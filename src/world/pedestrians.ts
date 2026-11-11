@@ -58,7 +58,7 @@ export class Pedestrians {
       w.yaw += diff * (1 - Math.exp(-6 * dt));
       w.avatar.root.position.copy(w.pos);
       w.avatar.root.rotation.y = w.yaw;
-      w.avatar.setLocomotion(speed, 0, 1, true, dt);
+      w.avatar.setLocomotion(dir.multiplyScalar(speed), true, dt);
       if (w.avatar.root.position.distanceTo(g.renderer.camera.position) < 60) w.avatar.update(dt);
     }
   }

@@ -2,7 +2,7 @@
 
 A small 3D arena game built on the Zenkoverse power system. You pick a Technique, hold a rooftop in the rain for eight waves, and grow your output the way the setting says you must: by giving things up.
 
-**Play it:** https://thatxliner.github.io/zenkoverse-pact/
+**Play it:** https://bryanhu.com/zenkoverse-pact/
 
 ## What is in it
 

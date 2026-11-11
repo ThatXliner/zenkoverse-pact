@@ -8,7 +8,7 @@ import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, EXTTextureWebP } from '@gltf-transform/extensions';
-import { Matrix4, Vector3, Plane } from 'three';
+import { Matrix4, Vector3, Plane, Quaternion } from 'three';
 import sharp from 'sharp';
 
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
@@ -20,6 +20,11 @@ const HAIR = ['Hair_SimpleParted', 'Hair_Buzzed', 'Hair_Long', 'Hair_Buns', 'Hai
 const ARM_BONES = (side) => new RegExp(`^(clavicle|upperarm|lowerarm|hand|thumb_\\d+|index_\\d+|middle_\\d+|ring_\\d+|pinky_\\d+)(_\\d+_leaf)?_${side}$`);
 const HAND_BONES = (side) => new RegExp(`^(hand|thumb_\\d+|index_\\d+|middle_\\d+|ring_\\d+|pinky_\\d+)(_\\d+_leaf)?_${side}$`);
 const SHELL = 0.004;
+// The library's jog and sprint twist the chest up to 48 degrees against the
+// hips each stride, about three times what a runner does, so the torso reads
+// as spinning. These bones keep that share of their twist about their own
+// long axis; lean and bob are untouched.
+const CALM_CHEST = { clips: ['Jog_Fwd_Loop', 'Sprint_Loop'], bones: { spine_02: 'spine_03', spine_03: 'neck_01' }, keep: 0.35 };
 const CUFF_ABOVE_WRIST = 0.035;
 
 // Reads a .gltf whose image URIs may name files that do not exist in the pack
@@ -129,6 +134,21 @@ class Soup {
   }
 }
 
+// Scales the twist of each keyframe rotation away from `rest` about `axis`, the
+// bone's long axis in its own frame.
+function scaleTwist(values, rest, axis, keep) {
+  const restInv = rest.clone().invert();
+  const q = new Quaternion();
+  for (let i = 0; i < values.length; i += 4) {
+    const d = restInv.clone().multiply(q.fromArray(values, i));
+    const along = axis.x * d.x + axis.y * d.y + axis.z * d.z;
+    const twist = new Quaternion(axis.x * along, axis.y * along, axis.z * along, d.w).normalize();
+    const swing = d.clone().multiply(twist.clone().invert());
+    rest.clone().multiply(swing).multiply(new Quaternion().slerp(twist, keep)).toArray(values, i);
+  }
+  return values;
+}
+
 function worldPos(node) { const m = node.getWorldMatrix(); return new Vector3(m[12], m[13], m[14]); }
 
 async function webp(image, size, quality) {
@@ -234,6 +254,11 @@ export async function buildHuman(raw, out) {
       const input = doc.createAccessor().setType('SCALAR').setArray(new Float32Array(src.getInput().getArray())).setBuffer(buffer);
       let outArr = new Float32Array(src.getOutput().getArray());
       if (path === 'translation') outArr = outArr.map((v) => v * ratio);
+      const child = CALM_CHEST.bones[target.getName()];
+      if (path === 'rotation' && child && CALM_CHEST.clips.includes(a.getName())) {
+        const axis = new Vector3(...libNodes.get(child).getTranslation()).normalize();
+        outArr = scaleTwist(outArr, new Quaternion(...libNodes.get(target.getName()).getRotation()), axis, CALM_CHEST.keep);
+      }
       const output = doc.createAccessor().setType(src.getOutput().getType()).setArray(outArr).setBuffer(buffer);
       const sampler = doc.createAnimationSampler().setInput(input).setOutput(output).setInterpolation(src.getInterpolation());
       anim.addSampler(sampler).addChannel(doc.createAnimationChannel().setTargetNode(target).setTargetPath(path).setSampler(sampler));

@@ -219,11 +219,10 @@ export class Game {
     const axis = this.input.axis();
     this.avatar.root.position.copy(this.player.position);
     const moving = this.player.planarSpeed.value > 0.5;
-    const faceYaw = this.cam.yaw;
-    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), faceYaw + Math.PI);
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.cam.yaw);
     this.avatar.root.quaternion.slerp(q, 1 - Math.exp(-(moving ? 14 : 8) * raw));
-    this.avatar.setLocomotion(this.player.planarSpeed.value, axis.x, axis.y, this.player.grounded, raw);
-    this.avatar.setAimPitch(-this.cam.pitch);
+    this.avatar.setLocomotion(this.player.velocity, this.player.grounded, raw);
+    this.avatar.setAimPitch(this.cam.pitch);
     this.avatar.update(dt);
     this.avatar.root.visible = !this.cam.isFirst || this.cam.inShot;
 

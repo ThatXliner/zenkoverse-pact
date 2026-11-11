@@ -14,6 +14,8 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
   dummy: { name: 'Training Dummy', model: 'buzzed', hp: 100000, speed: 0, dmg: 0, ai: 'dummy', tint: 0x3e5a78 },
 };
 
+const STILL = new THREE.Vector3();
+
 type State = 'idle' | 'chase' | 'windup' | 'strike' | 'recover' | 'stagger' | 'knocked' | 'dead' | 'cast';
 
 export class Enemy {
@@ -167,8 +169,7 @@ export class Enemy {
 
     this.avatar.root.position.copy(this.position);
     this.avatar.root.rotation.y = this.yaw;
-    const planar = Math.hypot(this.velocity.x, this.velocity.z);
-    this.avatar.setLocomotion(this.alive ? planar : 0, 0, 1, this.grounded, dt);
+    this.avatar.setLocomotion(this.alive ? this.velocity : STILL, this.grounded, dt);
     if (this.resonance > 0) this.avatar.root.position.x += (Math.random() - 0.5) * this.resonance * 0.03;
     this.avatar.update(dt);
     if (this.aura.active) this.aura.radius = THREE.MathUtils.lerp(this.aura.radius, 13, 1 - Math.exp(-3 * dt));

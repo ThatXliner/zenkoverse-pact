@@ -27,6 +27,7 @@ const UPPER_CLIPS = ['Punch_Jab', 'Punch_Cross', 'Spell_Simple_Enter', 'Spell_Si
 const UPPER_BONE = /^(spine_0[1-3]|neck_01|Head|clavicle|upperarm|lowerarm|hand|thumb|index|middle|ring|pinky)/;
 const SPINE = ['spine_01', 'spine_02', 'spine_03'];
 const SUIT = 0x1a1d25;
+const BODY_BOUNDS = new THREE.Sphere(new THREE.Vector3(0, 0.9, 0), 1.5);
 const WHITE = new THREE.Color(1, 1, 1);
 
 // Pulls the torso and arm tracks out of a clip so a gesture plays on the
@@ -76,7 +77,10 @@ export class Avatar {
       if (!m.isMesh) return;
       m.castShadow = true;
       m.receiveShadow = true;
-      m.frustumCulled = false;
+      // Shared geometry is quantized, so its own bounds mean nothing. A sphere
+      // around the whole body lets the renderer cull this mesh from every
+      // camera and shadow pass it is outside of.
+      if ((m as THREE.SkinnedMesh).isSkinnedMesh) (m as THREE.SkinnedMesh).boundingSphere = BODY_BOUNDS;
       const src = m.material as THREE.MeshStandardMaterial;
       if (src.name === 'Suit') { m.material = this.suit; return; }
       const mat = src.clone();

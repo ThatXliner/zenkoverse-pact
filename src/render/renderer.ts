@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { EffectComposer, RenderPass, EffectPass, BloomEffect, SMAAEffect, VignetteEffect, ToneMappingEffect, ToneMappingMode, BlendFunction, Effect, ChromaticAberrationEffect, KernelSize } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
 import type { Quality } from '../app/settings';
+import { patchLightLoop } from './lightLoop';
 
 const impactShader = /* glsl */ `
 uniform float amount;
@@ -42,6 +43,7 @@ export class Renderer {
   overlayVisible = true;
 
   constructor(canvas: HTMLCanvasElement) {
+    patchLightLoop();
     this.gl = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false, depth: true });
     this.gl.outputColorSpace = THREE.SRGBColorSpace;
     this.gl.toneMapping = THREE.NoToneMapping;

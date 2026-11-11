@@ -102,7 +102,7 @@ const drill: DrillDef = {
 export const recoil: TechniqueKit = {
   id: 'recoil', name: 'Recoil', glyph: '反', color: COLOR, type: 'Manipulation, Energy family',
   blurb: 'Take in kinetic energy, store it, release it later as motion. Energy never disappears: every softened blow is a debt.',
-  resource: { name: 'Reserve', max: 100, regen: 7, startsFull: false },
+  resource: { name: 'Reserve', max: 100, regen: 7, startsFull: false, free: ['primary', 'secondary'] },
   primitive: { name: 'Recoil', description: 'Absorb a little kinetic energy from any direction and leak most of it. Release what is left as a shove.' },
   parameters: ['direction', 'range', 'target', 'trigger', 'duration', 'resource', 'body'],
   shapes: {

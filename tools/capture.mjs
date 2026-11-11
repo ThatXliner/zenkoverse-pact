@@ -26,7 +26,7 @@ if (!url) {
 }
 
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
 page.on('console', (m) => { if (m.type() === 'error' && !/favicon|WebGL|GPU stall|Automatic fallback/.test(m.text())) errors.push(`console: ${m.text()}`); });
@@ -62,7 +62,7 @@ if (run('ui')) {
     await page.reload();
     await ready();
   }
-  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.setViewportSize({ width: 1280, height: 720 });
 }
 
 async function checkFit(name, selector) {
@@ -78,14 +78,14 @@ async function checkFit(name, selector) {
 
 async function startRun(tech, opts = {}) {
   await api((g, t, o) => { g.technique(t); g.game.startRun({ skipTutorial: !o.tutorial }); g.loop(false); }, tech, opts);
-  await step(30);
+  await step(12);
 }
 
 if (run('hands')) {
   for (const t of TECHS) {
     await startRun(t);
     await api((g) => { g.teleport('market'); g.camera('first'); g.look(Math.PI / 2, -0.05); });
-    await step(40);
+    await step(20);
     await shot('hands', `${t}-idle`);
     await api((g) => g.cast('primary'));
     for (const f of [3, 8, 14, 20, 30]) { await step(f === 3 ? 3 : 6); await shot('hands', `${t}-primary-f${f}`); }
@@ -94,7 +94,7 @@ if (run('hands')) {
     await api((g) => g.cast('secondary'));
     for (const f of [6, 16]) { await step(f === 6 ? 6 : 10); await shot('hands', `${t}-secondary-f${f}`); }
     await api((g) => g.hold('secondary', false));
-    await step(30);
+    await step(10);
   }
 }
 
@@ -118,7 +118,7 @@ if (run('district')) {
   const vistas = [['market-east', 'market', Math.PI / 2, -0.02], ['market-west', 'market', -Math.PI / 2, -0.02], ['alley', 'alley', 0, -0.05], ['bridge', 'bridge', -Math.PI / 2, -0.05], ['academy', 'academy', -Math.PI / 2, -0.05], ['dojo', 'dojo', Math.PI, -0.05], ['kuroda', 'kuroda', Math.PI, -0.05], ['roof', 'roof', Math.PI / 2, -0.25]];
   for (const [name, where, yaw, pitch] of vistas) {
     await api((g, w, y, p) => { g.teleport(w); g.camera('first'); g.look(y, p); }, where, yaw, pitch);
-    await step(45);
+    await step(24);
     await shot('district', name);
   }
   await api((g) => { g.teleport('market'); g.camera('third'); g.look(Math.PI / 2, -0.3); });
@@ -195,7 +195,7 @@ if (run('workshop')) {
       await step(2);
     }
   }
-  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.setViewportSize({ width: 1280, height: 720 });
 }
 
 if (run('tutorial')) {

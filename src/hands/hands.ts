@@ -31,7 +31,7 @@ interface ArmRig {
 
 const UPPER_LEN = 0.30;
 const FORE_LEN = 0.27;
-const SKIN = 0xd7a88a;
+const SKIN = 0xc99a80;
 
 // A skinned first-person arm pair built in code: shoulder, upper arm,
 // forearm, hand, and three-joint fingers with nails. Gestures drive the hand
@@ -63,15 +63,15 @@ export class Hands {
   private fill: THREE.HemisphereLight;
 
   constructor(scene: THREE.Scene, private camera: THREE.PerspectiveCamera) {
-    this.skin = new THREE.MeshPhysicalMaterial({ color: SKIN, roughness: 0.52, metalness: 0, sheen: 0.4, sheenRoughness: 0.6, sheenColor: new THREE.Color(0xff9a7a), clearcoat: 0.25, clearcoatRoughness: 0.35, emissive: 0x000000 });
+    this.skin = new THREE.MeshPhysicalMaterial({ color: SKIN, roughness: 0.58, metalness: 0, sheen: 0.25, sheenRoughness: 0.7, sheenColor: new THREE.Color(0xd98a74), clearcoat: 0.18, clearcoatRoughness: 0.4, emissive: 0x000000 });
     this.sleeve = new THREE.MeshStandardMaterial({ color: 0x1b1d24, roughness: 0.92, metalness: 0 });
     this.nailMat = new THREE.MeshPhysicalMaterial({ color: 0xe8c9b8, roughness: 0.3, clearcoat: 0.6, transmission: 0, emissive: 0x000000 });
     this.arms.push(this.buildArm(1), this.buildArm(-1));
     this.light = new THREE.PointLight(0xffffff, 0, 1.6, 2);
     this.light.position.set(0, -0.1, -0.35);
-    this.fill = new THREE.HemisphereLight(0x8aa0c8, 0x120c0a, 1.4);
+    this.fill = new THREE.HemisphereLight(0x6f7fa6, 0x1a110c, 1.0);
     this.root.add(this.light, this.fill);
-    const key = new THREE.DirectionalLight(0xfff0dd, 1.6);
+    const key = new THREE.DirectionalLight(0xdfe6ff, 1.1);
     key.position.set(0.6, 0.8, 0.2);
     this.root.add(key);
     scene.add(this.root);
@@ -162,11 +162,11 @@ export class Hands {
     const fingers = {} as Record<Finger, FingerChain>;
     const nails: THREE.Mesh[] = [];
     const defs: { f: Finger; x: number; z: number; len: number[]; r: number; yaw: number; thumb?: boolean }[] = [
-      { f: 'index', x: 0.031, z: -0.098, len: [0.038, 0.026, 0.021], r: 0.0095, yaw: 0.05 },
-      { f: 'middle', x: 0.010, z: -0.102, len: [0.042, 0.03, 0.022], r: 0.0098, yaw: 0 },
-      { f: 'ring', x: -0.011, z: -0.098, len: [0.038, 0.027, 0.021], r: 0.0092, yaw: -0.04 },
-      { f: 'pinky', x: -0.031, z: -0.088, len: [0.03, 0.02, 0.018], r: 0.0082, yaw: -0.1 },
-      { f: 'thumb', x: 0.046, z: -0.035, len: [0.04, 0.03, 0.026], r: 0.011, yaw: 0.9, thumb: true },
+      { f: 'index', x: -0.031, z: -0.098, len: [0.038, 0.026, 0.021], r: 0.0095, yaw: -0.05 },
+      { f: 'middle', x: -0.010, z: -0.102, len: [0.042, 0.03, 0.022], r: 0.0098, yaw: 0 },
+      { f: 'ring', x: 0.011, z: -0.098, len: [0.038, 0.027, 0.021], r: 0.0092, yaw: 0.04 },
+      { f: 'pinky', x: 0.031, z: -0.088, len: [0.03, 0.02, 0.018], r: 0.0082, yaw: 0.1 },
+      { f: 'thumb', x: -0.046, z: -0.035, len: [0.04, 0.03, 0.026], r: 0.011, yaw: -0.9, thumb: true },
     ];
     for (const d of defs) {
       const joints: THREE.Bone[] = [];
@@ -174,7 +174,7 @@ export class Hands {
       let px = side * d.x, pz = d.z, py = d.thumb ? -0.008 : 0.003;
       for (let j = 0; j < 3; j++) {
         const b = bone(parent, px, py, pz);
-        if (j === 0) { b.rotation.y = side * d.yaw; if (d.thumb) { b.rotation.z = side * -0.9; b.rotation.x = 0.35; } }
+        if (j === 0) { b.rotation.y = side * d.yaw; if (d.thumb) { b.rotation.z = side * 0.9; b.rotation.x = -0.35; } }
         joints.push(b);
         const len = d.len[j]!;
         const r0 = d.r * (1 - j * 0.1);
@@ -306,7 +306,7 @@ export class Hands {
 
     for (const arm of this.arms) {
       const tp = arm.targetPose;
-      const target = new THREE.Vector3(tp.pos[0], tp.pos[1] + 0.07 + breathe, tp.pos[2]).add(bob);
+      const target = new THREE.Vector3(tp.pos[0] * 0.92, tp.pos[1] * 0.9 + 0.06 + breathe, tp.pos[2] * 0.82).add(bob);
       target.x += this.sway.x * (arm.side === 1 ? 1.2 : 0.9);
       target.y += this.sway.y;
       const acc = target.clone().sub(arm.pos).multiplyScalar(arm.stiffness).addScaledVector(arm.vel, -arm.damping);
@@ -382,10 +382,10 @@ export class Hands {
         b.quaternion.copy(ch.base[j]!);
         let c = curl[j]! * maxCurl[j]!;
         if (twitch) c += Math.sin(twitch.t * 20) * 0.08;
-        const axis = f === 'thumb' ? new THREE.Vector3(1, arm.side * 0.4, 0).normalize() : new THREE.Vector3(1, 0, 0);
+        const axis = f === 'thumb' ? new THREE.Vector3(-1, -arm.side * 0.5, 0).normalize() : new THREE.Vector3(-1, 0, 0);
         b.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(axis, c));
         if (j === 0 && f !== 'thumb') {
-          const spreadAmt = (f === 'index' ? 1 : f === 'middle' ? 0.2 : f === 'ring' ? -0.5 : -1.2) * arm.spread * 0.35;
+          const spreadAmt = (f === 'index' ? -1 : f === 'middle' ? -0.2 : f === 'ring' ? 0.5 : 1.2) * arm.spread * 0.35;
           b.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), spreadAmt * arm.side));
         }
       }

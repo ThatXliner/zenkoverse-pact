@@ -49,8 +49,8 @@ export function facadeMaterial(assets: Assets, palette: THREE.Texture | null, wa
         vec3 trimC = tri(tTrim, vWp, vWn).rgb;
         vec3 palTint = mix(vec3(1.0), pal.rgb / max(lum, 0.05) * 0.85, 0.35);
         vec3 wallFinal = mix(wallC * palTint, trimC * 0.8, isTrim);
-        vec3 cell = floor(vWp * vec3(0.9, 1.1, 0.9));
-        float lit = step(0.68, fhash(cell));
+        vec3 cell = floor(vWp * vec3(0.3, 0.42, 0.3) + vec3(0.5));
+        float lit = step(0.78, fhash(cell));
         float flick = 0.9 + 0.1*sin(time*3.0 + fhash(cell+1.0)*40.0);
         vec3 winCol = mix(vec3(0.5,0.72,1.0)*0.9, vec3(1.0,0.78,0.5), uWarm*fhash(cell+2.0)) ;
         vec3 winDark = vec3(0.01,0.015,0.03);
@@ -58,7 +58,9 @@ export function facadeMaterial(assets: Assets, palette: THREE.Texture | null, wa
         vFacadeWindow = isWindow; vFacadeLit = lit*flick; vFacadeWinCol = winCol;`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         float wr = tri(tWallR, vWp, vWn).r;
-        roughnessFactor = mix(wr * (1.0 - 0.35*uWet*(1.0-clamp(vWn.y,0.0,1.0))), 0.08, vFacadeWindow);`)
+        roughnessFactor = mix(wr * (1.0 - 0.35*uWet*(1.0-clamp(vWn.y,0.0,1.0))), 0.12, vFacadeWindow);`)
+      .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
+        metalnessFactor = mix(metalnessFactor, 0.6, vFacadeWindow);`)
       .replace('#include <normal_fragment_maps>', `
         vec3 tn = tri(tWallN, vWp, vWn).rgb * 2.0 - 1.0;
         vec3 nW = normalize(vWn);
@@ -67,7 +69,7 @@ export function facadeMaterial(assets: Assets, palette: THREE.Texture | null, wa
         vec3 pN = normalize(nW + (tangentW*tn.x + bitW*tn.y) * 0.8 * (1.0 - vFacadeWindow));
         normal = normalize((viewMatrix * vec4(pN, 0.0)).xyz);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        totalEmissiveRadiance += vFacadeWinCol * (vFacadeLit * 1.6 + 0.06) * vFacadeWindow;`)
+        totalEmissiveRadiance += vFacadeWinCol * (vFacadeLit * 1.1 + 0.02) * vFacadeWindow;`)
       .replace('void main() {', 'float vFacadeWindow; float vFacadeLit; vec3 vFacadeWinCol;\nvoid main() {');
   };
   mat.customProgramCacheKey = () => `facade-${wall}-${trim}-${scale}`;

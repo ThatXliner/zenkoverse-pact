@@ -93,6 +93,7 @@ export class Techniques {
   }
 
   costFor(slot: AbilitySlot, pact: Pact | null): { resource: number; health: number; strain: number } {
+    if (this.def.resource.free?.includes(slot) && !pact?.clauses.some((c) => c.kind === 'restrict' && c.restriction.param === 'resource')) return { resource: 0, health: 0, strain: 0 };
     const base = slot === 'primary' ? 0.16 : slot === 'secondary' ? 0.22 : 1;
     const eff = 1 - this.game.mastery.get(this.def.id, 'efficiency') * 0.45;
     const r = restriction(pact ?? ({ clauses: [] } as unknown as Pact), 'resource');

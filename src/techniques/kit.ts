@@ -21,7 +21,7 @@ export interface TechniqueKit {
   color: number;
   type: string;
   blurb: string;
-  resource: { name: string; max: number; regen: number; startsFull: boolean };
+  resource: { name: string; max: number; regen: number; startsFull: boolean; free?: AbilitySlot[] };
   primitive: { name: string; description: string };
   parameters: Param[];
   shapes: Record<string, { label: string; slot: AbilitySlot[]; description: string }>;

@@ -14,6 +14,8 @@ export class Input {
   readonly look = { x: 0, y: 0 };
   wheel = 0;
   locked = false;
+  onLockLost: (() => void) | null = null;
+  private releasing = false;
   enabled = true;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -49,7 +51,14 @@ export class Input {
       this.look.y += e.movementY;
     });
     window.addEventListener('wheel', (e) => { this.wheel += Math.sign(e.deltaY); }, { passive: true });
-    document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === canvas; });
+    document.addEventListener('pointerlockchange', () => {
+      const was = this.locked;
+      this.locked = document.pointerLockElement === canvas;
+      // Chrome spends the first Esc on leaving pointer lock and never delivers
+      // the keydown, so a lock we did not release ourselves counts as a pause.
+      if (was && !this.locked && !this.releasing) this.onLockLost?.();
+      this.releasing = false;
+    });
     window.addEventListener('blur', () => this.clear());
   }
 
@@ -59,7 +68,9 @@ export class Input {
   }
 
   releaseLock(): void {
-    if (this.locked) document.exitPointerLock();
+    if (!this.locked) return;
+    this.releasing = true;
+    document.exitPointerLock();
   }
 
   isDown(a: Action): boolean { return this.enabled && this.down.has(a); }

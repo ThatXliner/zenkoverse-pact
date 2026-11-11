@@ -78,6 +78,7 @@ function Title({ game }: { game: Game }) {
         <div class="sub">A rainy district, one Technique, and the Pacts you write to shape it. Every ability is a sacrifice the universe reads back to you.</div>
         <div class="menu" style="margin-top:18px">
           <button onClick={() => { setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Begin</button>
+          <button onClick={() => { location.href = `${import.meta.env.BASE_URL}arena/`; }}>Arena (classic)</button>
           <button onClick={() => { game.audio.resumeContext(); pause('settings'); setState({ kind: 'paused', resume: { kind: 'title' }, tab: 'settings' }); }}>Settings</button>
           <button onClick={() => setState({ kind: 'paused', resume: { kind: 'title' }, tab: 'codex' })}>Codex</button>
         </div>
@@ -150,7 +151,7 @@ function Hud({ game }: { game: Game }) {
       {boss && !cut && <div class="boss" style={{ '--c': hex(boss.color) } as never}><span class="n">{boss.name}</span><div class="track"><i style={{ width: `${boss.frac * 100}%` }} /></div></div>}
       {zone && !cut && <div class="zone" key={zone.id}><span class="jp">{zoneJp(zone.id)}</span><span class="en">{zone.label}</span></div>}
       {prompt && !cut && <div class="prompt"><kbd>{prompt.key}</kbd><span>{prompt.text}</span></div>}
-      {tut && !cut && <div class="objective"><span class="step">Tutorial {tut.index} / {tut.total} · {tut.jp}</span><span class="t">{tut.title}</span><span class="b">{tut.body}</span><span class="step">Press Esc and choose Skip to skip</span></div>}
+      {tut && !cut && <div class="objective"><span class="step">Tutorial {tut.index} / {tut.total} · {tut.jp}</span><span class="t">{tut.title}</span><span class="b">{tut.body}</span><span class="step">Esc pauses · Skip tutorial is in the pause menu</span></div>}
       {drill && !cut && <div class="drill-hud"><span class="big">{drill.score} / {drill.needed}</span><span class="s">{drill.jp} · {drill.tier} · {drill.left} left</span></div>}
       {pl && !cut && <div class="objective" style="top:auto;bottom:140px;right:36px;border-color:#9fdfff"><span class="step">Lore plaque</span><span class="t">{pl.title}</span><span class="b">{pl.body}</span></div>}
       <div class="toasts">{hud.toasts.value.map((t) => <div key={t.id} class={`toast ${t.tone}`}>{t.text}</div>)}</div>

@@ -71,7 +71,7 @@ export class PlayerController {
     this.dashCooldown = Math.max(0, this.dashCooldown - dt);
 
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
-    const right = new THREE.Vector3(forward.z, 0, -forward.x);
+    const right = new THREE.Vector3(-forward.z, 0, forward.x);
     const wish = locked ? new THREE.Vector3() : new THREE.Vector3().addScaledVector(forward, axis.y).addScaledVector(right, axis.x);
     const targetSpeed = (wantsSprint ? 6.6 : 4.1) * this.speedScale;
     const accel = this.grounded ? 22 : 7;

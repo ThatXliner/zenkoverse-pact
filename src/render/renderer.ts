@@ -87,7 +87,6 @@ export class Renderer {
     this.lights.setSize(POOL[q]);
     this.gl.shadowMap.enabled = q !== 'low';
     this.ao.enabled = q !== 'low';
-    this.ao.configuration.halfRes = q !== 'high';
     this.ao.configuration.aoSamples = q === 'high' ? 16 : 8;
     this.ao.configuration.denoiseSamples = q === 'high' ? 8 : 4;
     this.resize();

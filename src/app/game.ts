@@ -3,7 +3,7 @@ import { signal } from '@preact/signals';
 import { Assets } from './assets';
 import { Input } from './input';
 import { GameClock } from './clock';
-import { appState, setState, worldRuns, uiBlocksInput, pause, resume, type AppState } from './state';
+import { appState, setState, worldRuns, uiBlocksInput, pause, resume, openWorkshop, type AppState } from './state';
 import { settings } from './settings';
 import { Renderer } from '../render/renderer';
 import { setupEnvironment, type Environment } from '../render/env';
@@ -28,6 +28,8 @@ import { Cutscenes } from '../cutscene/cutscene';
 import { Tutorial } from '../tutorial/tutorial';
 import { Drills } from '../drills/drills';
 import { PactBook } from '../pacts/book';
+import type { Pact } from '../pacts/schema';
+import { KEY_WORDS } from '../pacts/readback';
 import { Mastery } from '../mastery/mastery';
 import { installDebug } from './debug';
 
@@ -141,7 +143,9 @@ export class Game {
   startRun(opts: { skipTutorial?: boolean } = {}): void {
     this.combat.resetPlayer();
     this.encounters.reset();
+    this.book.preview.value = null;
     if (opts.skipTutorial) {
+      this.tutorial.skip();
       this.player.teleport(SPAWN.market.clone());
       this.cam.yaw = Math.PI / 2;
       setState({ kind: 'explore' });
@@ -153,6 +157,29 @@ export class Game {
     }
     this.input.requestLock();
     this.audio.resumeContext();
+  }
+
+  openWorkshop(): void {
+    this.input.releaseLock();
+    this.book.preview.value = null;
+    openWorkshop();
+    this.audio.play('open_001', 0.4);
+  }
+
+  closeWorkshop(): void {
+    if (appState.value.kind !== 'workshop') return;
+    resume();
+    this.input.requestLock();
+    this.audio.play('close_001', 0.4);
+  }
+
+  // Try a draft before inscribing it: the draft defines its key until the
+  // Workshop opens again, and the dummies are the place to swing it.
+  tryDraft(p: Pact): void {
+    this.closeWorkshop();
+    this.book.preview.value = p;
+    if (appState.value.kind !== 'encounter') this.encounters.begin('dummy-room', true);
+    toast(`Trying "${p.name}" on ${KEY_WORDS[p.slot]}. Tab returns to the Workshop.`);
   }
 
   loop(on: boolean): void { this.renderer.gl.setAnimationLoop(on ? () => this.frame() : null); }
@@ -171,9 +198,9 @@ export class Game {
     rainUniforms.time.value += raw;
     this.input.enabled = !uiBlocksInput.value && !this.cam.inShot;
 
-    if (this.input.hit('pause')) {
+    if (this.input.hitAny('pause')) {
       if (st.kind === 'paused') { resume(); this.input.requestLock(); }
-      else if (st.kind === 'workshop') { setState({ kind: 'explore' }); this.input.requestLock(); }
+      else if (st.kind === 'workshop') this.closeWorkshop();
       else if (worldRuns.value) { pause(); this.input.releaseLock(); }
     }
     if (worldRuns.value && !this.input.locked && !this.cam.inShot && this.input.hit('primary')) this.input.requestLock();
@@ -209,7 +236,7 @@ export class Game {
     const look = this.input.consumeLook();
     if (this.input.enabled && !this.cam.inShot) this.cam.look(look.x, look.y, s.sensitivity, s.invertY);
     if (this.input.hit('camera') && !this.cam.inShot) { this.cam.toggleMode(); this.audio.play('toggle_001', 0.3); this.tutorial.notify('camera'); }
-    if (this.input.hit('workshop') && (st.kind === 'explore' || st.kind === 'tutorial')) { this.input.releaseLock(); setState({ kind: 'workshop' }); this.audio.play('open_001', 0.4); }
+    if (this.input.hit('workshop') && (st.kind === 'explore' || st.kind === 'tutorial' || st.kind === 'encounter')) this.openWorkshop();
 
     this.player.yaw = this.cam.yaw;
     const sprintOk = !this.techniques.casting;
@@ -254,7 +281,7 @@ export class Game {
       if (p.position.distanceTo(this.player.position) < 2.2) { best = { key: 'E', text: p.found ? `Reread: ${p.title}` : `Read plaque: ${p.title}`, act: () => { p.found = true; hud.plaque.value = { title: p.title, body: p.body }; this.audio.play('glass_002', 0.4); setTimeout(() => { hud.plaque.value = null; }, 7000); } }; break; }
     }
     const dojoDesk = new THREE.Vector3(-23, 0, -70.6);
-    if (!best && dojoDesk.distanceTo(this.player.position) < 3.2) best = { key: 'E', text: 'Speak with the Pact Architect', act: () => { this.input.releaseLock(); setState({ kind: 'workshop' }); this.audio.play('open_001', 0.4); } };
+    if (!best && dojoDesk.distanceTo(this.player.position) < 3.2) best = { key: 'E', text: 'Speak with the Pact Architect', act: () => this.openWorkshop() };
     const enc = this.encounters.interactable(this.player.position);
     if (!best && enc) best = enc;
     const drill = this.drills.interactable(this.player.position);

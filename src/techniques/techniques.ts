@@ -1,11 +1,12 @@
 import * as THREE from 'three';
-import { signal } from '@preact/signals';
+import { signal, effect } from '@preact/signals';
 import type { Game } from '../app/game';
 import { toast } from '../app/game';
 import { settings } from '../app/settings';
 import type { TechniqueKit, AbilityContext, CastResult, TechniqueId } from './kit';
-import type { AbilitySlot, Pact } from '../pacts/schema';
+import type { AbilitySlot, Pact, TriggerValue } from '../pacts/schema';
 import { restriction } from '../pacts/schema';
+import { describe } from '../pacts/resolve';
 import { pick } from '../hands/gestures';
 import type { GestureVariant } from '../mastery/mastery';
 import { MASTERY_CONFIG } from '../mastery/mastery';
@@ -21,12 +22,17 @@ export const KITS: Record<TechniqueId, TechniqueKit> = { recoil, shift, rime, bl
 
 interface Cast { slot: AbilitySlot; ctx: AbilityContext; t: number; impactAt: number; duration: number; fired: boolean; held: boolean; result?: CastResult | void }
 
+// What the HUD shows for a key: the Ability's name, a few words on what it
+// does, and whether it is the raw Technique or a draft being tried.
+export interface SlotLabel { name: string; what: string; raw: boolean; preview: boolean }
+const NO_LABELS: Record<AbilitySlot, SlotLabel> = { primary: { name: '', what: '', raw: true, preview: false }, secondary: { name: '', what: '', raw: true, preview: false }, max: { name: '', what: '', raw: true, preview: false }, passive: { name: '', what: '', raw: true, preview: false } };
+
 export const techUi = {
   resource: signal(1),
   strain: signal(0),
   charge: signal(0),
   cooldowns: signal<Record<AbilitySlot, number>>({ primary: 0, secondary: 0, max: 0, passive: 0 }),
-  names: signal<Record<AbilitySlot, string>>({ primary: '', secondary: '', max: '', passive: '' }),
+  slots: signal<Record<AbilitySlot, SlotLabel>>(NO_LABELS),
   variant: signal<GestureVariant>('long'),
   sealed: signal(0),
 };
@@ -47,6 +53,7 @@ export class Techniques {
 
   constructor(private game: Game) {
     for (const k of Object.values(KITS)) { game.book.registerCatalogue(k.id, k.catalogue); if (k.drill) game.drills.register(k.drill); }
+    effect(() => this.refreshSlots());
   }
 
   select(id: TechniqueId): void {
@@ -56,20 +63,55 @@ export class Techniques {
     this.charge = 0;
     this.cast_ = null;
     this.game.hands.stop();
-    this.refreshNames();
+    this.refreshSlots();
     this.game.cutscenes.register(`max-${id}`, () => this.cast('max', true));
   }
 
   get casting(): boolean { return this.cast_ !== null; }
   get current(): Cast | null { return this.cast_; }
 
-  private refreshNames(): void {
-    const n = { primary: '', secondary: '', max: '', passive: '' } as Record<AbilitySlot, string>;
-    for (const s of ['primary', 'secondary', 'max'] as const) n[s] = this.game.book.bound(s)?.name ?? `Raw ${this.def.primitive.name}`;
-    techUi.names.value = n;
+  private refreshSlots(): void {
+    const book = this.game.book;
+    const preview = book.preview.value;
+    const labels = { ...NO_LABELS };
+    for (const s of ['primary', 'secondary', 'max'] as const) {
+      const p = preview?.slot === s && preview.technique === this.def.id ? preview : book.bound(s);
+      labels[s] = p
+        ? { name: p.name, what: this.def.shapes[p.grant.shape]?.short ?? '', raw: false, preview: p === preview }
+        : { name: `Raw ${this.def.primitive.name}`, what: this.def.primitive.short, raw: true, preview: false };
+    }
+    techUi.slots.value = labels;
   }
 
-  pactFor(slot: AbilitySlot): Pact | null { return this.game.book.bound(slot); }
+  // A draft being tried defines its key. Otherwise an inscribed Pact that
+  // is programmed to take precedence does so while its trigger holds, and
+  // the bound Pact defines the key the rest of the time.
+  pactFor(slot: AbilitySlot): Pact | null {
+    const book = this.game.book;
+    const preview = book.preview.value;
+    if (preview && preview.slot === slot && preview.technique === this.def.id) return preview;
+    for (const p of book.inscribed.value) {
+      if (p.technique !== this.def.id || p.slot !== slot || book.expired(p)) continue;
+      const prefer = p.clauses.find((c) => c.kind === 'program' && c.then === 'prefer');
+      if (prefer?.kind === 'program' && this.triggerHolds(prefer.when)) return p;
+    }
+    return book.bound(slot);
+  }
+
+  private triggerHolds(t: TriggerValue): boolean {
+    const g = this.game;
+    const still = g.player.planarSpeed.value < 0.3;
+    switch (t) {
+      case 'still': return still;
+      case 'grounded': return g.player.grounded;
+      case 'airborne': return !g.player.grounded;
+      case 'struck': return this.struckRecently > 0;
+      case 'lowHealth': return g.combat.hp / g.combat.maxHp <= 0.35;
+      case 'fullSign': return g.input.isDown('fullsign');
+      case 'eyesClosed': return true;
+      case 'declared': return true;
+    }
+  }
 
   private baselineShape(slot: AbilitySlot): string {
     const entry = Object.entries(this.def.shapes).find(([, v]) => v.slot.includes(slot));
@@ -78,17 +120,9 @@ export class Techniques {
 
   triggerMet(pact: Pact | null): { ok: boolean; why?: string } {
     if (!pact) return { ok: true };
-    const g = this.game;
     const t = restriction(pact, 'trigger');
-    const body = restriction(pact, 'body');
-    const still = g.player.planarSpeed.value < 0.3;
-    if (t === 'still' && !still) return { ok: false, why: 'only while standing still' };
-    if (t === 'grounded' && !g.player.grounded) return { ok: false, why: 'only with feet on the ground' };
-    if (t === 'airborne' && g.player.grounded) return { ok: false, why: 'only in the air' };
-    if (t === 'struck' && this.struckRecently <= 0) return { ok: false, why: 'only after being struck' };
-    if (t === 'lowHealth' && g.combat.hp / g.combat.maxHp > 0.35) return { ok: false, why: 'only near defeat' };
-    if (t === 'fullSign' && !g.input.isDown('fullsign')) return { ok: false, why: 'only with the full hand sign (hold Alt)' };
-    if (body === 'noMove' && !still) return { ok: false, why: 'you vowed never to move for this' };
+    if (t && !this.triggerHolds(t)) return { ok: false, why: t === 'fullSign' ? 'only with the full hand sign (hold Alt)' : describe({ param: 'trigger', value: t }) };
+    if (restriction(pact, 'body') === 'noMove' && !this.triggerHolds('still')) return { ok: false, why: 'you vowed never to move for this' };
     return { ok: true };
   }
 
@@ -228,9 +262,7 @@ export class Techniques {
     techUi.cooldowns.value = { ...this.cooldown };
     techUi.sealed.value = this.sealed;
     techUi.variant.value = g.mastery.variant(this.def.id, false);
-    if (g.book.inscribed.value.length !== this.lastInscribed) { this.lastInscribed = g.book.inscribed.value.length; this.refreshNames(); }
   }
-  private lastInscribed = -1;
 
   // Maximum Output routes through the cutscene player: the world freezes, the
   // full sign plays regardless of Activation, and the effect fires on the

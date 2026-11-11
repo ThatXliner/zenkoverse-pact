@@ -3,7 +3,7 @@ import type { Game } from '../app/game';
 import { hud } from '../app/game';
 import { appState, setState, pause, resume } from '../app/state';
 import { settings, setSetting, type Quality } from '../app/settings';
-import { KITS, techUi } from '../techniques/techniques';
+import { KITS, techUi, type SlotLabel } from '../techniques/techniques';
 import { TECHNIQUE_IDS, type TechniqueId } from '../pacts/schema';
 import { combatUi, EYES } from '../combat/combat';
 import { auraUi } from '../combat/aura';
@@ -100,7 +100,7 @@ function Meter({ label, value, color, cls, text }: { label: string; value: numbe
 function Hud({ game }: { game: Game }) {
   const kit = KITS[game.techniqueId];
   const c = hex(kit.color);
-  const names = techUi.names.value;
+  const slots = techUi.slots.value;
   const cd = techUi.cooldowns.value;
   const zone = hud.zone.value;
   const prompt = hud.prompt.value;
@@ -133,9 +133,9 @@ function Hud({ game }: { game: Game }) {
       )}
       {!cut && (
         <div class="abilities">
-          <Ability k="LMB" name={names.primary} glyph={kit.glyph} cd={cd.primary / 0.42} ready={cd.primary <= 0} />
-          <Ability k="RMB" name={names.secondary} glyph="構" cd={cd.secondary / 0.9} ready={cd.secondary <= 0} />
-          <Ability k="Q" name={names.max} glyph="全" cd={1 - techUi.charge.value} ready={techUi.charge.value >= 1} max />
+          <Ability k="Left click" label={slots.primary} glyph={kit.glyph} cd={cd.primary / 0.42} ready={cd.primary <= 0} />
+          <Ability k="Right click" label={slots.secondary} glyph="構" cd={cd.secondary / 0.9} ready={cd.secondary <= 0} />
+          <Ability k="Q" label={slots.max} glyph="全" cd={1 - techUi.charge.value} ready={techUi.charge.value >= 1} max />
         </div>
       )}
       {!cut && s.showMastery && (
@@ -169,12 +169,15 @@ function zoneJp(id: string): string {
   return ({ academy: '学院', dojo: '道場', market: '市場', alley: '路地', rooftop: '屋上', bridge: '橋', kuroda: '黒田', canal: '運河' } as Record<string, string>)[id] ?? '';
 }
 
-function Ability({ k, name, glyph, cd, ready, max }: { k: string; name: string; glyph: string; cd: number; ready: boolean; max?: boolean }) {
+function Ability({ k, label, glyph, cd, ready, max }: { k: string; label: SlotLabel; glyph: string; cd: number; ready: boolean; max?: boolean }) {
   return (
-    <div class={`ab ${ready ? 'ready' : ''} ${max ? 'max' : ''}`}>
-      <span class="key">{k}</span>
+    <div class={`ab ${ready ? 'ready' : ''} ${max ? 'max' : ''} ${label.preview ? 'preview' : ''}`}>
       <div class="box"><span class="glyph">{glyph}</span><div class="cool" style={{ height: `${Math.max(0, Math.min(1, cd)) * 100}%` }} /></div>
-      <span class="name">{name}</span>
+      <div class="txt">
+        <span class="key">{k}{label.preview ? ' · trying a draft' : ''}</span>
+        <span class="name">{label.name}</span>
+        <span class="what">{label.what}</span>
+      </div>
     </div>
   );
 }

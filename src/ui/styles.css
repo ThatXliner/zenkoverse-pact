@@ -75,7 +75,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 1px solid var(--paper)
 .meter.resource .track > i { background: var(--c); box-shadow: 0 0 12px color-mix(in oklab, var(--c) 60%, transparent); }
 .meter.strain .track > i { background: #ff6b6b; }
 .abilities { position: absolute; right: 36px; bottom: 34px; display: flex; gap: 14px; align-items: end; }
-.ab { display: flex; gap: 10px; align-items: center; width: 212px; padding: 8px 10px 8px 8px; background: rgba(10,11,16,0.55); backdrop-filter: blur(8px); border: 1px solid transparent; border-left: 2px solid var(--line); transition: border-color 0.2s; }
+.ab { display: flex; gap: 10px; align-items: center; width: 224px; padding: 8px 10px 8px 8px; background: rgba(10,11,16,0.55); backdrop-filter: blur(8px); border: 1px solid transparent; border-left: 2px solid var(--line); transition: border-color 0.2s; }
 .ab.ready { border-left-color: var(--c); }
 .ab.preview { border-color: #ffd34d; }
 .ab .txt { display: grid; gap: 2px; min-width: 0; }
@@ -87,7 +87,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 1px solid var(--paper)
 .ab.ready .box { border-color: color-mix(in oklab, var(--c) 60%, transparent); }
 .ab.max .box { border-radius: 50%; }
 .ab.max.ready .box { box-shadow: 0 0 24px color-mix(in oklab, var(--c) 55%, transparent); animation: pulse 1.6s ease-in-out infinite; }
-.ab .name { font-family: var(--serif); font-size: 16px; font-weight: 600; color: var(--paper); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ab .name { font-family: var(--serif); font-size: 16px; font-weight: 600; line-height: 1.2; color: var(--paper); }
 .ab .what { font-size: 13px; line-height: 1.3; color: var(--mist); }
 .zone { position: absolute; left: 50%; top: 10%; transform: translateX(-50%); text-align: center; display: grid; gap: 6px; animation: rise 0.8s var(--ease); }
 .zone .jp { font-size: 40px; font-weight: 600; letter-spacing: 0.3em; }

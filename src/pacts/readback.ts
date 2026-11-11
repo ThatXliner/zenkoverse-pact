@@ -1,36 +1,52 @@
-import { type Pact, type Clause } from './schema';
+import { type Pact, type Clause, type Param, type AbilitySlot } from './schema';
 import { describe } from './resolve';
 
-// The terms as the universe reads them: one paragraph in plain words, built
-// from the parsed Pact and nothing else, so the player confirms exactly what
-// the engine will enforce.
-export function readback(pact: Pact, shapeLabel: (shape: string) => string, behaviorLabel: (b: string) => string): string {
-  const parts: string[] = [];
-  const restrict = pact.clauses.filter((c): c is Extract<Clause, { kind: 'restrict' }> => c.kind === 'restrict');
-  const grant = shapeLabel(pact.grant.shape);
+// The terms as the universe reads them, built from the parsed Pact and
+// nothing else. The Workshop renders the segments as the editor, so what the
+// player clicks is exactly what the engine enforces.
+export type Focus = { kind: 'key' } | { kind: 'grant' } | { kind: 'term'; param: Param } | { kind: 'clause'; index: number };
+export interface Segment { text: string; focus?: Focus }
+
+export const KEY_WORDS: Record<AbilitySlot, string> = { primary: 'left click', secondary: 'right click', max: 'Q, Maximum Output', passive: 'no key, always' };
+
+export function readbackSegments(pact: Pact, shapeLabel: (shape: string) => string, behaviorLabel: (b: string) => string): Segment[] {
+  const out: Segment[] = [];
+  const restrict = pact.clauses.map((c, index) => ({ c, index })).filter((x): x is { c: Extract<Clause, { kind: 'restrict' }>; index: number } => x.c.kind === 'restrict');
   const behaviors = (pact.grant.behaviors ?? []).map(behaviorLabel).filter(Boolean);
-  const bound = pact.slot === 'passive' ? 'always, without a key' : `on ${pact.slot === 'max' ? 'Maximum Output' : pact.slot === 'primary' ? 'the primary key' : 'the secondary key'}`;
-  parts.push(`"${pact.name}" is bound ${bound}. It ${grant}${behaviors.length ? `, and ${joinAnd(behaviors)}` : ''}.`);
-  if (restrict.length) parts.push(`In exchange it works ${joinAnd(restrict.map((c) => describe(c.restriction)))}.`);
-  else parts.push('It asks nothing of you, so the universe gives it nothing beyond the raw Technique.');
-  for (const c of pact.clauses) {
-    if (c.kind === 'sunset') parts.push('seconds' in c.term ? `Invoked, its term runs ${c.term.seconds} seconds; the Pact remains.` : `Its term ends after ${c.term.encounters} ${c.term.encounters === 1 ? 'fight' : 'fights'}; the Pact remains.`);
-    if (c.kind === 'risk') parts.push(`Risk: you may push past the ${c.beyond} limit, and ${riskCost(c.cost)}.`);
-    if (c.kind === 'wager') parts.push(`Wager: before it fires, you may declare ${prediction(c.predict)}. Correct, the universe pays out; wrong, your Technique seals.`);
-    if (c.kind === 'program') parts.push(`Programmed: when ${triggerWords(c.when)}, this Pact ${c.then === 'activate' ? 'fires on its own' : c.then === 'suppress' ? 'refuses to fire' : 'takes precedence over your other Pacts'}.`);
-  }
-  parts.push('Once inscribed it cannot be unwritten.');
-  return parts.join(' ');
+  out.push({ text: `"${pact.name}" on ` }, { text: KEY_WORDS[pact.slot], focus: { kind: 'key' } }, { text: ' ' });
+  out.push({ text: shapeLabel(pact.grant.shape) + (behaviors.length ? `, and ${joinAnd(behaviors)}` : ''), focus: { kind: 'grant' } });
+  out.push({ text: '. ' });
+  if (restrict.length) {
+    out.push({ text: 'In exchange it works ' });
+    restrict.forEach(({ c, index }, i) => {
+      out.push({ text: describe(c.restriction), focus: { kind: 'term', param: c.restriction.param } });
+      out.push({ text: i < restrict.length - 2 ? ', ' : i === restrict.length - 2 ? ' and ' : '. ' });
+      void index;
+    });
+  } else out.push({ text: 'It asks nothing of you, so the universe gives it nothing beyond the raw Technique. ' });
+  pact.clauses.forEach((c, index) => {
+    const focus: Focus = { kind: 'clause', index };
+    if (c.kind === 'sunset') out.push({ text: 'seconds' in c.term ? `Invoked, its term runs ${c.term.seconds} seconds; the Pact remains` : `Its term ends after ${c.term.encounters} ${c.term.encounters === 1 ? 'fight' : 'fights'}; the Pact remains`, focus }, { text: '. ' });
+    if (c.kind === 'risk') out.push({ text: `Risk: you may push past the ${c.beyond} limit, and ${riskCost(c.cost)}`, focus }, { text: '. ' });
+    if (c.kind === 'wager') out.push({ text: `Wager: before it fires, you may declare ${prediction(c.predict)}. Correct, the universe pays out; wrong, your Technique seals`, focus }, { text: '. ' });
+    if (c.kind === 'program') out.push({ text: `Programmed: when ${triggerWords(c.when)}, this Pact ${c.then === 'activate' ? 'fires on its own' : c.then === 'suppress' ? 'refuses to fire' : 'takes precedence over your other Pacts'}`, focus }, { text: '. ' });
+  });
+  out.push({ text: 'Once inscribed it cannot be unwritten.' });
+  return out;
+}
+
+export function readback(pact: Pact, shapeLabel: (shape: string) => string, behaviorLabel: (b: string) => string): string {
+  return readbackSegments(pact, shapeLabel, behaviorLabel).map((s) => s.text).join('');
 }
 
 function joinAnd(items: string[]): string {
   if (items.length <= 1) return items[0] ?? '';
   return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
-function riskCost(c: 'health' | 'exhaustion' | 'seal'): string {
+export function riskCost(c: 'health' | 'exhaustion' | 'seal'): string {
   return c === 'health' ? 'every use past it costs health' : c === 'exhaustion' ? 'every use past it leaves you winded and slow' : 'a use past it seals the Technique for a while';
 }
-function prediction(p: string): string {
+export function prediction(p: string): string {
   return p === 'hit' ? 'that the next strike connects' : p === 'kill' ? 'that the next strike finishes its target' : p === 'untouched' ? 'that you take no hit for the next ten seconds' : 'that you land the first strike of the fight';
 }
 export function triggerWords(t: string): string {

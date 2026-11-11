@@ -71,21 +71,33 @@ const WEIGHTS: Record<string, { base: number; usage: (t: Telemetry) => number; w
   'body:voice': { base: 1.0, usage: () => 1, why: 'you say the words' },
 };
 
-export function estimateResolve(pact: Pact, inscribed: Pact[], telemetry: Telemetry): ResolveEstimate {
+// A sacrifice counts once, for the Pact that paid it first. Pacts inscribed
+// earlier come first, and a draft comes after everything inscribed.
+export function countedBefore(pact: Pact, inscribed: Pact[]): Set<string> {
+  const at = inscribed.findIndex((p) => p.id === pact.id);
   const counted = new Set<string>();
-  for (const other of inscribed) if (other.id !== pact.id) for (const r of restrictions(other)) counted.add(sacrificeTag(r));
+  for (const other of at < 0 ? inscribed : inscribed.slice(0, at)) for (const r of restrictions(other)) counted.add(sacrificeTag(r));
+  return counted;
+}
+
+export function lineFor(r: Restriction, counted: Set<string>, telemetry: Telemetry): ResolveLine {
+  const tag = sacrificeTag(r);
+  const w = WEIGHTS[tag]!;
+  if (counted.has(tag)) return { label: describe(r), value: 0, reason: 'already counted by another Pact', zero: true };
+  const usage = Math.min(1.6, Math.max(0.05, w.usage(telemetry)));
+  const warn = usage < 0.5;
+  return { label: describe(r), value: round(w.base * usage), reason: warn ? `${w.why}, but you rarely do otherwise` : w.why, warn };
+}
+
+export function estimateResolve(pact: Pact, inscribed: Pact[], telemetry: Telemetry): ResolveEstimate {
+  const counted = countedBefore(pact, inscribed);
   const lines: ResolveLine[] = [];
   let total = 0;
   for (const r of restrictions(pact)) {
-    const tag = sacrificeTag(r);
-    const w = WEIGHTS[tag];
-    if (!w) continue;
-    if (counted.has(tag)) { lines.push({ label: describe(r), value: 0, reason: 'already counted by another Pact', zero: true }); continue; }
-    const usage = Math.min(1.6, Math.max(0.05, w.usage(telemetry)));
-    const v = round(w.base * usage);
-    const warn = usage < 0.5;
-    lines.push({ label: describe(r), value: v, reason: warn ? `${w.why}, but you rarely do otherwise` : w.why, warn });
-    total += v;
+    if (!WEIGHTS[sacrificeTag(r)]) continue;
+    const line = lineFor(r, counted, telemetry);
+    lines.push(line);
+    total += line.value;
   }
   for (const c of pact.clauses) {
     if (c.kind === 'sunset') { const f = 'seconds' in c.term ? 0.55 : 0.7; lines.push({ label: 'sunset clause', value: round(-total * (1 - f)), reason: 'a term that ends is worth less than one that does not' }); total *= f; }

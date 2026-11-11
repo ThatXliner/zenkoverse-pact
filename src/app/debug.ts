@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Game } from './game';
 import { SPAWN } from '../world/district';
-import { setState, appState } from './state';
+import { appState } from './state';
 import type { TechniqueId } from '../techniques/kit';
 import type { PoseName } from '../hands/poses';
 
@@ -53,7 +53,7 @@ export function installDebug(game: Game): void {
     hold(action, held) { game.input.inject(action, held); },
     encounter(id) { game.encounters.begin(id, true); },
     drill(id) { game.drills.begin(id); },
-    workshop(open) { setState(open ? { kind: 'workshop' } : { kind: 'explore' }); },
+    workshop(open) { if (open) game.openWorkshop(); else game.closeWorkshop(); },
     tutorialStep(step) { game.tutorial.jump(step as never); },
     cutscene(id) { game.cutscenes.playById(id); },
     freezeTime(on) { game.clock.slowMo = on ? 0 : 1; },

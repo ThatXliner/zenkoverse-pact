@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'preact/hooks';
 import type { Game } from '../app/game';
-import { setState } from '../app/state';
 import { toast } from '../app/game';
 import { type Pact, type Clause, type Param, type AbilitySlot, PARAM_VALUES, PREDICTIONS, RISK_COSTS, validatePact, restrictions, PACT_SCHEMA } from '../pacts/schema';
 import { readback } from '../pacts/readback';
@@ -34,7 +33,7 @@ export function Workshop({ game }: { game: Game }) {
   const addClause = (c: Clause) => { if (!draft) return; update({ ...draft, clauses: [...draft.clauses, c] }); };
   const setClause = (i: number, c: Clause) => { if (!draft) return; const clauses = draft.clauses.slice(); clauses[i] = c; update({ ...draft, clauses }); };
   const removeClause = (i: number) => { if (!draft) return; update({ ...draft, clauses: draft.clauses.filter((_, k) => k !== i) }); };
-  const close = () => { setState({ kind: 'explore' }); game.input.requestLock(); game.audio.play('close_001', 0.4); };
+  const close = () => game.closeWorkshop();
   const inscribe = () => {
     if (!draft) return;
     const r = book.inscribe(draft, Object.keys(kit.shapes));

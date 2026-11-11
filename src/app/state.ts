@@ -9,7 +9,7 @@ export type AppState =
   | { kind: 'title' }
   | { kind: 'tutorial'; step: TutorialStepId }
   | { kind: 'explore' }
-  | { kind: 'workshop' }
+  | { kind: 'workshop'; resume: AppState }
   | { kind: 'drill'; id: DrillId }
   | { kind: 'encounter'; id: EncounterId }
   | { kind: 'cinematic'; resume: AppState }
@@ -41,5 +41,13 @@ export function pause(tab: 'menu' | 'settings' | 'codex' | 'map' = 'menu'): void
 
 export function resume(): void {
   const cur = appState.value;
-  if (cur.kind === 'paused' || cur.kind === 'cinematic') appState.value = cur.resume;
+  if (cur.kind === 'paused' || cur.kind === 'cinematic' || cur.kind === 'workshop') appState.value = cur.resume;
+}
+
+// The Workshop pauses the world and returns to the state it opened from, so
+// a tutorial in progress is still in progress after the player closes it.
+export function openWorkshop(): void {
+  const cur = appState.value;
+  if (cur.kind === 'workshop') return;
+  appState.value = { kind: 'workshop', resume: cur.kind === 'paused' ? cur.resume : cur };
 }

@@ -22,9 +22,10 @@ export interface TechniqueKit {
   type: string;
   blurb: string;
   resource: { name: string; max: number; regen: number; startsFull: boolean; free?: AbilitySlot[] };
-  primitive: { name: string; description: string };
+  // `short` is the HUD's few words on what a key does, in sentence case.
+  primitive: { name: string; short: string; description: string };
   parameters: Param[];
-  shapes: Record<string, { label: string; slot: AbilitySlot[]; description: string }>;
+  shapes: Record<string, { label: string; short: string; slot: AbilitySlot[]; description: string }>;
   behaviors: Record<string, string>;
   catalogue: Pact[];
   gestures: Record<string, GestureSet>;

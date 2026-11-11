@@ -1,11 +1,12 @@
 import * as THREE from 'three';
+import type { PointSource } from '../render/lightPool';
 
 export interface NeonDef { text: string; color: number; position: [number, number, number]; rotationY: number; width?: number; vertical?: boolean; flicker?: number; light?: boolean }
 
 export class NeonSign {
   readonly group = new THREE.Group();
   private mat: THREE.MeshStandardMaterial;
-  private light: THREE.PointLight | null = null;
+  readonly light: PointSource | null = null;
   private seed = Math.random() * 100;
   private flicker: number;
   private color: THREE.Color;
@@ -51,9 +52,10 @@ export class NeonSign {
     this.group.rotation.y = def.rotationY;
     this.flicker = def.flicker ?? 0;
     if (def.light !== false) {
-      this.light = new THREE.PointLight(def.color, 28, 14, 2);
-      this.light.position.set(0, -h * 0.3, 0.6);
-      this.group.add(this.light);
+      // Signs never move and their parent sits at the origin, so the group's
+      // local matrix places the light in world space.
+      this.group.updateMatrix();
+      this.light = { kind: 'point', position: new THREE.Vector3(0, -h * 0.3, 0.6).applyMatrix4(this.group.matrix), color: this.color, intensity: 28, distance: 14, decay: 2 };
     }
   }
 

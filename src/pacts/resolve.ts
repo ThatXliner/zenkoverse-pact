@@ -1,4 +1,4 @@
-import { type Pact, type Restriction, restrictions, sacrificeTag } from './schema';
+import { type Pact, type Param, type Restriction, restrictions, sacrificeTag } from './schema';
 
 // Play telemetry the Resolve estimate reads. Fractions are 0..1 and decay
 // toward what the player actually does, so a restriction on something they
@@ -23,7 +23,7 @@ export const DEFAULT_TELEMETRY: Telemetry = {
 
 export type ResolveRead = 'trivial' | 'slight' | 'meaningful' | 'heavy' | 'grave';
 
-export interface ResolveLine { label: string; value: number; reason: string; zero?: boolean; warn?: boolean }
+export interface ResolveLine { label: string; value: number; reason: string; zero?: boolean; warn?: boolean; param?: Param; by?: string }
 export interface ResolveEstimate { total: number; read: ResolveRead; lines: ResolveLine[]; potency: number }
 
 // Base weight: how much capability the restriction surrenders for a typical
@@ -73,20 +73,21 @@ const WEIGHTS: Record<string, { base: number; usage: (t: Telemetry) => number; w
 
 // A sacrifice counts once, for the Pact that paid it first. Pacts inscribed
 // earlier come first, and a draft comes after everything inscribed.
-export function countedBefore(pact: Pact, inscribed: Pact[]): Set<string> {
+export function countedBefore(pact: Pact, inscribed: Pact[]): Map<string, string> {
   const at = inscribed.findIndex((p) => p.id === pact.id);
-  const counted = new Set<string>();
-  for (const other of at < 0 ? inscribed : inscribed.slice(0, at)) for (const r of restrictions(other)) counted.add(sacrificeTag(r));
+  const counted = new Map<string, string>();
+  for (const other of at < 0 ? inscribed : inscribed.slice(0, at)) for (const r of restrictions(other)) if (!counted.has(sacrificeTag(r))) counted.set(sacrificeTag(r), other.name);
   return counted;
 }
 
-export function lineFor(r: Restriction, counted: Set<string>, telemetry: Telemetry): ResolveLine {
+export function lineFor(r: Restriction, counted: Map<string, string>, telemetry: Telemetry): ResolveLine {
   const tag = sacrificeTag(r);
   const w = WEIGHTS[tag]!;
-  if (counted.has(tag)) return { label: describe(r), value: 0, reason: 'already counted by another Pact', zero: true };
+  const by = counted.get(tag);
+  if (by) return { label: describe(r), value: 0, reason: `"${by}" already pays this sacrifice while it is in use, so it earns nothing again`, zero: true, param: r.param, by };
   const usage = Math.min(1.6, Math.max(0.05, w.usage(telemetry)));
   const warn = usage < 0.5;
-  return { label: describe(r), value: round(w.base * usage), reason: warn ? `${w.why}, but you rarely do otherwise` : w.why, warn };
+  return { label: describe(r), value: round(w.base * usage), reason: warn ? `${w.why}, but you rarely do otherwise` : w.why, warn, param: r.param };
 }
 
 export function estimateResolve(pact: Pact, inscribed: Pact[], telemetry: Telemetry): ResolveEstimate {

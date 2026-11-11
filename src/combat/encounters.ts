@@ -71,7 +71,7 @@ export class Encounters {
       if (s.key === 'ancient') e.aura.active = true;
       this.enemies.push(e);
     }
-    setState({ kind: 'encounter', id });
+    if (appState.value.kind !== 'tutorial') setState({ kind: 'encounter', id });
     banner(d.jp, d.title);
     if (d.intro) toast(d.intro);
     g.audio.play('bong_001', 0.7, 0.8);

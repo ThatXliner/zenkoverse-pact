@@ -3,22 +3,23 @@ import { signal } from '@preact/signals';
 import type { Game } from '../app/game';
 import { appState, setState, type TutorialStepId } from '../app/state';
 import { toast, banner } from '../app/game';
+import { techUi } from '../techniques/techniques';
 
-export interface TutorialStep { id: TutorialStepId; title: string; jp: string; body: string; objective(g: Game, ev: Set<string>): boolean }
+export interface TutorialStep { id: TutorialStepId; title: string; jp: string; body: string | ((g: Game) => string); objective(g: Game, ev: Set<string>): boolean }
 
 const STEPS: TutorialStep[] = [
   { id: 'move', title: 'Move', jp: '歩', body: 'WASD to walk, Shift to sprint, Space to jump, C to dash. Walk across the courtyard.', objective: (g) => g.player.position.distanceTo(new THREE.Vector3(-58, 0, -52)) > 6 },
   { id: 'look', title: 'Look', jp: '視', body: 'Look around. The crane to your west is the Academy drill rig.', objective: (_g, ev) => ev.has('looked') },
   { id: 'camera', title: 'Camera', jp: '視点', body: 'Press V to step outside yourself. Third person shows the whole sign.', objective: (_g, ev) => ev.has('camera') },
-  { id: 'primary', title: 'Primary', jp: '技', body: 'Left click. Your Technique is raw: one imprecise primitive and the baseline Pact. The sign is long because you are new.', objective: (_g, ev) => ev.has('primary') },
-  { id: 'secondary', title: 'Secondary', jp: '構', body: 'Right click. Hold it where it holds. Try it on the crates by the crane.', objective: (_g, ev) => ev.has('secondary') },
-  { id: 'pact', title: 'Pact', jp: '契約', body: 'Press Tab to open the Pact Workshop. Inscribe one of the catalogue Pacts, or write your own. Read the terms before you confirm.', objective: (g) => g.book.inscribed.value.length > 0 },
+  { id: 'primary', title: 'Primary', jp: '技', body: () => { const s = techUi.slots.value.primary; return `Left click fires ${s.name}: ${s.what}. The sign is long because you are new.`; }, objective: (_g, ev) => ev.has('primary') },
+  { id: 'secondary', title: 'Secondary', jp: '構', body: () => { const s = techUi.slots.value.secondary; return `Right click fires ${s.name}: ${s.what}. Try it on the crates by the crane.`; }, objective: (_g, ev) => ev.has('secondary') },
+  { id: 'pact', title: 'Write a Pact', jp: '契約', body: 'Your Abilities are Pacts already written for you. Press Tab to open the Workshop and write one of your own: choose New Pact, add a term, then hold Inscribe. The Workshop shows each step.', objective: (g) => g.book.inscribed.value.some((p) => p.technique === g.techniqueId && !g.book.isCatalogue(p.id)) },
   { id: 'wager', title: 'Wager', jp: '賭', body: 'Press R to declare that your next strike connects. Then make it connect.', objective: (_g, ev) => ev.has('wager') },
   { id: 'max', title: 'Maximum Output', jp: '全力', body: 'The ring fills as you fight. When it is full, press Q. The world will wait for you.', objective: (_g, ev) => ev.has('max') },
   { id: 'done', title: 'Go', jp: '行', body: 'The district is yours. The dojo east of here holds the Workshop and a dummy room. Thugs wait in the alleys south of the market.', objective: () => false },
 ];
 
-export const tutorialUi = { step: signal<{ index: number; total: number; title: string; jp: string; body: string } | null>(null) };
+export const tutorialUi = { step: signal<{ id: TutorialStepId; index: number; total: number; title: string; jp: string; body: string } | null>(null) };
 
 export class Tutorial {
   private index = -1;
@@ -62,7 +63,7 @@ export class Tutorial {
     if (!s) { this.skip(); return; }
     this.events.clear();
     this.settleT = 0.6;
-    tutorialUi.step.value = { index: this.index + 1, total: STEPS.length - 1, title: s.title, jp: s.jp, body: s.body };
+    tutorialUi.step.value = { id: s.id, index: this.index + 1, total: STEPS.length - 1, title: s.title, jp: s.jp, body: typeof s.body === 'string' ? s.body : s.body(this.game) };
     setState({ kind: 'tutorial', step: s.id });
     if (s.id === 'max') this.game.techniques.charge = 1;
     if (s.id === 'done') { setTimeout(() => { if (appState.value.kind === 'tutorial') { setState({ kind: 'explore' }); tutorialUi.step.value = null; } }, 9000); }

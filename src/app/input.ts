@@ -75,6 +75,8 @@ export class Input {
 
   isDown(a: Action): boolean { return this.enabled && this.down.has(a); }
   hit(a: Action): boolean { return this.enabled && this.pressed.has(a); }
+  // Esc must work while a sheet blocks the rest of the input.
+  hitAny(a: Action): boolean { return this.pressed.has(a); }
   up(a: Action): boolean { return this.enabled && this.released.has(a); }
 
   axis(): { x: number; y: number } {

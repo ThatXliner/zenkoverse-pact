@@ -80,8 +80,6 @@ export class Techniques {
         ? { name: p.name, what: this.def.shapes[p.grant.shape]?.short ?? '', raw: false, preview: p === preview }
         : { name: `Raw ${this.def.primitive.name}`, what: this.def.primitive.short, raw: true, preview: false };
     }
-    void book.bindings.value;
-    void book.inscribed.value;
     techUi.slots.value = labels;
   }
 

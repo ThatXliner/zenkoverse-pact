@@ -145,6 +145,7 @@ export class Game {
     this.encounters.reset();
     this.book.preview.value = null;
     if (opts.skipTutorial) {
+      this.tutorial.skip();
       this.player.teleport(SPAWN.market.clone());
       this.cam.yaw = Math.PI / 2;
       setState({ kind: 'explore' });
@@ -197,7 +198,7 @@ export class Game {
     rainUniforms.time.value += raw;
     this.input.enabled = !uiBlocksInput.value && !this.cam.inShot;
 
-    if (this.input.hit('pause')) {
+    if (this.input.hitAny('pause')) {
       if (st.kind === 'paused') { resume(); this.input.requestLock(); }
       else if (st.kind === 'workshop') this.closeWorkshop();
       else if (worldRuns.value) { pause(); this.input.releaseLock(); }

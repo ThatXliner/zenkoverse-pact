@@ -1,6 +1,6 @@
 import { signal } from '@preact/signals';
 import { type Pact, type AbilitySlot, type TechniqueId, validatePact, type Validation } from './schema';
-import { estimateResolve, DEFAULT_TELEMETRY, type Telemetry, type ResolveEstimate } from './resolve';
+import { estimateResolve, countedBefore, DEFAULT_TELEMETRY, type Telemetry, type ResolveEstimate } from './resolve';
 
 const KEY = 'zenko.pacts.v3';
 const LEGACY_KEY = 'zenko.pacts.v2';
@@ -65,7 +65,15 @@ export class PactBook {
     return false;
   }
 
-  estimate(p: Pact): ResolveEstimate { return estimateResolve(p, this.inscribed.value, this.telemetry); }
+  // A sacrifice is paid only while the Pact that names it is in use, so
+  // Resolve is judged against the bound Pacts, with `p` standing in for
+  // whatever holds its key now (inscribing it would bind it there).
+  inEffect(p: Pact): Pact[] {
+    const holder = p.slot === 'passive' ? undefined : this.binding(p.slot);
+    return this.inscribed.value.filter((q) => q.technique === p.technique && (q.id === p.id || ((q.slot === 'passive' || this.binding(q.slot) === q.id) && q.id !== holder)));
+  }
+  estimate(p: Pact): ResolveEstimate { return estimateResolve(p, this.inEffect(p), this.telemetry); }
+  counted(p: Pact): Map<string, string> { return countedBefore(p, this.inEffect(p)); }
 
   saveDraft(p: Pact): void {
     this.drafts.value = [...this.drafts.value.filter((d) => d.id !== p.id), p];

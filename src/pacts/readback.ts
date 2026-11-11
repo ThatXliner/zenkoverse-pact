@@ -11,17 +11,16 @@ export const KEY_WORDS: Record<AbilitySlot, string> = { primary: 'left click', s
 
 export function readbackSegments(pact: Pact, shapeLabel: (shape: string) => string, behaviorLabel: (b: string) => string): Segment[] {
   const out: Segment[] = [];
-  const restrict = pact.clauses.map((c, index) => ({ c, index })).filter((x): x is { c: Extract<Clause, { kind: 'restrict' }>; index: number } => x.c.kind === 'restrict');
+  const restrict = pact.clauses.filter((c): c is Extract<Clause, { kind: 'restrict' }> => c.kind === 'restrict');
   const behaviors = (pact.grant.behaviors ?? []).map(behaviorLabel).filter(Boolean);
   out.push({ text: `"${pact.name}" on ` }, { text: KEY_WORDS[pact.slot], focus: { kind: 'key' } }, { text: ' ' });
   out.push({ text: shapeLabel(pact.grant.shape) + (behaviors.length ? `, and ${joinAnd(behaviors)}` : ''), focus: { kind: 'grant' } });
   out.push({ text: '. ' });
   if (restrict.length) {
     out.push({ text: 'In exchange it works ' });
-    restrict.forEach(({ c, index }, i) => {
+    restrict.forEach((c, i) => {
       out.push({ text: describe(c.restriction), focus: { kind: 'term', param: c.restriction.param } });
       out.push({ text: i < restrict.length - 2 ? ', ' : i === restrict.length - 2 ? ' and ' : '. ' });
-      void index;
     });
   } else out.push({ text: 'It asks nothing of you, so the universe gives it nothing beyond the raw Technique. ' });
   pact.clauses.forEach((c, index) => {

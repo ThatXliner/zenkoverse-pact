@@ -53,7 +53,7 @@ function freezeArea(g: import('../../app/game').Game, center: THREE.Vector3, rad
     const body = g.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(center.x, -2.75, center.z));
     const col = g.physics.world.createCollider(RAPIER.ColliderDesc.cuboid(radius, 0.15, radius), body);
     icePlatforms.push({ col, body, t: seconds + 4 });
-    const slab = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 0.9, 0.3, 24), new THREE.MeshPhysicalMaterial({ color: 0xcfefff, roughness: 0.08, transmission: 0.3, thickness: 0.5, transparent: true, opacity: 0.9 }));
+    const slab = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 0.9, 0.3, 24), new THREE.MeshPhysicalMaterial({ color: 0xcfefff, roughness: 0.08, transparent: true, opacity: 0.8 }));
     slab.position.set(center.x, -2.75, center.z);
     g.renderer.scene.add(slab);
     setTimeout(() => g.renderer.scene.remove(slab), (seconds + 4) * 1000);

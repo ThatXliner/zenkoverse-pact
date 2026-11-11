@@ -22,7 +22,9 @@ export class Vfx {
   private patchGeo = new THREE.CircleGeometry(1, 32);
   private debrisMat = new THREE.MeshStandardMaterial({ color: 0x5a4a3a, roughness: 0.9 });
   private metalMat = new THREE.MeshStandardMaterial({ color: 0x888c92, roughness: 0.4, metalness: 0.9 });
-  private iceMat = new THREE.MeshPhysicalMaterial({ color: 0xcfefff, roughness: 0.12, transmission: 0.4, thickness: 0.3, emissive: 0x6fd3ff, emissiveIntensity: 0.3, transparent: true, opacity: 0.9 });
+  // No transmission: it makes three render the whole scene a second time
+  // whenever a shard or spike is on screen, which doubles the frame.
+  private iceMat = new THREE.MeshPhysicalMaterial({ color: 0xcfefff, roughness: 0.12, emissive: 0x6fd3ff, emissiveIntensity: 0.3, transparent: true, opacity: 0.75 });
   private iceSpikeGeo = new THREE.ConeGeometry(0.22, 1.4, 6);
   readonly spikes: { mesh: THREE.Mesh; life: number }[] = [];
 

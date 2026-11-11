@@ -90,7 +90,7 @@ export class Encounters {
     const g = this.game;
     g.cutscenes.play({
       def: bossUltimate, caster: boss.avatar.root, casterYaw: boss.yaw, target: g.player.position.clone().add(new THREE.Vector3(0, 1.2, 0)),
-      onGesture: () => boss.avatar.playUpper('Spellcast_Long', 0.8),
+      onGesture: () => boss.avatar.playUpper('Spell_Simple_Enter', 0.8),
       onResolve: () => {
         const c = boss.position.clone();
         for (let i = 1; i <= 4; i++) setTimeout(() => g.vfx.ring(c.clone().add(new THREE.Vector3(0, 0.1 + i * 0.2, 0)), 0x7dffb2, 0.5, 6 * i, 0.7), i * 60);

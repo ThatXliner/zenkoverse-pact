@@ -68,7 +68,7 @@ export const shift: TechniqueKit = {
     secondary: gestureSet(0.55, 0.22, [{ t: 0, right: 'point', left: 'crossChest', slow: true }, { t: 0.18, right: 'pointFar', snap: true, camera: { fov: 10, roll: 0.03 } }, { t: 0.4, right: 'rest', left: 'rest' }]),
     max: gestureSet(2.0, 1.5, [{ t: 0, right: 'crossChest', left: 'crossChest', slow: true }, { t: 0.7, right: 'point', left: 'point', slow: true }, { t: 1.45, right: 'pointFar', left: 'pointFar', snap: true, camera: { fov: 14 } }, { t: 1.9, right: 'rest', left: 'rest' }]),
   },
-  avatarClips: { primary: 'Dualwield_Melee_Attack_Stab', secondary: 'Spellcast_Shoot', max: 'Dodge_Forward', passive: 'Idle' },
+  avatarClips: { primary: 'Punch_Jab', secondary: 'Spell_Simple_Shoot', max: 'Sword_Attack', passive: 'Idle_Loop' },
   traits: {},
   cutscene,
   effects: {

@@ -2,7 +2,8 @@
 // Capture harness for the gauntlet critics. Drives the built game through the
 // `?debug` hooks to fixed scenarios and saves screenshots and short frame
 // sequences per piece. Usage:
-//   node tools/capture.mjs [--out captures] [--only hands,district] [--url http://...] [--port 4173]
+//   node tools/capture.mjs [--out captures] [--only hands,district] [--url http://...] [--port 4173] [--gpu]
+// Pieces: ui, hands, variants, poses, third-person, district, vfx, encounters, workshop, tutorial, drill, perf.
 // Without --url it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -26,7 +27,11 @@ if (!url) {
   url = `http://localhost:${port}/`;
 }
 
-const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+// --gpu runs the installed Chrome on the real GPU (Metal), which is many times
+// faster than SwiftShader and matches what a player sees.
+const browser = args.gpu === 'true'
+  ? await chromium.launch({ channel: 'chrome', args: ['--use-angle=metal', '--ignore-gpu-blocklist'] })
+  : await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
@@ -97,6 +102,45 @@ if (run('hands')) {
     await api((g) => g.hold('secondary', false));
     await step(10);
   }
+}
+
+// Trained activation shortens the sign (short), then drops it (none); Alt
+// forces the full sign back. Each variant must still read as its gesture.
+if (run('variants')) {
+  await startRun('recoil');
+  await api((g) => { g.teleport('market'); g.camera('first'); g.look(Math.PI / 2, -0.05); });
+  const setActivation = (a) => api((g, v) => { const m = g.game.mastery; m.stats.value = { ...m.stats.value, recoil: { ...m.stats.value.recoil, activation: v } }; }, a);
+  for (const [name, act, full] of [['short', 0.5, false], ['none', 0.9, false], ['fullsign', 0.9, true]]) {
+    await setActivation(act);
+    await api((g, f) => g.hold('fullsign', f), full);
+    await step(20);
+    await api((g) => g.cast('primary'));
+    for (const f of [3, 8, 14, 24]) { await step(f === 3 ? 3 : f === 24 ? 10 : 6); await shot('variants', `recoil-${name}-f${f}`); }
+    await api((g) => g.hold('fullsign', false));
+    await step(40);
+  }
+  await setActivation(0);
+}
+
+// One frame per authored hand pose, held on both hands, for judging the rig.
+if (run('poses')) {
+  await startRun('rime');
+  await api((g) => { g.teleport('market'); g.camera('first'); g.look(Math.PI / 2, -0.05); });
+  for (const p of ['rest', 'restLow', 'sprint', 'bracePalm', 'braceWide', 'chamber', 'punch', 'palmDown', 'slamUp', 'slamDown', 'clawReady', 'clawReach', 'point', 'pointFar', 'cupEyes', 'cupFlinch', 'shieldEyes', 'palmSurface', 'palmPress', 'snapReady', 'snapped', 'quietSpread', 'guard', 'raiseHigh', 'crossChest', 'flat', 'landCatch']) {
+    await api((g, n) => g.pose(n), p);
+    await step(45);
+    await shot('poses', p);
+  }
+  // Side and top views of the poses where finger and palm contact matters.
+  for (const p of ['punch', 'chamber', 'clawReady', 'snapped', 'point', 'rest']) {
+    await api((g, n) => g.pose(n), p);
+    for (const [name, yaw, pitch] of [['side', 1.2, 0.15], ['top', 0, 1.25], ['inner', -1.1, 0.3]]) {
+      await api((g, y, pt) => g.handsView(y, pt), yaw, pitch);
+      await step(45);
+      await shot('poses', `${p}-${name}`);
+    }
+  }
+  await api((g) => { g.handsView(0, 0); g.pose(null); });
 }
 
 if (run('third-person')) {
@@ -220,7 +264,7 @@ if (run('perf')) {
   await startRun('recoil');
   await api((g) => { g.teleport('market'); g.camera('first'); g.look(Math.PI / 2, 0); g.loop(true); });
   await settle(1500);
-  const fps = await page.evaluate(async () => { const t0 = performance.now(); let n = 0; await new Promise((r) => { const f = () => { n++; if (performance.now() - t0 > 2000) r(); else requestAnimationFrame(f); }; requestAnimationFrame(f); }); return { fps: Math.round(n / 2), ...window.game.stats() }; });
+  const fps = await page.evaluate(async () => { const t0 = performance.now(); let n = 0; await new Promise((r) => { const f = () => { n++; if (performance.now() - t0 > 2000) r(); else requestAnimationFrame(f); }; requestAnimationFrame(f); }); return { ...window.game.stats(), fps: Math.round(n / 2) }; });
   report.perf = fps;
   await api((g) => g.loop(false));
 }

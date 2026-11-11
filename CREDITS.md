@@ -4,7 +4,8 @@ Every third-party asset in `public/assets/` is listed here with its source and l
 
 | Asset | Author | License | Source | Used for |
 | --- | --- | --- | --- | --- |
-| KayKit Character Pack: Adventurers 1.0 | Kay Lousberg | CC0 1.0 | https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0 | Rigged, animated characters for the player, pedestrians and enemies. |
+| Universal Base Characters (Standard) | Quaternius | CC0 1.0 | https://quaternius.com/packs/universalbasecharacters.html | Realistic rigged human with finger bones: the first-person arms and hands, and the third-person player, pedestrians and enemies. The suit, sleeve and cuff are generated from the skin mesh by tools/human.mjs. |
+| Universal Animation Library (Standard) | Quaternius | CC0 1.0 | https://quaternius.com/packs/universalanimationlibrary.html | Locomotion, jump, hit, death and casting clips, retargeted onto the base character by bone name. |
 | City Kit (Commercial) 2.1 | Kenney | CC0 1.0 | https://kenney.nl/assets/city-kit-commercial | Buildings, awnings and overhangs. |
 | City Kit (Suburban) | Kenney | CC0 1.0 | https://kenney.nl/assets/city-kit-suburban | Houses, fences, planters, trees. |
 | City Kit (Roads) | Kenney | CC0 1.0 | https://kenney.nl/assets/city-kit-roads | Bridge pillars, street lights, poles, wires, signs, traffic lights, dumpsters, construction props. |
@@ -35,4 +36,4 @@ Every third-party asset in `public/assets/` is listed here with its source and l
 
 Typography is loaded from Google Fonts under the SIL Open Font License: Shippori Mincho B1, Zen Kaku Gothic New, and Inter.
 
-Rain, ice, aura, and shock-ring effects, the first-person arm rig, and all UI are original to this repository.
+Rain, ice, aura, and shock-ring effects, the generated clothing shells, the hand poses and gestures, and all UI are original to this repository.

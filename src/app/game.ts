@@ -108,11 +108,11 @@ export class Game {
       onJump: () => this.hands.jump(),
       onDash: () => { this.cam.kick({ fov: 9 }); this.audio.play('phaserUp3', 0.25, 1.4); this.hands.dash(); },
     });
-    this.avatar = new Avatar(this.assets, 'Rogue', { targetHeight: 1.78, hideParts: ['Cape'] });
+    this.avatar = new Avatar(this.assets, 'player', { targetHeight: 1.78 });
     scene.add(this.avatar.root);
     this.mastery = new Mastery();
     this.book = new PactBook();
-    this.hands = new Hands(this.renderer.overlayScene, this.renderer.overlayCamera);
+    this.hands = new Hands(this.renderer.overlayScene, this.renderer.overlayCamera, this.assets, scene.environment);
     this.drills = new Drills(this);
     this.techniques = new Techniques(this);
     this.combat = new Combat(this);
@@ -230,7 +230,7 @@ export class Game {
     this.renderer.overlayVisible = this.cam.isFirst && !this.cam.inShot && st.kind !== 'workshop';
 
     this.techniques.update(dt, raw);
-    this.hands.update(raw, dt, this.player, this.cam, this.input);
+    this.hands.update(raw, this.player, this.cam, this.input);
     this.combat.update(dt);
     this.aura.update(dt);
     this.encounters.update(dt);

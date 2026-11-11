@@ -119,7 +119,7 @@ export const recoil: TechniqueKit = {
     secondary: gestureSet(0.5, 0.2, [{ t: 0, right: 'bracePalm', left: 'bracePalm', snap: true, camera: { fov: -3 } }, { t: 0.3, right: 'braceWide', left: 'braceWide' }], true),
     max: gestureSet(2.2, 1.6, [{ t: 0, right: 'crossChest', left: 'crossChest', slow: true }, { t: 0.8, right: 'raiseHigh', left: 'raiseHigh', slow: true }, { t: 1.55, right: 'punch', left: 'punch', snap: true, camera: { fov: 12, pitch: 0.04 } }, { t: 2.0, right: 'rest', left: 'rest' }]),
   },
-  avatarClips: { primary: 'Unarmed_Melee_Attack_Punch_A', secondary: 'Block', max: 'Unarmed_Melee_Attack_Punch_B', passive: 'Idle' },
+  avatarClips: { primary: 'Punch_Jab', secondary: 'Spell_Simple_Enter', max: 'Punch_Cross', passive: 'Idle_Loop' },
   traits: {
     'kinetic-source': (prop, ctx) => { ctx.game.techniques.resource += prop.def.mass * 0.1; },
   },

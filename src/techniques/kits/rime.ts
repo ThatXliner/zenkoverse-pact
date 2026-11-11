@@ -81,7 +81,7 @@ export const rime: TechniqueKit = {
     secondary: gestureSet(0.6, 0.26, [{ t: 0, right: 'clawReady', slow: true }, { t: 0.2, right: 'clawReach', snap: true, camera: { fov: 4 } }, { t: 0.45, right: 'rest' }]),
     max: gestureSet(2.3, 1.7, [{ t: 0, right: 'clawReady', left: 'clawReady', slow: true }, { t: 0.8, right: 'raiseHigh', left: 'raiseHigh', slow: true }, { t: 1.6, right: 'slamDown', left: 'slamDown', snap: true, camera: { fov: 14, pitch: 0.06 } }, { t: 2.1, right: 'rest', left: 'rest' }]),
   },
-  avatarClips: { primary: '1H_Melee_Attack_Chop', secondary: 'Spellcast_Shoot', max: 'Spellcast_Long', passive: 'Idle' },
+  avatarClips: { primary: 'Sword_Attack', secondary: 'Spell_Simple_Shoot', max: 'Spell_Simple_Enter', passive: 'Idle_Loop' },
   traits: {
     freezable: (prop, ctx) => freezeProp(ctx, prop, 6),
   },

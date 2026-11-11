@@ -43,11 +43,14 @@ npm run dev
 
 ### Assets
 
-Everything under `public/assets/` is CC0, listed in `CREDITS.md`. To rebuild them from raw downloads (KayKit, Kenney, ambientCG, Poly Haven), place the downloads in one folder and run:
+Everything under `public/assets/` is CC0, listed in `CREDITS.md`. To rebuild them from raw downloads (Quaternius, KayKit, Kenney, ambientCG, Poly Haven), place the downloads in one folder and run:
 
 ```sh
-npm run assets -- <raw-download-dir>
+npm run assets -- <raw-download-dir>            # everything
+npm run assets -- <raw-download-dir> --only human  # just the character
 ```
+
+The character comes from `raw/quaternius/Universal Base Characters[Standard]` and `raw/quaternius/Universal Animation Library[Standard]`, the Standard zips from itch.io, unzipped. `tools/human.mjs` cuts the first-person arms, generates the suit and sleeve shells, retargets the clips, and writes `characters/human.glb`.
 
 The script compresses geometry with meshopt and textures to WebP, writes the byte manifest the loading bar reads, and regenerates `CREDITS.md`.
 
@@ -86,8 +89,8 @@ src/app         state machine, settings, input, asset loader, clock, game loop, 
 src/render      renderer and post stack, environment, wet PBR materials
 src/physics     Rapier world and queries
 src/player      character controller, camera rig
-src/character   KayKit avatar: locomotion blend, upper-body layer
-src/hands       first-person arm rig, poses, gesture timelines
+src/character   human avatar: looks, locomotion blend at measured clip speeds, upper-body layer
+src/hands       first-person arms on the human skeleton: calibrated IK rig, poses, gesture timelines
 src/pacts       Pact schema, validator, JSON Schema, Resolve, readback, the player's book
 src/mastery     mastery stats and gesture variant selection
 src/techniques  Technique kit contract, runtime, VFX pool, kits/<technique>.ts

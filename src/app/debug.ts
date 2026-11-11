@@ -3,6 +3,7 @@ import type { Game } from './game';
 import { SPAWN } from '../world/district';
 import { setState, appState } from './state';
 import type { TechniqueId } from '../techniques/kit';
+import type { PoseName } from '../hands/poses';
 
 export interface DebugApi {
   game: Game;
@@ -13,7 +14,9 @@ export interface DebugApi {
   camera(mode: 'first' | 'third'): void;
   look(yaw: number, pitch: number): void;
   cast(slot: 'primary' | 'secondary' | 'max'): void;
-  hold(action: 'primary' | 'secondary' | 'aura' | 'forward' | 'sprint', held: boolean): void;
+  pose(name: PoseName | null): void;
+  handsView(yaw: number, pitch: number): void;
+  hold(action: 'primary' | 'secondary' | 'aura' | 'forward' | 'sprint' | 'fullsign', held: boolean): void;
   encounter(id: 'alley-thugs' | 'kuroda' | 'ancient-bridge' | 'dummy-room'): void;
   drill(id: 'recoil-crane'): void;
   workshop(open: boolean): void;
@@ -45,6 +48,8 @@ export function installDebug(game: Game): void {
     camera(mode) { game.cam.mode = mode; game.cam.blend = mode === 'first' ? 0 : 1; },
     look(yaw, pitch) { game.cam.yaw = yaw; game.cam.pitch = pitch; },
     cast(slot) { game.techniques.cast(slot, true); },
+    pose(name) { game.hands.debugPose = name; },
+    handsView(yaw, pitch) { game.hands.inspect = yaw === 0 && pitch === 0 ? null : { yaw, pitch }; },
     hold(action, held) { game.input.inject(action, held); },
     encounter(id) { game.encounters.begin(id, true); },
     drill(id) { game.drills.begin(id); },

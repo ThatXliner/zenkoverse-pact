@@ -7,11 +7,11 @@ export type EnemyAi = 'thug' | 'kuroda' | 'ancient' | 'dummy';
 export interface EnemyDef { name: string; model: CharacterModel; hp: number; speed: number; dmg: number; ai: EnemyAi; boss?: boolean; tint?: number; emissive?: number; height?: number; title?: string }
 
 export const ENEMY_DEFS: Record<string, EnemyDef> = {
-  thug: { name: 'Underworld Thug', model: 'Rogue_Hooded', hp: 70, speed: 3.6, dmg: 11, ai: 'thug', tint: 0x9aa0a8 },
-  bruiser: { name: 'Bristle Brawler', model: 'Barbarian', hp: 120, speed: 3.0, dmg: 16, ai: 'thug', tint: 0xb08a80, height: 1.95 },
-  kuroda: { name: 'Kuroda Enforcer', model: 'Knight', hp: 620, speed: 3.2, dmg: 15, ai: 'kuroda', boss: true, tint: 0xb04a2a, emissive: 0xff3a00, height: 1.9, title: 'Kuroda Enforcer, whose "fire" is fuel' },
-  ancient: { name: 'The Ancient Echo Master', model: 'Mage', hp: 1300, speed: 2.6, dmg: 20, ai: 'ancient', boss: true, tint: 0xdfe8dc, emissive: 0x7dffb2, height: 1.7, title: 'The Ancient Echo Master' },
-  dummy: { name: 'Training Dummy', model: 'Barbarian', hp: 100000, speed: 0, dmg: 0, ai: 'dummy', tint: 0x7a6a58 },
+  thug: { name: 'Underworld Thug', model: 'bald', hp: 70, speed: 3.6, dmg: 11, ai: 'thug', tint: 0x9aa0a8 },
+  bruiser: { name: 'Bristle Brawler', model: 'beard', hp: 120, speed: 3.0, dmg: 16, ai: 'thug', tint: 0xb08a80, height: 1.95 },
+  kuroda: { name: 'Kuroda Enforcer', model: 'parted', hp: 620, speed: 3.2, dmg: 15, ai: 'kuroda', boss: true, tint: 0xb04a2a, emissive: 0xff3a00, height: 1.9, title: 'Kuroda Enforcer, whose "fire" is fuel' },
+  ancient: { name: 'The Ancient Echo Master', model: 'long', hp: 1300, speed: 2.6, dmg: 20, ai: 'ancient', boss: true, tint: 0xdfe8dc, emissive: 0x7dffb2, height: 1.7, title: 'The Ancient Echo Master' },
+  dummy: { name: 'Training Dummy', model: 'buzzed', hp: 100000, speed: 0, dmg: 0, ai: 'dummy', tint: 0x7a6a58 },
 };
 
 type State = 'idle' | 'chase' | 'windup' | 'strike' | 'recover' | 'stagger' | 'knocked' | 'dead' | 'cast';
@@ -47,7 +47,7 @@ export class Enemy {
     this.def = def;
     this.hp = this.maxHp = def.hp;
     this.position = pos.clone();
-    this.avatar = new Avatar(game.assets, def.model, { targetHeight: def.height ?? 1.8, tint: def.tint, emissive: def.emissive, hideWeapons: def.ai !== 'kuroda' });
+    this.avatar = new Avatar(game.assets, def.model, { targetHeight: def.height ?? 1.8, tint: def.tint, emissive: def.emissive });
     this.avatar.root.position.copy(pos);
     game.renderer.scene.add(this.avatar.root);
     const h = def.height ?? 1.8, r = 0.36;
@@ -70,16 +70,16 @@ export class Enemy {
     this.hp -= amount;
     this.damageTaken += amount;
     this.avatar.flash(1.2);
-    if (this.def.ai === 'dummy') { this.avatar.playOneShot('Hit_A'); return; }
+    if (this.def.ai === 'dummy') { this.avatar.playOneShot('Hit_Chest'); return; }
     const from = opts.from ?? this.game.player.position;
     const away = this.position.clone().sub(from).setY(0).normalize();
     const knock = (opts.knock ?? 0) * (this.isBoss ? 0.25 : 1);
     if (knock > 0) {
       this.velocity.addScaledVector(away, knock);
       this.velocity.y += (opts.lift ?? knock * 0.35) * (this.isBoss ? 0.3 : 1);
-      if (knock > 4 && !this.isBoss) { this.state = 'knocked'; this.t = 0; this.avatar.playOneShot('Hit_B'); }
-      else if (opts.stagger !== false) { this.state = 'stagger'; this.t = 0; this.avatar.playOneShot('Hit_A'); }
-    } else if (opts.stagger !== false && this.state !== 'knocked') { this.state = 'stagger'; this.t = 0; this.avatar.playOneShot('Hit_A'); }
+      if (knock > 4 && !this.isBoss) { this.state = 'knocked'; this.t = 0; this.avatar.playOneShot('Hit_Head'); }
+      else if (opts.stagger !== false) { this.state = 'stagger'; this.t = 0; this.avatar.playOneShot('Hit_Chest'); }
+    } else if (opts.stagger !== false && this.state !== 'knocked') { this.state = 'stagger'; this.t = 0; this.avatar.playOneShot('Hit_Chest'); }
     if (this.hp <= 0) this.die();
   }
 
@@ -127,8 +127,8 @@ export class Enemy {
           const reach = def.ai === 'ancient' ? 7 : 1.7;
           if (dist > reach) move.copy(toP).normalize().multiplyScalar(speed);
           if (def.ai === 'ancient' && dist < 5) move.copy(toP).normalize().multiplyScalar(-speed * 0.7);
-          if (dist <= reach + 0.3 && this.attackCd <= 0 && this.frozen <= 0) { this.state = 'windup'; this.t = 0; this.avatar.playUpper(def.ai === 'kuroda' ? 'Spellcast_Raise' : 'Unarmed_Melee_Attack_Punch_A', 1.1); }
-          if (def.ai !== 'thug' && this.castCd <= 0 && dist < 22 && this.frozen <= 0) { this.state = 'cast'; this.t = 0; this.avatar.playUpper('Spellcast_Long', 1); this.beginCast(); }
+          if (dist <= reach + 0.3 && this.attackCd <= 0 && this.frozen <= 0) { this.state = 'windup'; this.t = 0; this.avatar.playUpper(def.ai === 'kuroda' ? 'Spell_Simple_Enter' : 'Punch_Jab', 1.1); }
+          if (def.ai !== 'thug' && this.castCd <= 0 && dist < 22 && this.frozen <= 0) { this.state = 'cast'; this.t = 0; this.avatar.playUpper('Spell_Simple_Shoot', 1); this.beginCast(); }
           break;
         }
         case 'windup':

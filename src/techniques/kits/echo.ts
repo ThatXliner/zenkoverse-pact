@@ -55,7 +55,7 @@ export const echo: TechniqueKit = {
     secondary: gestureSet(0.5, 0.2, [{ t: 0, right: 'quietSpread', left: 'quietSpread', snap: true, camera: { fov: -3 } }], true),
     max: gestureSet(2.3, 1.7, [{ t: 0, right: 'raiseHigh', left: 'raiseHigh', slow: true }, { t: 0.9, right: 'flat', left: 'flat', slow: true }, { t: 1.65, right: 'palmPress', left: 'palmPress', snap: true, camera: { fov: 14, pitch: 0.08 } }, { t: 2.1, right: 'rest', left: 'rest' }]),
   },
-  avatarClips: { primary: 'Spellcast_Shoot', secondary: 'Blocking', max: 'Spellcast_Long', passive: 'Idle' },
+  avatarClips: { primary: 'Spell_Simple_Shoot', secondary: 'Spell_Simple_Idle_Loop', max: 'Spell_Simple_Enter', passive: 'Idle_Loop' },
   traits: {
     resonant: (prop, ctx) => {
       prop.resonance += 1.2 * ctx.potency + 0.3;

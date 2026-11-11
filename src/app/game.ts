@@ -96,11 +96,11 @@ export class Game {
     const scene = this.renderer.scene;
     this.env = setupEnvironment(scene, this.renderer.gl, this.assets);
     this.props = new PropSystem(this.assets, this.physics, scene);
-    this.district = buildDistrict(this.assets, this.physics, scene, this.props);
+    this.district = buildDistrict(this.assets, this.physics, scene, this.props, this.renderer.lights);
     this.rain = new Rain();
     scene.add(this.rain.group);
     this.audio = new Audio(this.assets);
-    this.vfx = new Vfx(scene);
+    this.vfx = new Vfx(scene, this.renderer.lights);
     this.cam = new CameraRig(this.renderer.camera, this.physics);
     this.player = new PlayerController(this.physics, SPAWN.academy.clone(), {
       onStep: (speed, surface) => { this.audio.footstep(surface, speed); this.hands.step(speed); },

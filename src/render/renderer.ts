@@ -3,6 +3,13 @@ import { EffectComposer, RenderPass, EffectPass, BloomEffect, SMAAEffect, Vignet
 import { N8AOPostPass } from 'n8ao';
 import type { Quality } from '../app/settings';
 import { patchLightLoop } from './lightLoop';
+import { LightPool, type PoolSize } from './lightPool';
+
+const POOL: Record<Quality, PoolSize> = {
+  high: { points: 8, spots: 6, spotShadows: 1 },
+  medium: { points: 6, spots: 4, spotShadows: 0 },
+  low: { points: 4, spots: 3, spotShadows: 0 },
+};
 
 const impactShader = /* glsl */ `
 uniform float amount;
@@ -34,6 +41,7 @@ export class Renderer {
   readonly overlayScene = new THREE.Scene();
   readonly camera = new THREE.PerspectiveCamera(80, 1, 0.08, 400);
   readonly overlayCamera = new THREE.PerspectiveCamera(75, 1, 0.01, 10);
+  readonly lights = new LightPool(this.scene);
   private impact: ImpactFrameEffect;
   private bloom: BloomEffect;
   private chroma: ChromaticAberrationEffect;
@@ -76,6 +84,7 @@ export class Renderer {
   setQuality(q: Quality): void {
     const dpr = Math.min(window.devicePixelRatio, q === 'low' ? 1 : q === 'medium' ? 1.25 : 2);
     this.gl.setPixelRatio(dpr);
+    this.lights.setSize(POOL[q]);
     this.gl.shadowMap.enabled = q !== 'low';
     this.ao.enabled = q !== 'low';
     this.ao.configuration.halfRes = q !== 'high';
@@ -107,6 +116,8 @@ export class Renderer {
     this.impact.amount = this.impactFrames > 0 ? 1 : 0;
     this.impact.tint = this.impactTint;
     if (this.impactFrames > 0) this.impactFrames--;
+    this.camera.updateMatrixWorld();
+    this.lights.update(this.camera, dt);
     this.gl.info.reset();
     this.gl.clear(true, true, true);
     this.composer.render(dt);

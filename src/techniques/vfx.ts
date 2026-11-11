@@ -1,9 +1,10 @@
 import * as THREE from 'three';
+import type { LightPool, PointSource } from '../render/lightPool';
 
 interface Particle { mesh: THREE.Object3D; vel: THREE.Vector3; spin: THREE.Vector3; life: number; max: number; kind: 'debris' | 'spark' | 'shard'; gravity: number; scaleEnd: number }
 interface Ring { mesh: THREE.Mesh; life: number; max: number; from: number; to: number; mat: THREE.MeshBasicMaterial }
 interface Trail { mesh: THREE.Mesh; points: THREE.Vector3[]; life: number; mat: THREE.MeshBasicMaterial; width: number }
-interface Flash { light: THREE.PointLight; life: number; max: number; peak: number }
+interface Flash { light: PointSource; life: number; max: number; peak: number }
 interface Patch { mesh: THREE.Mesh; life: number; max: number; mat: THREE.MeshPhysicalMaterial }
 
 // Pooled effects shared by every Technique: shock rings, debris, sparks,
@@ -25,7 +26,7 @@ export class Vfx {
   private iceSpikeGeo = new THREE.ConeGeometry(0.22, 1.4, 6);
   readonly spikes: { mesh: THREE.Mesh; life: number }[] = [];
 
-  constructor(private scene: THREE.Scene) {}
+  constructor(private scene: THREE.Scene, private lights: LightPool) {}
 
   ring(center: THREE.Vector3, color: number, from: number, to: number, life = 0.45, normal?: THREE.Vector3): void {
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -57,9 +58,7 @@ export class Vfx {
   }
 
   flash(center: THREE.Vector3, color: number, intensity: number, life = 0.25, distance = 12): void {
-    const light = new THREE.PointLight(color, intensity, distance, 2);
-    light.position.copy(center);
-    this.scene.add(light);
+    const light = this.lights.add<PointSource>({ kind: 'point', urgent: true, position: center.clone(), color: new THREE.Color(color), intensity, distance, decay: 2 });
     this.flashes.push({ light, life, max: life, peak: intensity });
   }
 
@@ -154,7 +153,7 @@ export class Vfx {
       const f = this.flashes[i]!;
       f.life -= dt;
       f.light.intensity = f.peak * Math.max(0, f.life / f.max);
-      if (f.life <= 0) { this.scene.remove(f.light); this.flashes.splice(i, 1); }
+      if (f.life <= 0) { this.lights.remove(f.light); this.flashes.splice(i, 1); }
     }
     for (let i = this.patches.length - 1; i >= 0; i--) {
       const p = this.patches[i]!;

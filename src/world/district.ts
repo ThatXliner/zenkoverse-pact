@@ -5,6 +5,7 @@ import { makeSurface, emissive, glass } from '../render/materials';
 import { facadeMaterial } from './facade';
 import { NeonSign, type NeonDef } from './neon';
 import { PropSystem } from './props';
+import type { LightPool } from '../render/lightPool';
 
 export type ZoneId = 'academy' | 'dojo' | 'market' | 'alley' | 'rooftop' | 'bridge' | 'kuroda' | 'canal';
 
@@ -63,17 +64,15 @@ export interface District {
   zones: Zone[];
   plaques: Plaque[];
   neons: NeonSign[];
-  lights: THREE.Light[];
   craneHook: THREE.Object3D;
   zoneAt(p: THREE.Vector3): Zone | null;
   indoorsAt(p: THREE.Vector3): number;
   update(time: number): void;
 }
 
-export function buildDistrict(assets: Assets, physics: Physics, scene: THREE.Scene, props: PropSystem): District {
+export function buildDistrict(assets: Assets, physics: Physics, scene: THREE.Scene, props: PropSystem, lights: LightPool): District {
   const g = new THREE.Group();
   scene.add(g);
-  const lights: THREE.Light[] = [];
   const zones: Zone[] = [];
   const plaques: Plaque[] = [];
   const neons: NeonSign[] = [];
@@ -89,6 +88,10 @@ export function buildDistrict(assets: Assets, physics: Physics, scene: THREE.Sce
   const planks = makeSurface(assets, 'Planks012', { repeat: 4, wet: 0.6 });
   const corrugated = makeSurface(assets, 'CorrugatedSteel005', { repeat: 4, wet: 0.8, metalness: 0.7, roughness: 0.5 });
   const brick = makeSurface(assets, 'Bricks059', { repeat: 6, wet: 0.5 });
+
+  const pointLight = (color: number, intensity: number, distance: number, x: number, y: number, z: number): void => {
+    lights.add({ kind: 'point', position: new THREE.Vector3(x, y, z), color: new THREE.Color(color), intensity, distance, decay: 2 });
+  };
 
   const slab = (mat: THREE.Material, x: number, y: number, z: number, w: number, h: number, d: number, rotY = 0, surface = 'concrete', shadow = true): THREE.Mesh => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
@@ -194,7 +197,7 @@ export function buildDistrict(assets: Assets, physics: Physics, scene: THREE.Sce
   for (let x = -70; x <= 50; x += 20) { lampPositions.push([x, -9.4, 0]); lampPositions.push([x + 10, 9.4, Math.PI]); }
   for (let z = -40; z <= 60; z += 25) { lampPositions.push([-8.4, z, Math.PI / 2]); }
   lampPositions.push([-58, -40, 0], [-72, -58, Math.PI / 2], [canalX - 11, 6, -Math.PI / 2], [canalX + 11, -6, Math.PI / 2], [20, 46, 0], [52, 50, Math.PI]);
-  lampPositions.forEach(([x, z, rot], i) => {
+  lampPositions.forEach(([x, z, rot]) => {
     const l = lampModel.clone(true);
     l.scale.setScalar(7.5);
     l.position.set(x, 0, z);
@@ -206,18 +209,11 @@ export function buildDistrict(assets: Assets, physics: Physics, scene: THREE.Sce
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 8), emissive(0xffc36a, 7));
     bulb.position.copy(head);
     g.add(bulb);
-    const spot = new THREE.SpotLight(0xffb45a, 160, 24, 0.95, 0.55, 1.6);
-    spot.position.copy(head);
-    spot.target.position.copy(head).setY(0);
-    spot.castShadow = i % 3 === 0;
-    spot.shadow.mapSize.set(512, 512);
-    spot.shadow.bias = -0.002;
-    g.add(spot, spot.target);
-    lights.push(spot);
+    lights.add({ kind: 'spot', position: head, target: head.clone().setY(0), color: new THREE.Color(0xffb45a), intensity: 160, distance: 24, decay: 1.6, angle: 0.95, penumbra: 0.55 });
   });
 
   // Neon signs over the market street and the alley.
-  for (const n of NEONS) { const s = new NeonSign(n); g.add(s.group); neons.push(s); }
+  for (const n of NEONS) { const s = new NeonSign(n); g.add(s.group); neons.push(s); if (s.light) lights.add(s.light); }
 
   // Market stalls: awning props with goods on crates.
   const awning = assets.model('props/detail-awning-wide').scene;
@@ -231,10 +227,7 @@ export function buildDistrict(assets: Assets, physics: Physics, scene: THREE.Sce
     a.traverse((o) => { if ((o as THREE.Mesh).isMesh) { (o as THREE.Mesh).castShadow = true; } });
     g.add(a);
     slab(planks, x, 0.5, z, 3.4, 1, 1.2, 0, 'wood');
-    const warm = new THREE.PointLight(0xffc98a, 22, 9, 2);
-    warm.position.set(x, 2.3, z);
-    g.add(warm);
-    lights.push(warm);
+    pointLight(0xffc98a, 22, 9, x, 2.3, z);
     const goods = ['steamer', 'pot', 'can', 'sodaCan', 'cardboard'];
     for (let k = 0; k < 3; k++) props.spawn(goods[(i + k) % goods.length]!, new THREE.Vector3(x - 1 + k, 1.02, z));
     props.spawn('crate', new THREE.Vector3(x + 2.6, 0.14, z));
@@ -259,10 +252,7 @@ export function buildDistrict(assets: Assets, physics: Physics, scene: THREE.Sce
     const face = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.6), new THREE.MeshStandardMaterial({ color: 0x0b1118, emissive: 0x7fd0ff, emissiveIntensity: 1.8, roughness: 0.2 }));
     face.position.set(x, 1.1, -8.84);
     g.add(face);
-    const pl = new THREE.PointLight(0x9fdfff, 10, 6, 2);
-    pl.position.set(x, 1.2, -8.2);
-    g.add(pl);
-    lights.push(pl);
+    pointLight(0x9fdfff, 10, 6, x, 1.2, -8.2);
   }
 
   // Alley: dumpsters, crates, puddled concrete, a steam vent.
@@ -300,10 +290,7 @@ export function buildDistrict(assets: Assets, physics: Physics, scene: THREE.Sce
     const lantern = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 0.5, 12), lanternMat);
     lantern.position.set(lx, 2.6, lz);
     g.add(lantern);
-    const pl = new THREE.PointLight(0xffb36b, 16, 9, 2);
-    pl.position.set(lx, 2.5, lz);
-    g.add(pl);
-    lights.push(pl);
+    pointLight(0xffb36b, 16, 9, lx, 2.5, lz);
   }
   const place = (model: string, x: number, y: number, z: number, rot = 0, s = 1): void => {
     const m = assets.model(model).scene.clone(true);
@@ -337,10 +324,7 @@ export function buildDistrict(assets: Assets, physics: Physics, scene: THREE.Sce
   g.add(hook);
   for (let i = 0; i < 4; i++) props.spawn('dummy', new THREE.Vector3(cx + 10 + i * 2.5, 0.16, cz + 2));
   for (let i = 0; i < 5; i++) props.spawn('crate', new THREE.Vector3(cx + 6 + i * 1.3, 0.16, cz - 12));
-  const academyLamp = new THREE.PointLight(0xdfe8ff, 40, 30, 1.8);
-  academyLamp.position.set(cx + 8, 7, cz - 2);
-  g.add(academyLamp);
-  lights.push(academyLamp);
+  lights.add({ kind: 'point', position: new THREE.Vector3(cx + 8, 7, cz - 2), color: new THREE.Color(0xdfe8ff), intensity: 40, distance: 30, decay: 1.8 });
   zones.push({ id: 'academy', min: new THREE.Vector3(-80, -1, -79), max: new THREE.Vector3(-36, 20, -38), label: 'Academy courtyard' });
 
   // Kuroda house: a lit house with a warm fence line and lanterns that burn fuel.
@@ -361,10 +345,7 @@ export function buildDistrict(assets: Assets, physics: Physics, scene: THREE.Sce
     lantern.position.set(lx, 1.9, lz);
     g.add(lantern);
     slab(rust, lx, 0.8, lz, 0.14, 1.6, 0.14);
-    const pl = new THREE.PointLight(0xff7a2a, 20, 10, 2);
-    pl.position.set(lx, 1.9, lz);
-    g.add(pl);
-    lights.push(pl);
+    pointLight(0xff7a2a, 20, 10, lx, 1.9, lz);
   }
   for (let i = 0; i < 4; i++) props.spawn('barrel', new THREE.Vector3(kx - 9 + i * 1.6, 0.14, kz - 7));
   zones.push({ id: 'kuroda', min: new THREE.Vector3(kx - 14, -1, kz - 12), max: new THREE.Vector3(kx + 14, 12, kz + 6), label: 'Kuroda house' });
@@ -420,7 +401,7 @@ export function buildDistrict(assets: Assets, physics: Physics, scene: THREE.Sce
   }
 
   const district: District = {
-    group: g, zones, plaques, neons, lights, craneHook: hook,
+    group: g, zones, plaques, neons, craneHook: hook,
     zoneAt(p) {
       for (const z of zones) if (z.id !== 'rooftop' && p.x >= z.min.x && p.x <= z.max.x && p.y >= z.min.y && p.y <= z.max.y && p.z >= z.min.z && p.z <= z.max.z) return z;
       const roof = zones.find((z) => z.id === 'rooftop')!;

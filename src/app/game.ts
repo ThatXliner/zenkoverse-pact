@@ -164,6 +164,7 @@ export class Game {
     this.book.preview.value = null;
     openWorkshop();
     this.audio.play('open_001', 0.4);
+    this.tutorial.notify('workshop');
   }
 
   closeWorkshop(): void {

@@ -154,7 +154,7 @@ await page.getByRole('button', { name: 'Begin at the Academy' }).click();
 check((await waitState('tutorial')) === 'tutorial', 'Begin at the Academy starts the tutorial');
 await page.evaluate(() => window.game.tutorialStep('pact'));
 await page.waitForTimeout(800);
-check((await page.locator('.objective .t').textContent()) === 'Write a Pact', `the card shows the Pact step: ${await page.locator('.objective .t').textContent()}`);
+check((await page.locator('.objective .t').textContent()) === 'Your Pacts', `the card shows the Pact step: ${await page.locator('.objective .t').textContent()}`);
 await shot('07-tutorial-pact-card');
 await page.keyboard.press('Tab');
 await page.locator('.ws-sheet').waitFor();

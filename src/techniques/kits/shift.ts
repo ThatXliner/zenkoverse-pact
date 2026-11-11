@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { toast } from '../../app/game';
 import type { TechniqueKit } from '../kit';
 import { gestureSet, rangeFor, hitCone, propsInCone, shoveProps } from './shared';
 import type { Pact } from '../../pacts/schema';
@@ -32,20 +33,26 @@ const cutscene = anchored({
 
 // Shift must handle an occupied destination: walk back along the line until a
 // standing capsule fits, and displace anything that stood where you arrive.
+// Shift translates horizontally toward the aim and lands on whatever ground is
+// below the arrival point, so aiming at the horizon or the sky still moves you.
+// An occupied or groundless arrival walks back along the line until a standing
+// capsule fits.
 function freeDestination(ctx: { game: import('../../app/game').Game }, from: THREE.Vector3, to: THREE.Vector3): THREE.Vector3 {
   const g = ctx.game;
-  const steps = 16;
-  for (let i = 0; i <= steps; i++) {
+  const down = new THREE.Vector3(0, -1, 0);
+  const steps = 24;
+  const top = Math.max(from.y, to.y) + 3;
+  for (let i = 0; i < steps; i++) {
     const p = to.clone().lerp(from, i / steps);
-    const feet = p.clone();
-    const blocked = g.physics.castRay(feet.clone().add(new THREE.Vector3(0, 1.0, 0)), new THREE.Vector3(0, -1, 0), 1.0, GROUP_WORLD)
-      && !g.physics.castRay(feet.clone().add(new THREE.Vector3(0, 0.95, 0)), new THREE.Vector3(0, 1, 0), 0.9, GROUP_WORLD)
-      && !g.physics.castRay(feet.clone().add(new THREE.Vector3(0, 0.3, 0)), new THREE.Vector3(1, 0, 0), 0.35, GROUP_WORLD)
-      && !g.physics.castRay(feet.clone().add(new THREE.Vector3(0, 0.3, 0)), new THREE.Vector3(-1, 0, 0), 0.35, GROUP_WORLD);
-    if (blocked) {
-      const ground = g.physics.castRay(feet.clone().add(new THREE.Vector3(0, 1.0, 0)), new THREE.Vector3(0, -1, 0), 1.0, GROUP_WORLD)!;
-      return ground.point;
-    }
+    const ground = g.physics.castRay(new THREE.Vector3(p.x, top, p.z), down, top - from.y + 6, GROUP_WORLD);
+    if (!ground || ground.point.y > from.y + 3.5) continue;
+    const feet = ground.point;
+    const clear = !g.physics.castRay(feet.clone().add(new THREE.Vector3(0, 0.05, 0)), new THREE.Vector3(0, 1, 0), 1.8, GROUP_WORLD)
+      && !g.physics.castRay(feet.clone().add(new THREE.Vector3(0, 0.5, 0)), new THREE.Vector3(1, 0, 0), 0.35, GROUP_WORLD)
+      && !g.physics.castRay(feet.clone().add(new THREE.Vector3(0, 0.5, 0)), new THREE.Vector3(-1, 0, 0), 0.35, GROUP_WORLD)
+      && !g.physics.castRay(feet.clone().add(new THREE.Vector3(0, 0.5, 0)), new THREE.Vector3(0, 0, 1), 0.35, GROUP_WORLD)
+      && !g.physics.castRay(feet.clone().add(new THREE.Vector3(0, 0.5, 0)), new THREE.Vector3(0, 0, -1), 0.35, GROUP_WORLD);
+    if (clear) return feet.clone();
   }
   return from.clone();
 }
@@ -82,7 +89,7 @@ export const shift: TechniqueKit = {
         g.vfx.afterimage(g.avatar.model, COLOR, 0.4);
         g.player.displace(dest.clone().sub(from));
         const momentum = ctx.behaviors.includes('momentum') ? 1 + g.player.planarSpeed.value / 6 : 1;
-        const hits = hitCone({ ...ctx, origin: g.player.eye() }, 2.4, 0.9, 24 * ctx.potency * momentum, { knock: 4, lift: 1.5, kind: 'cut', heavy: momentum > 1.5 });
+        const hits = hitCone({ ...ctx, origin: g.player.eye() }, 3.0, 1.0, 34 * ctx.potency * momentum, { knock: 4, lift: 1.5, kind: 'cut', heavy: momentum > 1.5 });
         shoveProps(ctx, propsInCone(g, g.player.eye(), flat, 2.6, 0.8), 3);
         g.vfx.ring(g.player.eye().addScaledVector(flat, 0.8), COLOR, 0.2, 1.8, 0.3, new THREE.Vector3(0, 1, 0).cross(flat).normalize());
         g.vfx.trail([from.clone().add(new THREE.Vector3(0, 1.2, 0)), dest.clone().add(new THREE.Vector3(0, 1.2, 0))], COLOR, 0.5, 0.25);
@@ -92,12 +99,16 @@ export const shift: TechniqueKit = {
       if (ctx.shape === 'translate') {
         const range = rangeFor(ctx, 14);
         const from = g.player.position.clone();
-        const aim = ctx.aim ?? from.clone().addScaledVector(flat, range);
-        const want = from.clone().add(aim.clone().sub(ctx.origin).setY(0).clampLength(0, range));
-        want.y = Math.max(0, aim.y - 0.1 > from.y + 0.5 ? aim.y : from.y);
-        const dest = ctx.behaviors.includes('through') ? freeDestination(ctx, from, want) : freeDestination(ctx, from, from.clone().lerp(want, 0.6));
+        // Aiming at ground nearer than full range lands there; aiming level, at the
+        // sky, or at a wall (which 'through' passes) takes the full range.
+        const aimFlat = ctx.aim ? ctx.aim.clone().sub(ctx.origin).setY(0).length() : range;
+        const onGround = !!ctx.aim && ctx.aim.y < from.y + 0.6 && ctx.dir.y < -0.05;
+        const blockedByWall = !!ctx.aim && !onGround && aimFlat < range;
+        const dist = onGround ? THREE.MathUtils.clamp(aimFlat, 4, range) : blockedByWall && !ctx.behaviors.includes('through') ? Math.max(0, aimFlat - 0.8) : range;
+        const dest = freeDestination(ctx, from, from.clone().addScaledVector(flat, dist));
+        if (dest.distanceTo(from) < 1) { toast('No room to Shift there', 'bad'); return { hits: 0 }; }
         let hits = 0;
-        for (const e of g.techniques.enemiesInSphere(dest, 1.2)) { g.combat.hitEnemy(e, 20 * ctx.potency, { from: dest, knock: 7, lift: 3, kind: 'cut' }); hits++; }
+        for (const e of g.techniques.enemiesInSphere(dest, 2.0)) { g.combat.hitEnemy(e, 30 * ctx.potency, { from: dest, knock: 7, lift: 3, kind: 'cut' }); hits++; }
         for (const p of g.props.instances) if (p.mesh.position.distanceTo(dest) < 1.4) { p.body.wakeUp(); p.body.applyImpulse(p.mesh.position.clone().sub(dest).setY(0.5).normalize().multiplyScalar(p.def.mass * 5), true); }
         g.vfx.afterimage(g.avatar.model, COLOR, 0.45);
         g.vfx.ring(from.clone().add(new THREE.Vector3(0, 1, 0)), COLOR, 0.3, 1.6, 0.35, flat);

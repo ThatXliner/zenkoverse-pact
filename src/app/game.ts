@@ -108,7 +108,7 @@ export class Game {
       onJump: () => this.hands.jump(),
       onDash: () => { this.cam.kick({ fov: 9 }); this.audio.play('phaserUp3', 0.25, 1.4); this.hands.dash(); },
     });
-    this.avatar = new Avatar(this.assets, 'Rogue', { targetHeight: 1.78 });
+    this.avatar = new Avatar(this.assets, 'Rogue', { targetHeight: 1.78, hideParts: ['Cape'] });
     scene.add(this.avatar.root);
     this.mastery = new Mastery();
     this.book = new PactBook();

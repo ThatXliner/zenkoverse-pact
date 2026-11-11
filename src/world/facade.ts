@@ -43,12 +43,12 @@ export function facadeMaterial(assets: Assets, palette: THREE.Texture | null, wa
         vec4 pal = texture2D(map, vMapUv);
         float lum = dot(pal.rgb, vec3(0.3,0.59,0.11));
         float bluish = pal.b - max(pal.r, pal.g);
-        float isWindow = step(0.10, bluish) * step(0.30, lum);
+        float isWindow = step(0.04, bluish) * step(0.25, lum);
         float isTrim = step(lum, 0.22);
         vec3 wallC = tri(tWall, vWp, vWn).rgb;
         vec3 trimC = tri(tTrim, vWp, vWn).rgb;
         vec3 palTint = mix(vec3(1.0), pal.rgb / max(lum, 0.05) * 0.85, 0.35);
-        vec3 wallFinal = mix(wallC * palTint, trimC * 0.8, isTrim);
+        vec3 wallFinal = mix(wallC * palTint, trimC * 0.8, isTrim) * 0.55;
         vec3 cell = floor(vWp * vec3(0.3, 0.42, 0.3) + vec3(0.5));
         float lit = step(0.78, fhash(cell));
         float flick = 0.9 + 0.1*sin(time*3.0 + fhash(cell+1.0)*40.0);

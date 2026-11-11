@@ -148,11 +148,11 @@ export class Hands {
     segment(fore, hand, 0.047, 0.036, FORE_LEN, 1);
     pushLocal(fore, geos.pop()!);
     jointSphere(fore, 0.047, 1); pushLocal(fore, geos.pop()!);
-    const cuff = new THREE.CylinderGeometry(0.05, 0.046, 0.05, 16, 1, true); cuff.rotateX(-Math.PI / 2); cuff.translate(0, 0, 0.03);
+    const cuff = new THREE.CylinderGeometry(0.052, 0.047, 0.055, 16, 1, false); cuff.rotateX(-Math.PI / 2); cuff.translate(0, 0, 0.03);
     attachTo(hand, cuff, 1); pushLocal(hand, geos.pop()!);
     const wristSkin = new THREE.CylinderGeometry(0.034, 0.038, 0.05, 14, 1, true); wristSkin.rotateX(-Math.PI / 2); wristSkin.translate(0, 0, 0.02);
     attachTo(hand, wristSkin, 0); pushLocal(hand, geos.pop()!);
-    const palm = new THREE.BoxGeometry(0.082, 0.028, 0.092, 3, 2, 3);
+    const palm = new THREE.BoxGeometry(0.084, 0.036, 0.092, 3, 2, 3);
     roundBox(palm, 0.012);
     palm.translate(side * 0.004, 0, -0.052);
     attachTo(hand, palm, 0); pushLocal(hand, geos.pop()!);
@@ -162,11 +162,11 @@ export class Hands {
     const fingers = {} as Record<Finger, FingerChain>;
     const nails: THREE.Mesh[] = [];
     const defs: { f: Finger; x: number; z: number; len: number[]; r: number; yaw: number; thumb?: boolean }[] = [
-      { f: 'index', x: -0.031, z: -0.098, len: [0.038, 0.026, 0.021], r: 0.0095, yaw: -0.05 },
-      { f: 'middle', x: -0.010, z: -0.102, len: [0.042, 0.03, 0.022], r: 0.0098, yaw: 0 },
-      { f: 'ring', x: 0.011, z: -0.098, len: [0.038, 0.027, 0.021], r: 0.0092, yaw: 0.04 },
-      { f: 'pinky', x: 0.031, z: -0.088, len: [0.03, 0.02, 0.018], r: 0.0082, yaw: 0.1 },
-      { f: 'thumb', x: -0.046, z: -0.035, len: [0.04, 0.03, 0.026], r: 0.011, yaw: -0.9, thumb: true },
+      { f: 'index', x: -0.031, z: -0.098, len: [0.036, 0.024, 0.02], r: 0.0118, yaw: -0.05 },
+      { f: 'middle', x: -0.010, z: -0.102, len: [0.04, 0.027, 0.021], r: 0.012, yaw: 0 },
+      { f: 'ring', x: 0.011, z: -0.098, len: [0.036, 0.025, 0.02], r: 0.0112, yaw: 0.04 },
+      { f: 'pinky', x: 0.031, z: -0.088, len: [0.028, 0.019, 0.017], r: 0.0098, yaw: 0.1 },
+      { f: 'thumb', x: -0.046, z: -0.035, len: [0.038, 0.028, 0.024], r: 0.013, yaw: -0.9, thumb: true },
     ];
     for (const d of defs) {
       const joints: THREE.Bone[] = [];
@@ -306,7 +306,7 @@ export class Hands {
 
     for (const arm of this.arms) {
       const tp = arm.targetPose;
-      const target = new THREE.Vector3(tp.pos[0] * 0.92, tp.pos[1] * 0.9 + 0.06 + breathe, tp.pos[2] * 0.82).add(bob);
+      const target = new THREE.Vector3(tp.pos[0] * 0.9, tp.pos[1] * 0.85 + 0.12 + breathe, tp.pos[2] * 0.82).add(bob);
       target.x += this.sway.x * (arm.side === 1 ? 1.2 : 0.9);
       target.y += this.sway.y;
       const acc = target.clone().sub(arm.pos).multiplyScalar(arm.stiffness).addScaledVector(arm.vel, -arm.damping);
@@ -334,9 +334,9 @@ export class Hands {
 
     const glowTarget = this.gesture ? 1 : 0;
     this.glow += (glowTarget - this.glow) * (1 - Math.exp(-8 * dtc));
-    this.light.intensity = this.glow * 2.2;
-    this.skin.emissive.copy(this.color).multiplyScalar(this.glow * 0.08);
-    this.nailMat.emissive.copy(this.frost > 0 ? new THREE.Color(0x9fe8ff) : this.color).multiplyScalar(this.frost * 0.5 + this.glow * 0.4);
+    this.light.intensity = this.glow * 0.22;
+    this.skin.emissive.copy(this.color).multiplyScalar(this.glow * 0.015);
+    this.nailMat.emissive.copy(this.frost > 0 ? new THREE.Color(0x9fe8ff) : this.color).multiplyScalar(this.frost * 0.5 + this.glow * 0.25);
     this.nailMat.color.lerp(this.frost > 0 ? new THREE.Color(0xd8f4ff) : new THREE.Color(0xe8c9b8), 0.1);
     for (const arm of this.arms) for (const n of arm.nails) n.scale.z = 1.3 + this.frost * 1.6 * (0.6 + this.glow);
     void dt;

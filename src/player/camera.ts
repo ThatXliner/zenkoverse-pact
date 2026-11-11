@@ -113,12 +113,12 @@ export class CameraRig {
 
     const fpPos = eye.clone().add(new THREE.Vector3(bobX, bobY, 0).applyQuaternion(q));
 
-    const pivot = playerPos.clone().add(new THREE.Vector3(0, 1.5, 0));
+    const pivot = playerPos.clone().add(new THREE.Vector3(0, 1.62, 0));
     const lookQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(this.pitch + this.pitchKick + shakePitch, this.yaw + shakeYaw, 0, 'YXZ'));
     const shoulder = new THREE.Vector3(0.55, 0.15, 0).applyQuaternion(lookQ);
     const back = new THREE.Vector3(0, 0, 1).applyQuaternion(lookQ);
     const armOrigin = pivot.clone().add(shoulder);
-    const desiredDist = 3.1 + Math.max(0, this.pitch) * 1.2;
+    const desiredDist = 3.6 + Math.max(0, this.pitch) * 1.2;
     const hit = this.physics.castRay(armOrigin, back, desiredDist + 0.3, GROUP_WORLD);
     const wantDist = hit ? Math.max(0.6, hit.toi - 0.3) : desiredDist;
     this.armDist += (wantDist - this.armDist) * (1 - Math.exp(-(wantDist < this.armDist ? 30 : 6) * rawDt));

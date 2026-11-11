@@ -2,7 +2,7 @@
 // Capture harness for the gauntlet critics. Drives the built game through the
 // `?debug` hooks to fixed scenarios and saves screenshots and short frame
 // sequences per piece. Usage:
-//   node tools/capture.mjs [--out captures] [--only hands,district] [--url http://...]
+//   node tools/capture.mjs [--out captures] [--only hands,district] [--url http://...] [--port 4173]
 // Without --url it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -20,9 +20,10 @@ let server = null;
 let url = args.url;
 if (!url) {
   if (!existsSync('dist/index.html')) throw new Error('dist/ missing: run npm run build first');
-  server = spawn('npx', ['vite', 'preview', '--port', '4173', '--strictPort'], { stdio: 'ignore' });
+  const port = args.port ?? '4173';
+  server = spawn('npx', ['vite', 'preview', '--port', port, '--strictPort'], { stdio: 'ignore' });
   await new Promise((r) => setTimeout(r, 1800));
-  url = 'http://localhost:4173/';
+  url = `http://localhost:${port}/`;
 }
 
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });

@@ -127,3 +127,17 @@ interface TutorialStep { id: TutorialStepId; title: string; body: string; object
 Each piece gets a builder agent and a separate critic agent. The critic judges recordings and screenshots against the named real-world references and writes concrete failures. The builder revises until the critic passes it. Nobody grades their own work.
 
 Rebuild in place on the `rebuild` branch. Delete the arena code once it is superseded. Do not keep it alive alongside. Commit each phase after it builds and passes the headless check. Keep the `?debug` hook: expose `window.game` and add teleport and skip-tutorial helpers.
+
+## Phase A deviations and known gaps
+
+Each line names a departure from the sections above, with the reason.
+
+- **Characters are KayKit Adventurers, not realistic humans.** No realistic rigged human with a permissive license exists to download without an account. KayKit is CC0, rigged, and ships 75 clips. The first-person arms are a skinned mesh built in code (`src/hands/hands.ts`) with three-joint fingers, because the KayKit rig has no finger bones. Phase B's hands critic should start from the arm silhouette and skin material.
+- **Pacts are the issue #3 model, not the stat-buff table.** `src/pacts/schema.ts` is the single source of truth, with a validator and an exported JSON Schema for issue #16. Catalogue Abilities are pre-authored as example Pacts the player can inscribe or edit. Resolve shows as a number plus a qualitative read. Both open questions can change inside `src/pacts` and `src/workshop` only.
+- **Technique kit contract.** Every Technique is one module exporting `TechniqueKit` (`src/techniques/kit.ts`). Two things still sit outside the kit: the Blink blindness overlay reads `blinkUi` directly in `src/ui/App.tsx`, and Rime's canal ice platforms touch the physics world from inside the kit. Both should move behind a kit `ui`/`world` hook when Tier 2 lands.
+- **Mastery (issue #17)** lives in `src/mastery/mastery.ts` with its tuning in `MASTERY_CONFIG`. Only the Recoil crane drill exists; it is the data template for the rest.
+- **Cutscenes (issue #27)** are `CutsceneDef` data in `src/cutscene/cutscene.ts`. Anchors are caster- or target-relative. All five Maximum Outputs and the Ancient Echo Master's ultimate route through it.
+- **Aura (issue #4)** keeps the arena rules in `src/combat/aura.ts` and nothing else depends on its internals.
+- **Workshop lesson.** The Workshop offers no side-by-side random options at all; the player edits a draft and reads the Resolve lines, where an already-counted sacrifice shows as struck through with the anti-loophole note. Every sheet is capped to the viewport and the capture harness checks the fit at 1280×720 and 1920×1080.
+- **Textures are WebP, not KTX2.** `toktx` is not available in the build environment. Geometry is meshopt-compressed. First load is 24.8 MB.
+- **Rain ambience is synthesized** (filtered noise through Web Audio) because no CC0 rain loop was available for automated download; it is muffled indoors.

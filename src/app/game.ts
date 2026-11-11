@@ -175,7 +175,6 @@ export class Game {
       else if (st.kind === 'workshop') { setState({ kind: 'explore' }); this.input.requestLock(); }
       else if (worldRuns.value) { pause(); this.input.releaseLock(); }
     }
-    if (st.kind === 'paused' && !document.pointerLockElement) { /* stay paused until resume */ }
     if (worldRuns.value && !this.input.locked && !this.cam.inShot && this.input.hit('primary')) this.input.requestLock();
 
     if (st.kind === 'title' || st.kind === 'boot') {
@@ -195,8 +194,7 @@ export class Game {
     this.district.update(this.clock.time);
     this.env.update(this.renderer.camera);
     this.rain.update(this.renderer.camera, this.district.indoorsAt(this.renderer.camera.position));
-    this.rain.groundY = this.player ? Math.max(0, Math.floor(this.player.position.y / 2) * 2) * 0 : 0;
-    this.audio.update(raw, this.district.indoorsAt(this.player.position), this.renderer.camera);
+    this.audio.update(this.district.indoorsAt(this.player.position));
     this.renderer.render(raw);
     this.input.endFrame();
 
@@ -215,8 +213,7 @@ export class Game {
     this.player.yaw = this.cam.yaw;
     const sprintOk = !this.techniques.casting;
     this.player.update(dt, this.input, sprintOk);
-    const steps = this.physics.tick(dt);
-    void steps;
+    this.physics.tick(dt);
 
     const axis = this.input.axis();
     this.avatar.root.position.copy(this.player.position);
@@ -239,7 +236,7 @@ export class Game {
     this.encounters.update(dt);
     this.pedestrians.update(dt);
     this.props.update(dt);
-    this.vfx.update(dt, this.renderer.camera);
+    this.vfx.update(dt);
     this.cutscenes.update(raw);
     this.tutorial.update(dt);
     this.drills.update(dt);
@@ -252,7 +249,6 @@ export class Game {
   }
 
   private updateInteract(): void {
-    const eye = this.player.eye();
     let best: { key: string; text: string; act: () => void } | null = null;
     for (const p of this.district.plaques) {
       if (p.position.distanceTo(this.player.position) < 2.2) { best = { key: 'E', text: p.found ? `Reread: ${p.title}` : `Read plaque: ${p.title}`, act: () => { p.found = true; hud.plaque.value = { title: p.title, body: p.body }; this.audio.play('glass_002', 0.4); setTimeout(() => { hud.plaque.value = null; }, 7000); } }; break; }
@@ -265,6 +261,5 @@ export class Game {
     if (!best && drill) best = drill;
     hud.prompt.value = best ? { key: best.key, text: best.text } : null;
     if (best && this.input.hit('interact')) best.act();
-    void eye;
   }
 }

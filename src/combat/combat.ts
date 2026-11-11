@@ -3,7 +3,6 @@ import { signal } from '@preact/signals';
 import type { Game } from '../app/game';
 import { hud, toast, banner } from '../app/game';
 import { setState } from '../app/state';
-import type { Pact } from '../pacts/schema';
 import type { Enemy } from './enemies';
 
 export type EyeId = 'horizon' | 'empty' | 'thread' | 'vault' | 'covenant';
@@ -69,8 +68,7 @@ export class Combat {
 
   wagerCommitted(slot: string): void { this.wagerSlot = slot; this.wagerArmed = false; combatUi.wagerArmed.value = false; this.wagerCd = 4; }
 
-  resolveWager(hit: boolean, pact: Pact | null): void {
-    void pact;
+  resolveWager(hit: boolean): void {
     this.wagerSlot = null;
     if (hit) { this.wagersWon++; banner('的中', 'Wager won. The universe pays out.'); this.game.audio.play('confirmation_002', 0.7); this.game.techniques.charge = Math.min(1, this.game.techniques.charge + 0.35); }
     else { this.wagersLost++; banner('外れ', 'Wager lost. Your Technique seals.'); this.game.audio.play('glitch_001', 0.7); this.game.techniques.seal(4); }

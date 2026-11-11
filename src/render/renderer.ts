@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { EffectComposer, RenderPass, EffectPass, BloomEffect, SMAAEffect, VignetteEffect, ToneMappingEffect, ToneMappingMode, BlendFunction, Effect, ChromaticAberrationEffect, KernelSize, ClearPass } from 'postprocessing';
+import { EffectComposer, RenderPass, EffectPass, BloomEffect, SMAAEffect, VignetteEffect, ToneMappingEffect, ToneMappingMode, BlendFunction, Effect, ChromaticAberrationEffect, KernelSize } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
 import type { Quality } from '../app/settings';
 
@@ -115,4 +115,3 @@ export class Renderer {
   }
 }
 
-export { ClearPass };

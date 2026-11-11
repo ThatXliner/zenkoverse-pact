@@ -122,8 +122,7 @@ export class Vfx {
     this.trails.push({ mesh: group as unknown as THREE.Mesh, points: [], life, mat, width: 0 });
   }
 
-  update(dt: number, camera: THREE.Camera): void {
-    void camera;
+  update(dt: number): void {
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i]!;
       p.life -= dt;

@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'preact/hooks';
-import { useSignal } from '@preact/signals';
 import type { Game } from '../app/game';
 import { hud } from '../app/game';
 import { appState, setState, pause, resume } from '../app/state';
@@ -272,8 +271,6 @@ function Seg({ value, options, onChange }: { value: string; options: readonly st
 }
 
 function Defeat({ game }: { game: Game }) {
-  const s = useSignal(0);
-  void s;
   return (
     <div class="defeat">
       <div>

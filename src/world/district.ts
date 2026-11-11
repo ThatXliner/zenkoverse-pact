@@ -240,10 +240,22 @@ export function buildDistrict(assets: Assets, physics: Physics, scene: THREE.Sce
     props.spawn('crate', new THREE.Vector3(x + 2.6, 0.14, z));
   });
 
+  // Parked cars along the curb, wet paint catching the neon.
+  const cars = ['kk-car_sedan', 'kk-car_taxi', 'kk-car_hatchback', 'kk-car_stationwagon'];
+  [[-52, -4.6, 0], [-36, 4.6, Math.PI], [-10, -4.6, 0], [6, 4.6, Math.PI], [24, -4.6, 0], [44, 4.6, Math.PI], [-5.2, -30, Math.PI / 2], [5.2, 28, -Math.PI / 2]].forEach(([x, z, rot], i) => {
+    const car = assets.model(`props/${cars[i % cars.length]}`).scene.clone(true);
+    car.scale.setScalar(4.2);
+    car.position.set(x!, 0, z!);
+    car.rotation.y = rot!;
+    car.traverse((o) => { if ((o as THREE.Mesh).isMesh) { const m = o as THREE.Mesh; m.castShadow = true; m.receiveShadow = true; const mm = (m.material as THREE.MeshStandardMaterial).clone(); mm.roughness = 0.18; mm.metalness = 0.35; mm.envMapIntensity = 1.4; m.material = mm; } });
+    g.add(car);
+    const along = Math.abs(Math.cos(rot!)) > 0.5 ? [2.1, 1.0] : [1.0, 2.1];
+    physics.staticBox(new THREE.Vector3(x!, 0.75, z!), new THREE.Vector3(along[0]!, 0.75, along[1]!));
+  });
+
   // Vending machines: glowing boxes against the north facades.
   for (const x of [-18, 8, 26]) {
-    const vm = slab(steel, x, 1, -9.3, 1.1, 2, 0.9, 0, 'metal');
-    void vm;
+    slab(steel, x, 1, -9.3, 1.1, 2, 0.9, 0, 'metal');
     const face = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.6), new THREE.MeshStandardMaterial({ color: 0x0b1118, emissive: 0x7fd0ff, emissiveIntensity: 1.8, roughness: 0.2 }));
     face.position.set(x, 1.1, -8.84);
     g.add(face);

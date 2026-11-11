@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import { MathUtils } from 'three';
 import type { Assets } from '../app/assets';
 import { settings } from '../app/settings';
 
@@ -106,13 +106,12 @@ export class Audio {
 
   land(v: number): void { this.play('impactSoft_medium_000', Math.min(0.7, v * 0.08), 0.8); }
 
-  update(dt: number, indoors: number, camera: THREE.Camera): void {
-    void dt; void camera;
+  update(indoors: number): void {
     if (!this.ctx) return;
     const s = settings.value;
     this.master.gain.value = s.volume;
     this.musicBus.gain.value = s.music;
-    this.rainFilter.frequency.value = THREE.MathUtils.lerp(5200, 700, indoors);
-    this.rainGain.gain.value = THREE.MathUtils.lerp(0.16, 0.05, indoors);
+    this.rainFilter.frequency.value = MathUtils.lerp(5200, 700, indoors);
+    this.rainGain.gain.value = MathUtils.lerp(0.16, 0.05, indoors);
   }
 }

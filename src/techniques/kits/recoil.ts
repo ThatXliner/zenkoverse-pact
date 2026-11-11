@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { TechniqueKit, AbilityContext } from '../kit';
 import { gestureSet, rangeFor, hitCone, propsInCone, shoveProps, frontOnly } from './shared';
 import type { PropInstance } from '../../world/props';
-import { RAPIER, GROUP_PROP } from '../../physics/world';
+import { RAPIER } from '../../physics/world';
 import type { Pact } from '../../pacts/schema';
 import { anchored } from './shift';
 import type { DrillDef } from '../../drills/drills';
@@ -93,7 +93,6 @@ const drill: DrillDef = {
     return p;
   },
   judge(game, prop, event) {
-    void game;
     if (event === 'caught') return 1;
     setTimeout(() => game.props.remove(prop), 4000);
     return 0;
@@ -197,4 +196,3 @@ export const recoil: TechniqueKit = {
   audio: { primary: { cast: 'impactSoft_medium_000', volume: 0.35, pitch: 1.2 }, secondary: { cast: 'highUp', volume: 0.25, pitch: 0.7 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 0.7 }, passive: { cast: 'tick_001' } },
 };
 
-void GROUP_PROP;

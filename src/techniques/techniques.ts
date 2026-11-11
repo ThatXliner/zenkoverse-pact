@@ -171,7 +171,7 @@ export class Techniques {
       if (r.cameraKick) g.cam.kick(r.cameraKick);
       if (r.rooted) g.player.rooted = Math.max(g.player.rooted, r.rooted);
       if (r.moveLock) g.player.moveLock = Math.max(g.player.moveLock, r.moveLock);
-      if (c.ctx.wagered) g.combat.resolveWager((r.hits ?? 0) > 0, pact);
+      if (c.ctx.wagered) g.combat.resolveWager((r.hits ?? 0) > 0);
       if ((r.hits ?? 0) > 0) { this.charge = Math.min(1, this.charge + 0.08 * (r.hits ?? 1)); g.mastery.gain(this.def.id, 'precision', 0.006); }
       else if (c.slot !== 'max') g.book.observe('longRangeFraction', c.ctx.aim && c.ctx.aim.distanceTo(c.ctx.origin) > 8 ? 1 : 0);
     }

@@ -127,9 +127,7 @@ export class PlayerController {
     }
     if (blockedH && axis.y > 0.3 && !locked) this.tryMantle(forward);
 
-    const t = this.body.translation();
     this.body.setNextKinematicTranslation({ x: this.position.x, y: this.position.y + PLAYER_HEIGHT / 2, z: this.position.z });
-    void t;
 
     const speed = Math.hypot(this.velocity.x, this.velocity.z);
     this.planarSpeed.value = speed;

@@ -90,11 +90,10 @@ export const blink: TechniqueKit = {
       }
       return undefined;
     },
-    passive(game, dt) {
+    passive(_game, dt) {
       stare += dt;
       blinkUi.stare.value = Math.min(1, stare / 6);
       if (blinkUi.blind.value > 0) blinkUi.blind.value = Math.max(0, blinkUi.blind.value - dt);
-      void game;
     },
   },
   audio: { primary: { cast: 'lowRandom', volume: 0.35, pitch: 1.2 }, secondary: { cast: 'lowRandom', volume: 0.3, pitch: 0.9 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 0.6 }, passive: { cast: 'tick_001' } },

@@ -8,10 +8,10 @@ export interface EnemyDef { name: string; model: CharacterModel; hp: number; spe
 
 export const ENEMY_DEFS: Record<string, EnemyDef> = {
   thug: { name: 'Underworld Thug', model: 'bald', hp: 70, speed: 3.6, dmg: 11, ai: 'thug', tint: 0x9aa0a8 },
-  bruiser: { name: 'Bristle Brawler', model: 'beard', hp: 120, speed: 3.0, dmg: 16, ai: 'thug', tint: 0xb08a80, height: 1.95 },
+  bruiser: { name: 'Bristle Brawler', model: 'beard', hp: 120, speed: 3.0, dmg: 16, ai: 'thug', tint: 0x7a2c34, height: 1.95 },
   kuroda: { name: 'Kuroda Enforcer', model: 'parted', hp: 620, speed: 3.2, dmg: 15, ai: 'kuroda', boss: true, tint: 0xb04a2a, emissive: 0xff3a00, height: 1.9, title: 'Kuroda Enforcer, whose "fire" is fuel' },
   ancient: { name: 'The Ancient Echo Master', model: 'long', hp: 1300, speed: 2.6, dmg: 20, ai: 'ancient', boss: true, tint: 0xdfe8dc, emissive: 0x7dffb2, height: 1.7, title: 'The Ancient Echo Master' },
-  dummy: { name: 'Training Dummy', model: 'buzzed', hp: 100000, speed: 0, dmg: 0, ai: 'dummy', tint: 0x7a6a58 },
+  dummy: { name: 'Training Dummy', model: 'buzzed', hp: 100000, speed: 0, dmg: 0, ai: 'dummy', tint: 0x3e5a78 },
 };
 
 type State = 'idle' | 'chase' | 'windup' | 'strike' | 'recover' | 'stagger' | 'knocked' | 'dead' | 'cast';

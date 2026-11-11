@@ -19,7 +19,7 @@ export class Pedestrians {
 
   constructor(private game: Game) {
     const models: CharacterModel[] = ['Mage', 'Barbarian', 'Rogue', 'Knight', 'Rogue_Hooded'];
-    const tints = [0x7a8290, 0x5a6a80, 0x8a7a6a, 0x66707a, 0x4a5560];
+    const tints = [0x7a8290, 0x5a6a80, 0x4e6a58, 0x66707a, 0x4a5560];
     PATHS.forEach((p, i) => {
       for (let k = 0; k < 2; k++) {
         const path = p.map(([x, z]) => new THREE.Vector3(x, 0.14, z));

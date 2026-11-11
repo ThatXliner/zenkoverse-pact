@@ -214,16 +214,30 @@ if (run('workshop')) {
     await page.setViewportSize({ width: w, height: h });
     await api((g) => g.workshop(true));
     await settle(300);
-    await shot('workshop', `write-${w}x${h}`);
-    await checkFit(`workshop-write-${w}x${h}`, '.sheet');
-    await page.locator('.tabs button', { hasText: 'Inscribed' }).click();
+    await shot('workshop', `book-${w}x${h}`);
+    await checkFit(`workshop-book-${w}x${h}`, '.sheet');
+    await page.locator('.ws-book .bk.new').click();
     await settle(150);
-    await shot('workshop', `inscribed-${w}x${h}`);
-    await page.locator('.tabs button', { hasText: 'Write' }).click();
+    await shot('workshop', `add-term-${w}x${h}`);
+    await checkFit(`workshop-add-term-${w}x${h}`, '.sheet');
+    for (const [param, value] of [['Body', 'with both hands'], ['Direction', 'only from the front'], ['Range', 'within a few steps'], ['Trigger', 'only while standing still'], ['Duration', 'while held']]) {
+      await page.getByRole('button', { name: '+ add a term' }).click();
+      await page.locator('.opt', { hasText: param }).click();
+      await settle(120);
+      await shot('workshop', `pick-${param.toLowerCase()}-${w}x${h}`);
+      await checkFit(`workshop-pick-${param.toLowerCase()}-${w}x${h}`, '.sheet');
+      await page.locator('.opt', { hasText: value }).click();
+    }
+    await page.locator('.ws-sentence .ph', { hasText: 'releases stored energy' }).click();
+    await settle(120);
+    await shot('workshop', `pick-grant-${w}x${h}`);
+    await checkFit(`workshop-pick-grant-${w}x${h}`, '.sheet');
     await page.locator('.btn.primary', { hasText: 'Inscribe' }).click();
     await settle(200);
     await shot('workshop', `confirm-${w}x${h}`);
     await checkFit(`workshop-confirm-${w}x${h}`, '.confirm .box');
+    await page.locator('.btn', { hasText: 'Not yet' }).click();
+    await page.locator('.btn', { hasText: 'Discard draft' }).click();
     await api((g) => g.workshop(false));
     await settle(100);
   }

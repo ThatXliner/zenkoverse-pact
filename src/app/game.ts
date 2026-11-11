@@ -86,6 +86,7 @@ export class Game {
   constructor(readonly canvas: HTMLCanvasElement) {
     this.renderer = new Renderer(canvas);
     this.input = new Input(canvas);
+    this.input.onLockLost = () => { if (worldRuns.value && !this.cam.inShot) pause(); };
     this.assets = new Assets(import.meta.env.BASE_URL, (p, label) => setState({ kind: 'boot', progress: p, label }));
     window.addEventListener('resize', () => this.renderer.resize());
     this.renderer.resize();

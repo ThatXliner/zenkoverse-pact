@@ -26,6 +26,12 @@ const LOOPS: Locomotion[] = ['idle', 'walk', 'run', 'sprint', 'air'];
 const UPPER_CLIPS = ['Punch_Jab', 'Punch_Cross', 'Spell_Simple_Enter', 'Spell_Simple_Exit', 'Spell_Simple_Shoot', 'Spell_Simple_Idle_Loop', 'Hit_Chest', 'Hit_Head', 'Interact', 'PickUp_Table', 'Sword_Attack'];
 const UPPER_BONE = /^(spine_0[1-3]|neck_01|Head|clavicle|upperarm|lowerarm|hand|thumb|index|middle|ring|pinky)/;
 const SPINE = ['spine_01', 'spine_02', 'spine_03'];
+// Bones the procedural layer turns on top of the clips.
+const LAYERED = ['pelvis', ...SPINE, 'Head'];
+const UP = new THREE.Vector3(0, 1, 0);
+// Beyond this angle from the facing, travel plays the cycle backward.
+const BACKING = THREE.MathUtils.degToRad(100);
+const MAX_HIP_YAW = 1.2;
 const SUIT = 0x1a1d25;
 const BODY_BOUNDS = new THREE.Sphere(new THREE.Vector3(0, 0.9, 0), 1.5);
 const WHITE = new THREE.Color(1, 1, 1);
@@ -50,6 +56,7 @@ export class Avatar {
   readonly bones = new Map<string, THREE.Bone>();
   private aimPitch = 0;
   private hipYaw = 0;
+  private layered: { bone: THREE.Bone; clip: THREE.Quaternion }[] = [];
   private oneShot: THREE.AnimationAction | null = null;
   readonly height: number;
   private suit: THREE.MeshPhysicalMaterial;
@@ -94,6 +101,10 @@ export class Avatar {
       this.materials.push(mat);
     });
     for (const o of drop) o.removeFromParent();
+    // The model is authored facing +Z. Turned inside the root, the root follows
+    // the game's convention (yaw 0 looks down -Z, like the camera), so callers
+    // set root.rotation.y to their yaw as they would for any other object.
+    this.model.rotation.y = Math.PI;
     const box = new THREE.Box3().setFromObject(this.model);
     const h = box.max.y - box.min.y;
     const target = opts.targetHeight ?? 1.78;
@@ -120,13 +131,20 @@ export class Avatar {
     // Bake the idle pose now: the bind pose is a T-pose, and far-away
     // pedestrians are never updated.
     this.mixer.update(0);
+    this.layered = LAYERED.flatMap((n) => { const bone = this.bones.get(n); return bone ? [{ bone, clip: bone.quaternion.clone() }] : []; });
   }
 
   // Locomotion is a blend over speed bands. Each clip runs at the time scale
   // that matches its measured ground speed, so feet plant instead of sliding.
-  setLocomotion(speed: number, strafe: number, forwardAmt: number, grounded: boolean, dt: number): void {
+  // `velocity` is in world space; the avatar reads it against its own facing.
+  setLocomotion(velocity: THREE.Vector3, grounded: boolean, dt: number): void {
+    const speed = Math.hypot(velocity.x, velocity.z);
+    const facing = this.root.getWorldQuaternion(new THREE.Quaternion());
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(facing);
+    // Direction of travel as a yaw from the facing, positive to the left.
+    const travel = Math.atan2(fwd.z * velocity.x - fwd.x * velocity.z, fwd.x * velocity.x + fwd.z * velocity.z);
+    const backing = Math.abs(travel) > BACKING;
     const targets: Partial<Record<Locomotion, number>> = {};
-    const backing = forwardAmt < -0.4 && Math.abs(strafe) < 0.6;
     if (!grounded) targets.air = 1;
     else if (speed < 0.35) targets.idle = 1;
     else {
@@ -146,9 +164,10 @@ export class Avatar {
       const natural = this.clipSpeed[LOCO_CLIP[l]];
       if (natural && w > 0.001) a.setEffectiveTimeScale(THREE.MathUtils.clamp(speed / natural, 0.55, 1.6) * (backing ? -1 : 1));
     }
-    // Strafing turns the hips toward the motion while the spine twists back,
-    // so the chest keeps facing the aim.
-    const wantHip = grounded && speed > 0.35 && !backing ? THREE.MathUtils.clamp(Math.atan2(strafe, Math.max(0.2, forwardAmt)), -1.2, 1.2) : 0;
+    // Off-axis travel turns the hips so the legs run along it, forward or
+    // backward, while the spine twists back so the chest keeps the facing.
+    const legs = backing ? Math.atan2(-Math.sin(travel), -Math.cos(travel)) : travel;
+    const wantHip = grounded && speed > 0.35 ? THREE.MathUtils.clamp(legs, -MAX_HIP_YAW, MAX_HIP_YAW) : 0;
     this.hipYaw += (wantHip - this.hipYaw) * (1 - Math.exp(-8 * dt));
     this.current = (Object.entries(targets)[0]?.[0] as Locomotion) ?? 'idle';
   }
@@ -183,18 +202,25 @@ export class Avatar {
     this.current = 'dead';
   }
 
+  // Pitch of the aim in radians, positive looking up.
   setAimPitch(p: number): void { this.aimPitch = p; }
 
   flash(intensity: number): void { this.flashT = intensity; }
 
   update(dt: number): void {
+    // The mixer only writes a bone whose blended value changed since its last
+    // write, so a bone held still by its clips (spine_01 in every locomotion
+    // clip) would keep last frame's turn and gain another each frame. Hand the
+    // mixer back the pose it wrote before layering on top of it again.
+    for (const l of this.layered) l.bone.quaternion.copy(l.clip);
     this.mixer.update(dt);
+    for (const l of this.layered) l.clip.copy(l.bone.quaternion);
     if (this.oneShot && !this.oneShot.isRunning()) { this.oneShot.fadeOut(0.2); this.oneShot = null; }
     if (this.current !== 'dead') {
       this.model.updateMatrixWorld(true);
-      this.rotateAbout('pelvis', new THREE.Vector3(0, 1, 0), this.hipYaw);
-      for (const s of SPINE) this.rotateAbout(s, new THREE.Vector3(0, 1, 0), -this.hipYaw / 3);
-      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.root.quaternion);
+      this.rotateAbout('pelvis', UP, this.hipYaw);
+      for (const s of SPINE) this.rotateAbout(s, UP, -this.hipYaw / 3);
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.root.getWorldQuaternion(new THREE.Quaternion()));
       this.rotateAbout('spine_02', right, this.aimPitch * 0.3);
       this.rotateAbout('spine_03', right, this.aimPitch * 0.25);
       this.rotateAbout('Head', right, this.aimPitch * 0.35);

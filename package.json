@@ -12,7 +12,8 @@
     "check:controls": "node tools/check-controls.mjs",
     "check:locomotion": "node tools/check-locomotion.mjs",
     "check:navigation": "node tools/check-navigation.mjs",
-    "check:rooftop": "node tools/check-rooftop.mjs"
+    "check:rooftop": "node tools/check-rooftop.mjs",
+    "check:tints": "node tools/check-tints.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.14.0",

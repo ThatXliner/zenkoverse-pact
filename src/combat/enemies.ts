@@ -14,7 +14,7 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
   dummy: { name: 'Training Dummy', model: 'buzzed', hp: 100000, speed: 0, dmg: 0, ai: 'dummy', tint: 0x3e5a78 },
   // Rooftop-trial roster: the same thug AI at other speeds, weights and hit points.
   runner: { name: 'Spring Leaper', model: 'buzzed', hp: 52, speed: 5.2, dmg: 14, ai: 'thug', tint: 0x4f8a58, height: 1.72 },
-  husk: { name: 'Husk Shell', model: 'beard', hp: 190, speed: 2.3, dmg: 20, ai: 'thug', tint: 0xb8ad94, height: 2.05 },
+  husk: { name: 'Husk Shell', model: 'beard', hp: 190, speed: 2.3, dmg: 20, ai: 'thug', tint: 0x5c4a36, height: 2.05 },
 };
 
 export interface EnemyScale { hp: number; dmg: number }

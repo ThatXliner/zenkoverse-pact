@@ -3,7 +3,7 @@
 // `?debug` hooks to fixed scenarios and saves screenshots and short frame
 // sequences per piece. Usage:
 //   node tools/capture.mjs [--out captures] [--only hands,district] [--url http://...] [--port 4173] [--gpu]
-// Pieces: ui, hands, variants, poses, third-person, district, vfx, encounters, workshop, tutorial, drill, perf.
+// Pieces: ui, hud, nav, hands, variants, poses, third-person, district, vfx, encounters, workshop, tutorial, drill, perf.
 // Without --url it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -15,6 +15,7 @@ const out = args.out ?? 'captures';
 const only = args.only ? new Set(args.only.split(',')) : null;
 const TECHS = ['recoil', 'shift', 'rime', 'blink', 'echo'];
 const MODAL_SIZES = [[1280, 720], [1920, 1080]];
+const HUD_SIZES = [[1280, 720], [1920, 1080], [2000, 1000], [2560, 1440]];
 mkdirSync(out, { recursive: true });
 
 let server = null;
@@ -82,9 +83,51 @@ async function checkFit(name, selector) {
   if (r.missing || r.over || r.docScroll || r.w > r.vw + 1 || r.h > r.vh + 1) report.failures.push({ check: 'modal-fit', name, detail: r });
 }
 
+// The HUD must sit fully on screen at every window size (issue #35): the
+// top-left column keeps the same margin on both edges as the other corners,
+// nothing leaves the viewport, and no HUD block overlaps another.
+async function checkHud(name) {
+  const r = await page.evaluate(() => {
+    const rect = (sel) => { const el = document.querySelector(sel); if (!el) return null; const b = el.getBoundingClientRect(); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom }; };
+    const blocks = Object.fromEntries(['.top-left', '.top-center', '.objective', '.vitals', '.abilities'].map((s) => [s, rect(s)]).filter(([, b]) => b));
+    const w = innerWidth, h = innerHeight;
+    const out = [];
+    for (const [sel, b] of Object.entries(blocks)) if (b.left < 0 || b.top < 0 || b.right > w || b.bottom > h) out.push(`${sel} leaves the viewport`);
+    const tl = document.querySelector('.top-left');
+    const strayed = [...(tl ? tl.querySelectorAll('*') : [])].find((c) => { const b = c.getBoundingClientRect(); return b.width && (b.left < 0 || b.right > w || b.top < 0); });
+    if (strayed) out.push(`.top-left child ${strayed.className || strayed.tagName} leaves the viewport`);
+    const pad = blocks['.top-left']?.left ?? 0;
+    const margins = { 'top-left top': blocks['.top-left']?.top, 'vitals left': blocks['.vitals']?.left, 'vitals bottom': blocks['.vitals'] && h - blocks['.vitals'].bottom, 'abilities right': blocks['.abilities'] && w - blocks['.abilities'].right, 'abilities bottom': blocks['.abilities'] && h - blocks['.abilities'].bottom, 'objective right': blocks['.objective'] && w - blocks['.objective'].right, 'objective top': blocks['.objective']?.top };
+    for (const [k, v] of Object.entries(margins)) if (v !== undefined && Math.abs(v - pad) > 1.5) out.push(`${k} margin ${v.toFixed(1)}px differs from the ${pad.toFixed(1)}px corner margin`);
+    const names = Object.keys(blocks);
+    for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) {
+      const a = blocks[names[i]], b = blocks[names[j]];
+      if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) out.push(`${names[i]} overlaps ${names[j]}`);
+    }
+    return { problems: out, blocks, w, h };
+  });
+  if (!r.blocks['.top-left'] || !r.blocks['.top-center']) r.problems.push('top-left column or compass missing');
+  if (r.problems.length) report.failures.push({ check: 'hud-layout', name, detail: r.problems });
+}
+
 async function startRun(tech, opts = {}) {
   await api((g, t, o) => { g.technique(t); g.game.startRun({ skipTutorial: !o.tutorial }); g.loop(false); }, tech, opts);
   await step(12);
+}
+
+if (run('hud')) {
+  for (const tutorial of [false, true]) {
+    await startRun('recoil', { tutorial });
+    await api((g) => { g.teleport('market'); g.camera('first'); g.look(Math.PI / 2 + 0.3, -0.02); });
+    for (const [w, h] of HUD_SIZES) {
+      await page.setViewportSize({ width: w, height: h });
+      await settle(150);
+      await step(30);
+      await shot('hud', `${tutorial ? 'tutorial' : 'explore'}-${w}x${h}`);
+      await checkHud(`${tutorial ? 'tutorial' : 'explore'}-${w}x${h}`);
+    }
+    await page.setViewportSize({ width: 1280, height: 720 });
+  }
 }
 
 if (run('hands')) {

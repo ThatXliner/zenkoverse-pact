@@ -31,6 +31,8 @@ import { PactBook } from '../pacts/book';
 import type { Pact } from '../pacts/schema';
 import { KEY_WORDS } from '../pacts/readback';
 import { Mastery } from '../mastery/mastery';
+import { Navigation } from '../nav/navigation';
+import { Waypoints } from '../world/waypoints';
 import { installDebug } from './debug';
 
 export const hud = {
@@ -79,6 +81,8 @@ export class Game {
   drills!: Drills;
   book!: PactBook;
   mastery!: Mastery;
+  waypoints!: Waypoints;
+  nav!: Navigation;
   techniqueId: TechniqueId = 'recoil';
   private titleOrbit = 0;
   private fpsAcc = 0;
@@ -124,6 +128,8 @@ export class Game {
     this.pedestrians = new Pedestrians(this);
     this.cutscenes = new Cutscenes(this);
     this.tutorial = new Tutorial(this);
+    this.waypoints = new Waypoints(this.assets, this.physics, scene, this.vfx);
+    this.nav = new Navigation(this);
     this.setTechnique('recoil');
     this.cam.yaw = Math.PI * 0.9;
     installDebug(this);
@@ -221,6 +227,7 @@ export class Game {
     }
 
     this.district.update(this.clock.time);
+    this.waypoints.update(raw, this.clock.time);
     this.env.update(this.renderer.camera);
     this.rain.update(this.renderer.camera, this.district.indoorsAt(this.renderer.camera.position));
     this.audio.update(this.district.indoorsAt(this.player.position));
@@ -256,6 +263,7 @@ export class Game {
 
     this.cam.update(raw, dt, this.player.position, this.player.stepCycle, this.player.planarSpeed.value, this.player.grounded, axis.x, this.clock.time);
     this.renderer.overlayVisible = this.cam.isFirst && !this.cam.inShot && st.kind !== 'workshop';
+    this.nav.update(raw);
 
     this.techniques.update(dt, raw);
     this.hands.update(raw, this.player, this.cam, this.input);

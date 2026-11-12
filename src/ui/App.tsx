@@ -11,8 +11,10 @@ import { tutorialUi } from '../tutorial/tutorial';
 import { drillUi } from '../drills/drills';
 import { cutsceneUi } from '../cutscene/cutscene';
 import { blinkUi } from '../techniques/kits/blink';
-import { MASTERY_STATS, MASTERY_CONFIG } from '../mastery/mastery';
 import { Workshop } from '../workshop/Workshop';
+import { NavHud } from './nav/NavHud';
+import { NavMap } from './nav/NavMap';
+import { TopLeft } from './nav/TopLeft';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -102,7 +104,6 @@ function Hud({ game }: { game: Game }) {
   const c = hex(kit.color);
   const slots = techUi.slots.value;
   const cd = techUi.cooldowns.value;
-  const zone = hud.zone.value;
   const prompt = hud.prompt.value;
   const ban = hud.banner.value;
   const tut = tutorialUi.step.value;
@@ -114,10 +115,8 @@ function Hud({ game }: { game: Game }) {
   const [flash, setFlash] = useState(false);
   useEffect(() => { if (!hurt) return; setFlash(true); const t = setTimeout(() => setFlash(false), 220); return () => clearTimeout(t); }, [hurt]);
   const third = !game.cam.isFirst;
-  const s = settings.value;
   const blind = blinkUi.blind.value;
   const pl = hud.plaque.value;
-  const mast = game.mastery.stats.value[game.techniqueId];
   return (
     <div class={`hud ${cut ? 'letterbox' : ''}`} style={{ '--c': c } as never}>
       <div class={`damage ${flash ? 'hit' : ''}`} />
@@ -138,22 +137,16 @@ function Hud({ game }: { game: Game }) {
           <Ability k="Q" label={slots.max} glyph="全" cd={1 - techUi.charge.value} ready={techUi.charge.value >= 1} max />
         </div>
       )}
-      {!cut && s.showMastery && (
-        <div class="hint">
-          <span>{kit.name} · {techUi.variant.value === 'none' ? 'silent activation' : techUi.variant.value === 'short' ? 'short sign' : 'full sign'}{s.fullSignHold ? ' · Alt holds the full sign' : ''}</span>
-          <span>V camera · Tab workshop · R wager · F aura · Esc menu</span>
-          {MASTERY_CONFIG.showNumbers && <div class="mastery">{MASTERY_STATS.map((st) => <span key={st}>{st} <b>{Math.round(mast[st] * 100)}</b></span>)}</div>}
-        </div>
-      )}
+      {!cut && <NavHud />}
+      {!cut && <TopLeft game={game} />}
       {combatUi.wagerArmed.value && !cut && <div class="wager-arm">WAGER DECLARED · THE NEXT STRIKE CONNECTS</div>}
       {auraUi.active.value && !cut && <div class="aura-ring" />}
       {auraUi.clash.value !== null && !cut && <div class="clash"><span class="kicker">Aura clash · hold F</span><div class="track"><i style={{ left: `${50 + auraUi.clash.value * 50}%`, width: '3px' }} /></div></div>}
       {boss && !cut && <div class="boss" style={{ '--c': hex(boss.color) } as never}><span class="n">{boss.name}</span><div class="track"><i style={{ width: `${boss.frac * 100}%` }} /></div></div>}
-      {zone && !cut && <div class="zone" key={zone.id}><span class="jp">{zoneJp(zone.id)}</span><span class="en">{zone.label}</span></div>}
       {prompt && !cut && <div class="prompt"><kbd>{prompt.key}</kbd><span>{prompt.text}</span></div>}
       {tut && !cut && <div class="objective"><span class="step">Tutorial {tut.index} / {tut.total} · {tut.jp}</span><span class="t">{tut.title}</span><span class="b">{tut.body}</span><span class="step">Esc pauses · Skip tutorial is in the pause menu</span></div>}
       {drill && !cut && <div class="drill-hud"><span class="big">{drill.score} / {drill.needed}</span><span class="s">{drill.jp} · {drill.tier} · {drill.left} left</span></div>}
-      {pl && !cut && <div class="objective" style="top:auto;bottom:140px;right:36px;border-color:#9fdfff"><span class="step">Lore plaque</span><span class="t">{pl.title}</span><span class="b">{pl.body}</span></div>}
+      {pl && !cut && <div class="objective" style="top:auto;bottom:calc(var(--hud-pad) + 104px);right:var(--hud-pad);border-color:#9fdfff"><span class="step">Lore plaque</span><span class="t">{pl.title}</span><span class="b">{pl.body}</span></div>}
       <div class="toasts">{hud.toasts.value.map((t) => <div key={t.id} class={`toast ${t.tone}`}>{t.text}</div>)}</div>
       {ban && <div class="banner" key={ban.id}><div class="big jp">{ban.big}</div><div class="small">{ban.small}</div></div>}
       {title && <div class="cut-title" key={title.id} style={{ '--c': hex(title.color) } as never}><div class="jp">{title.jp}</div><div class="en">{title.en}</div></div>}
@@ -163,10 +156,6 @@ function Hud({ game }: { game: Game }) {
       </div>
     </div>
   );
-}
-
-function zoneJp(id: string): string {
-  return ({ academy: '学院', dojo: '道場', market: '市場', alley: '路地', rooftop: '屋上', bridge: '橋', kuroda: '黒田', canal: '運河' } as Record<string, string>)[id] ?? '';
 }
 
 function Ability({ k, label, glyph, cd, ready, max }: { k: string; label: SlotLabel; glyph: string; cd: number; ready: boolean; max?: boolean }) {
@@ -240,29 +229,11 @@ function Pause({ game, tab }: { game: Game; tab: 'menu' | 'settings' | 'codex' |
               <article>{(() => { const c = CODEX.find((x) => x.id === entry)!; return <><h3>{c.jp} · {c.title}</h3><p>{c.body}</p>{Object.values(EYES).length && c.id === 'eyes' && <p class="locked">{Object.values(EYES).map((e) => `${e.jp} ${e.name}`).join(' · ')}</p>}</>; })()}</article>
             </div>
           )}
-          {tab === 'map' && <div class="map"><DistrictMap game={game} /></div>}
+          {tab === 'map' && <NavMap game={game} />}
         </div>
-        <footer><div class="kbd-hint"><span><kbd>Esc</kbd> resume</span><span><kbd>Tab</kbd> workshop</span></div><button class="btn" onClick={back}>{fromTitle ? 'Back' : 'Resume'}</button></footer>
+        <footer><div class="kbd-hint"><span><kbd>Esc</kbd> resume</span><span><kbd>Tab</kbd> workshop</span><span><kbd>M</kbd> map</span></div><button class="btn" onClick={back}>{fromTitle ? 'Back' : 'Resume'}</button></footer>
       </div>
     </div>
-  );
-}
-
-function DistrictMap({ game }: { game: Game }) {
-  const p = game.player.position;
-  const toMap = (x: number, z: number) => [((x + 100) / 200) * 560, ((z + 100) / 200) * 560] as const;
-  const [px, pz] = toMap(p.x, p.z);
-  const spots: [string, number, number][] = [['Academy', -58, -58], ['Workshop', -26, -66], ['Market', 0, 0], ['Alley', 21, 32], ['Bridge', 70, 0], ['Kuroda', 52, 56]];
-  return (
-    <svg viewBox="0 0 560 560" role="img" aria-label="District map">
-      <rect width="560" height="560" fill="rgba(243,238,228,0.04)" />
-      <rect x="0" y={toMap(0, -7)[1]} width="560" height="40" fill="rgba(243,238,228,0.08)" />
-      <rect x={toMap(-7, 0)[0]} y="0" width="40" height="560" fill="rgba(243,238,228,0.08)" />
-      <rect x={toMap(61, 0)[0]} y="0" width="50" height="560" fill="rgba(111,211,255,0.12)" />
-      {spots.map(([n, x, z]) => { const [mx, mz] = toMap(x, z); return <g key={n}><circle cx={mx} cy={mz} r="5" fill="rgba(243,238,228,0.5)" /><text x={mx + 10} y={mz + 4} fill="#f3eee4" font-size="12" font-family="var(--sans)" letter-spacing="0.1em">{n}</text></g>; })}
-      <circle cx={px} cy={pz} r="7" fill="#ff3a6e" />
-      <circle cx={px} cy={pz} r="12" fill="none" stroke="#ff3a6e" stroke-width="1" />
-    </svg>
   );
 }
 

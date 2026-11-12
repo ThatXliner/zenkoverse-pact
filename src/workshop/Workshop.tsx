@@ -171,7 +171,7 @@ export function Workshop({ game }: { game: Game }) {
                       </>}
                       {focus.kind === 'term' && <>
                         <PanelHead title={PARAM_WORDS[focus.param].title} hint={PARAM_WORDS[focus.param].hint} onRemove={() => removeTerm(focus.param)} />
-                        <TermPicker param={focus.param} value={restrictions(pact).find((r) => r.param === focus.param)?.value} weigh={weigh(focus.param)} onPick={(v) => setTerm(focus.param, v)} />
+                        <TermPicker param={focus.param} technique={game.techniqueId} value={restrictions(pact).find((r) => r.param === focus.param)?.value} weigh={weigh(focus.param)} onPick={(v) => setTerm(focus.param, v)} />
                       </>}
                       {focus.kind === 'add' && !focus.param && <>
                         <PanelHead title="Add a term" hint="what will you give up?" />
@@ -190,7 +190,7 @@ export function Workshop({ game }: { game: Game }) {
                       </>}
                       {focus.kind === 'add' && focus.param && <>
                         <PanelHead title={PARAM_WORDS[focus.param].title} hint={PARAM_WORDS[focus.param].hint} onBack={() => setFocus({ kind: 'add' })} />
-                        <TermPicker param={focus.param} value={undefined} weigh={weigh(focus.param)} onPick={(v) => setTerm(focus.param!, v)} />
+                        <TermPicker param={focus.param} technique={game.techniqueId} value={undefined} weigh={weigh(focus.param)} onPick={(v) => setTerm(focus.param!, v)} />
                       </>}
                       {focus.kind === 'clause' && pact.clauses[focus.index] && <ClausePanel c={pact.clauses[focus.index]!} restricted={restrictions(pact).map((r) => r.param)} onChange={(c) => setClause(focus.index, c)} onRemove={() => removeClause(focus.index)} />}
                     </div>

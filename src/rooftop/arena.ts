@@ -5,15 +5,15 @@ import { makeSurface, emissive } from '../render/materials';
 import { NeonSign } from '../world/neon';
 import type { PropSystem } from '../world/props';
 import type { LightPool } from '../render/lightPool';
+import { SPAWN } from '../world/district';
 
 // The rooftop that hosts the trial: a tower on the east bank of the canal,
 // across the bridge from the Ancient Echo Master's fight. The deck is a
 // closed fighting floor, so nobody falls off and every wave stays on screen.
 
-const TOWER = new THREE.Vector3(100, 0, -28);
 const SIZE = { x: 30, z: 24, h: 15 };
-// Where the lift opens on the street, for the map and the waypoints.
-export const ROOFTOP_LIFT = new THREE.Vector3(TOWER.x - SIZE.x / 2 - 2.4, 0.12, TOWER.z);
+// The street end of the lift is SPAWN.rooftop, which the map and the waypoints read; the tower stands behind it.
+const TOWER = new THREE.Vector3(SPAWN.rooftop.x + SIZE.x / 2 + 2.4, 0, SPAWN.rooftop.z);
 const DECK_Y = SIZE.h + 0.2;
 const PARAPET = { h: 1.15, t: 0.5 };
 const WALL_TOP = 7;
@@ -253,7 +253,7 @@ export function buildArena(assets: Assets, physics: Physics, scene: THREE.Scene,
   return {
     group: g, deckY: DECK_Y, center, half: { x: hx - PARAPET.t, z: hz - PARAPET.t },
     start: rel(-8.5, 0), slots,
-    liftBase: ROOFTOP_LIFT.clone(),
+    liftBase: SPAWN.rooftop.clone(),
     liftTop: rel(-10, -1.2),
     consoleAt: rel(-9.4, 4.6), liftDownAt: rel(-10.4, 0),
     update(time) { for (const n of neons) n.update(time); },

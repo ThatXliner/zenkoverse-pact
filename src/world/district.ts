@@ -11,9 +11,11 @@ export type ZoneId = 'academy' | 'dojo' | 'market' | 'alley' | 'rooftop' | 'brid
 
 export interface Zone { id: ZoneId; min: THREE.Vector3; max: THREE.Vector3; indoors?: boolean; label: string }
 
+export interface Footprint { x: number; z: number; w: number; d: number; y: number }
+
 export interface Plaque { id: string; title: string; body: string; position: THREE.Vector3; mesh: THREE.Object3D; found: boolean }
 
-export const SPAWN = { academy: new THREE.Vector3(-58, 0, -52), dojo: new THREE.Vector3(-26, 0, -66), market: new THREE.Vector3(-20, 0, 2), alley: new THREE.Vector3(22, 0, 30), bridge: new THREE.Vector3(60, 0, 0), kuroda: new THREE.Vector3(52, 0, 58), roof: new THREE.Vector3(-8, 14.2, -16) };
+export const SPAWN = { academy: new THREE.Vector3(-58, 0, -52), dojo: new THREE.Vector3(-26, 0, -66), market: new THREE.Vector3(-20, 0, 2), alley: new THREE.Vector3(22, 0, 30), bridge: new THREE.Vector3(60, 0, 0), kuroda: new THREE.Vector3(52, 0, 58), roof: new THREE.Vector3(-8, 14.2, -16), rooftop: new THREE.Vector3(82.6, 0.12, -28) };
 
 interface BuildingDef { model: string; x: number; z: number; rot: number; scale?: number; wall: 'Bricks059' | 'Concrete034' | 'PaintedPlaster017' | 'Marble012'; warm?: number }
 
@@ -62,6 +64,8 @@ const NEONS: NeonDef[] = [
 export interface District {
   group: THREE.Group;
   zones: Zone[];
+  // Roof outlines of every building, for the map.
+  footprints: Footprint[];
   plaques: Plaque[];
   neons: NeonSign[];
   craneHook: THREE.Object3D;
@@ -401,7 +405,7 @@ export function buildDistrict(assets: Assets, physics: Physics, scene: THREE.Sce
   }
 
   const district: District = {
-    group: g, zones, plaques, neons, craneHook: hook,
+    group: g, zones, footprints: roofTops, plaques, neons, craneHook: hook,
     zoneAt(p) {
       for (const z of zones) if (z.id !== 'rooftop' && p.x >= z.min.x && p.x <= z.max.x && p.y >= z.min.y && p.y <= z.max.y && p.z >= z.min.z && p.z <= z.max.z) return z;
       const roof = zones.find((z) => z.id === 'rooftop')!;

@@ -36,7 +36,7 @@ export class Aura {
 
   update(dt: number): void {
     const g = this.game;
-    const wants = g.input.isDown('aura') && this.energy > 0.02;
+    const wants = g.input.isDown('aura') && this.energy > 0.02 && g.rooftop.auraAllowed;
     if (wants && !this.active) { g.audio.play('phaserUp3', 0.5, 0.4); g.tutorial.notify('aura'); }
     this.active = wants;
     this.energy = THREE.MathUtils.clamp(this.energy + (this.active ? -0.14 : 0.07) * dt, 0, 1);

@@ -82,6 +82,7 @@ export class Combat {
     if (g.aura.pressureOn(e.position)) m *= 1.15;
     if (this.eye === 'empty') m *= 1.2;
     const final = Math.round(amount * m);
+    if (this.eye === 'thread') this.threadSplash(e, final * 0.35);
     e.hurt(final, { from: opts.from, knock: opts.knock, lift: opts.lift, stagger: opts.stagger });
     this.number(e.center(), String(final), this.wagerSlot ? '#ffd34d' : m > 1.1 ? '#ffb0ff' : '#f3eee4', final >= 40);
     if (opts.heavy || final >= 40) { g.clock.hitStop(final >= 80 ? 0.11 : 0.06); g.cam.shake(0.35); g.renderer.impactFrame(final >= 80 ? 3 : 1, new THREE.Color(g.techniques.def.color)); }
@@ -96,6 +97,7 @@ export class Combat {
     if (this.god || (this.invuln > 0 && !opts.self)) return;
     let a = amount;
     if (!opts.self) a = g.techniques.def.effects.onStruck?.(g, a, opts.from ?? g.player.position) ?? a;
+    if (this.eye === 'horizon' && !opts.self) a *= 0.7;
     if (a <= 0) return;
     this.hp = Math.max(0, this.hp - a);
     combatUi.hp.value = this.hp / this.maxHp;
@@ -108,8 +110,18 @@ export class Combat {
     if (this.hp <= 0) this.defeat();
   }
 
+  // Thread Eye: damage to one body travels down the thread to its nearest neighbour.
+  private threadSplash(from: Enemy, amount: number): void {
+    const other = this.game.encounters.enemies.filter((o) => o !== from && o.alive && o.def.ai !== 'dummy' && o.position.distanceTo(from.position) < 7)
+      .sort((a, b) => a.position.distanceTo(from.position) - b.position.distanceTo(from.position))[0];
+    if (!other) return;
+    other.hurt(Math.round(amount), { from: from.position, stagger: false });
+    this.game.vfx.trail([from.center(), other.center()], EYES.thread.color, 0.08, 0.25);
+  }
+
   private defeat(): void {
     const g = this.game;
+    if (g.rooftop.active) { g.rooftop.lose(); return; }
     g.input.releaseLock();
     g.audio.play('lowDown', 0.8, 0.6);
     setState({ kind: 'defeat' });

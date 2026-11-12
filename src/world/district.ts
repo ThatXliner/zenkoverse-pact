@@ -15,7 +15,7 @@ export interface Footprint { x: number; z: number; w: number; d: number; y: numb
 
 export interface Plaque { id: string; title: string; body: string; position: THREE.Vector3; mesh: THREE.Object3D; found: boolean }
 
-export const SPAWN = { academy: new THREE.Vector3(-58, 0, -52), dojo: new THREE.Vector3(-26, 0, -66), market: new THREE.Vector3(-20, 0, 2), alley: new THREE.Vector3(22, 0, 30), bridge: new THREE.Vector3(60, 0, 0), kuroda: new THREE.Vector3(52, 0, 58), roof: new THREE.Vector3(-8, 14.2, -16) };
+export const SPAWN = { academy: new THREE.Vector3(-58, 0, -52), dojo: new THREE.Vector3(-26, 0, -66), market: new THREE.Vector3(-20, 0, 2), alley: new THREE.Vector3(22, 0, 30), bridge: new THREE.Vector3(60, 0, 0), kuroda: new THREE.Vector3(52, 0, 58), roof: new THREE.Vector3(-8, 14.2, -16), rooftop: new THREE.Vector3(82.6, 0.12, -28) };
 
 interface BuildingDef { model: string; x: number; z: number; rot: number; scale?: number; wall: 'Bricks059' | 'Concrete034' | 'PaintedPlaster017' | 'Marble012'; warm?: number }
 

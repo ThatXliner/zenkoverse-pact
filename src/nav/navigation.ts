@@ -144,7 +144,8 @@ export class Navigation {
     const cam = g.renderer.camera;
     cam.updateMatrixWorld();
     const heading = THREE.MathUtils.radToDeg(-g.cam.yaw);
-    const target = this.target.value;
+    // A rooftop trial is its own arena: nothing outside it is worth tracking.
+    const target = appState.value.kind.startsWith('rooftop') ? null : this.target.value;
     const targetDist = target ? p.distanceTo(target.position) : 0;
 
     const pips: CompassPip[] = [];

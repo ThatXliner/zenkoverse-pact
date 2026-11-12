@@ -14,18 +14,21 @@ export type AppState =
   | { kind: 'encounter'; id: EncounterId }
   | { kind: 'cinematic'; resume: AppState }
   | { kind: 'paused'; resume: AppState; tab: 'menu' | 'settings' | 'codex' | 'map' }
-  | { kind: 'defeat' };
+  | { kind: 'defeat' }
+  | { kind: 'rooftop' }
+  | { kind: 'rooftop-offer' }
+  | { kind: 'rooftop-end' };
 
 export const appState = signal<AppState>({ kind: 'boot', progress: 0, label: 'Preparing' });
 
 export const worldRuns = computed(() => {
   const k = appState.value.kind;
-  return k === 'tutorial' || k === 'explore' || k === 'encounter' || k === 'drill' || k === 'cinematic';
+  return k === 'tutorial' || k === 'explore' || k === 'encounter' || k === 'drill' || k === 'cinematic' || k === 'rooftop';
 });
 
 export const uiBlocksInput = computed(() => {
   const k = appState.value.kind;
-  return k === 'boot' || k === 'title' || k === 'workshop' || k === 'paused' || k === 'defeat';
+  return k === 'boot' || k === 'title' || k === 'workshop' || k === 'paused' || k === 'defeat' || k === 'rooftop-offer' || k === 'rooftop-end';
 });
 
 export function setState(next: AppState): void {

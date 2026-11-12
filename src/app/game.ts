@@ -31,6 +31,7 @@ import { PactBook } from '../pacts/book';
 import type { Pact } from '../pacts/schema';
 import { KEY_WORDS } from '../pacts/readback';
 import { Mastery } from '../mastery/mastery';
+import { Rooftop } from '../rooftop/rooftop';
 import { Navigation } from '../nav/navigation';
 import { Waypoints } from '../world/waypoints';
 import { installDebug } from './debug';
@@ -81,6 +82,7 @@ export class Game {
   drills!: Drills;
   book!: PactBook;
   mastery!: Mastery;
+  rooftop!: Rooftop;
   waypoints!: Waypoints;
   nav!: Navigation;
   techniqueId: TechniqueId = 'recoil';
@@ -128,6 +130,7 @@ export class Game {
     this.pedestrians = new Pedestrians(this);
     this.cutscenes = new Cutscenes(this);
     this.tutorial = new Tutorial(this);
+    this.rooftop = new Rooftop(this);
     this.waypoints = new Waypoints(this.assets, this.physics, scene, this.vfx);
     this.nav = new Navigation(this);
     this.setTechnique('recoil');
@@ -147,6 +150,7 @@ export class Game {
   }
 
   startRun(opts: { skipTutorial?: boolean } = {}): void {
+    this.rooftop.abandon();
     this.combat.resetPlayer();
     this.encounters.reset();
     this.book.preview.value = null;
@@ -222,7 +226,7 @@ export class Game {
       c.updateProjectionMatrix();
       this.avatar.root.visible = false;
       this.renderer.overlayVisible = false;
-    } else if (worldRuns.value || st.kind === 'workshop' || st.kind === 'paused') {
+    } else if (worldRuns.value || st.kind === 'workshop' || st.kind === 'paused' || st.kind === 'rooftop-offer') {
       this.simulate(dt, raw, st);
     }
 
@@ -270,6 +274,7 @@ export class Game {
     this.combat.update(dt);
     this.aura.update(dt);
     this.encounters.update(dt);
+    this.rooftop.update(dt);
     this.pedestrians.update(dt);
     this.props.update(dt);
     this.vfx.update(dt);
@@ -293,6 +298,8 @@ export class Game {
     if (!best && dojoDesk.distanceTo(this.player.position) < 3.2) best = { key: 'E', text: 'Speak with the Pact Architect', act: () => this.openWorkshop() };
     const enc = this.encounters.interactable(this.player.position);
     if (!best && enc) best = enc;
+    const roof = this.rooftop.interactable(this.player.position);
+    if (!best && roof) best = roof;
     const drill = this.drills.interactable(this.player.position);
     if (!best && drill) best = drill;
     hud.prompt.value = best ? { key: best.key, text: best.text } : null;

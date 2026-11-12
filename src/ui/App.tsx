@@ -12,6 +12,7 @@ import { drillUi } from '../drills/drills';
 import { cutsceneUi } from '../cutscene/cutscene';
 import { blinkUi } from '../techniques/kits/blink';
 import { Workshop } from '../workshop/Workshop';
+import { RooftopLayer } from '../rooftop/RooftopUi';
 import { NavHud } from './nav/NavHud';
 import { NavMap } from './nav/NavMap';
 import { TopLeft } from './nav/TopLeft';
@@ -24,7 +25,8 @@ export function App({ game }: { game: Game }) {
     <>
       {st.kind === 'boot' && <Boot progress={st.progress} label={st.label} />}
       {st.kind === 'title' && <Title game={game} />}
-      {(st.kind === 'tutorial' || st.kind === 'explore' || st.kind === 'encounter' || st.kind === 'drill' || st.kind === 'cinematic' || st.kind === 'paused') && <Hud game={game} />}
+      {(st.kind === 'tutorial' || st.kind === 'explore' || st.kind === 'encounter' || st.kind === 'drill' || st.kind === 'cinematic' || st.kind === 'rooftop' || st.kind === 'paused') && <Hud game={game} />}
+      <RooftopLayer game={game} />
       {st.kind === 'workshop' && <Workshop game={game} />}
       {st.kind === 'paused' && <Pause game={game} tab={st.tab} />}
       {st.kind === 'defeat' && <Defeat game={game} />}
@@ -46,9 +48,10 @@ function Boot({ progress, label }: { progress: number; label: string }) {
 
 function Title({ game }: { game: Game }) {
   const [select, setSelect] = useState(false);
+  const [rooftop, setRooftop] = useState(false);
   const [tech, setTech] = useState<TechniqueId>(game.techniqueId);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter' && !select) setSelect(true); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter' && !select) { setRooftop(false); setSelect(true); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [select]);
@@ -58,16 +61,23 @@ function Title({ game }: { game: Game }) {
         <div><div class="kicker">Choose your Technique</div><h2>生まれ持った技</h2></div>
         <div class="cards">
           {TECHNIQUE_IDS.map((id) => { const k = KITS[id]; return (
-            <button key={id} class={`card ${tech === id ? 'active' : ''}`} data-glyph={k.glyph} style={{ '--c': hex(k.color) } as never} onClick={() => { setTech(id); game.setTechnique(id); game.audio.play('select_001', 0.4); }} onDblClick={() => { game.setTechnique(id); game.startRun(); }}>
+            <button key={id} class={`card ${tech === id ? 'active' : ''}`} data-glyph={k.glyph} style={{ '--c': hex(k.color) } as never} onClick={() => { setTech(id); game.setTechnique(id); game.audio.play('select_001', 0.4); }} onDblClick={() => { game.setTechnique(id); if (rooftop) game.rooftop.begin(); else game.startRun(); }}>
               <span class="type">{k.type}</span><h3>{k.name}</h3><p>{k.blurb}</p><span class="res">Resource · {k.resource.name}</span>
             </button>); })}
         </div>
         <div class="select-foot">
           <span>{KITS[tech].primitive.description}</span>
-          <div style="display:flex;gap:8px">
-            <button class="btn" onClick={() => { game.setTechnique(tech); game.startRun({ skipTutorial: true }); }}>Skip tutorial</button>
-            <button class="btn primary" onClick={() => { game.setTechnique(tech); game.startRun(); }}>Begin at the Academy</button>
-          </div>
+          {rooftop ? (
+            <div style="display:flex;gap:8px">
+              <button class="btn" onClick={() => setSelect(false)}>Back</button>
+              <button class="btn primary" onClick={() => { game.setTechnique(tech); game.rooftop.begin(); }}>Climb to the rooftop</button>
+            </div>
+          ) : (
+            <div style="display:flex;gap:8px">
+              <button class="btn" onClick={() => { game.setTechnique(tech); game.startRun({ skipTutorial: true }); }}>Skip tutorial</button>
+              <button class="btn primary" onClick={() => { game.setTechnique(tech); game.startRun(); }}>Begin at the Academy</button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -79,8 +89,8 @@ function Title({ game }: { game: Game }) {
         <div class="jp-big">契<em>約</em></div>
         <div class="sub">A rainy district, one Technique, and the Pacts you write to shape it. Every ability is a sacrifice the universe reads back to you.</div>
         <div class="menu" style="margin-top:18px">
-          <button onClick={() => { setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Begin</button>
-          <button onClick={() => { location.href = `${import.meta.env.BASE_URL}arena/`; }}>Arena (classic)</button>
+          <button onClick={() => { setRooftop(false); setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Begin</button>
+          <button onClick={() => { setRooftop(true); setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Rooftop</button>
           <button onClick={() => { game.audio.resumeContext(); pause('settings'); setState({ kind: 'paused', resume: { kind: 'title' }, tab: 'settings' }); }}>Settings</button>
           <button onClick={() => setState({ kind: 'paused', resume: { kind: 'title' }, tab: 'codex' })}>Codex</button>
         </div>
@@ -205,8 +215,9 @@ function Pause({ game, tab }: { game: Game; tab: 'menu' | 'settings' | 'codex' |
               <button onClick={back}>Resume</button>
               <button onClick={() => { resume(); game.tutorial.skip(); game.input.requestLock(); }}>Skip tutorial</button>
               <button onClick={() => { resume(); game.startRun(); }}>Replay tutorial</button>
-              <button onClick={() => { game.book.resetAll(); game.mastery.reset(); setState({ kind: 'title' }); }}>Reset Pacts and mastery</button>
-              <button onClick={() => setState({ kind: 'title' })}>Quit to title</button>
+              {st.kind === 'paused' && st.resume.kind === 'rooftop' && <button onClick={() => game.rooftop.abandon()}>Leave the rooftop</button>}
+              <button onClick={() => { game.rooftop.abandon(); game.book.resetAll(); game.mastery.reset(); setState({ kind: 'title' }); }}>Reset Pacts and mastery</button>
+              <button onClick={() => { game.rooftop.abandon(); setState({ kind: 'title' }); }}>Quit to title</button>
             </div>
           )}
           {tab === 'settings' && (

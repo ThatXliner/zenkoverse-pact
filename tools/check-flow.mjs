@@ -16,7 +16,7 @@ const out = args.out ?? 'captures/flow';
 mkdirSync(out, { recursive: true });
 
 let server = null;
-let url = args.url;
+let url = args.url ?? process.argv.slice(2).find((a) => /^https?:/.test(a));
 if (!url) {
   if (!existsSync('dist/index.html')) throw new Error('dist/ missing: run npm run build first');
   const port = args.port ?? '4173';

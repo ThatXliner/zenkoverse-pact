@@ -116,21 +116,37 @@ export class PactBook {
     this.persist();
   }
 
+  // The whole book as one string, and back. The rooftop trial inscribes Pacts
+  // that must not outlive it, so it exports the book first and imports it after.
+  export(): string { return JSON.stringify(this.saved()); }
+
+  import(raw: string): void {
+    try { this.apply(JSON.parse(raw) as Partial<Saved>); } catch { return; }
+    this.seed();
+    this.persist();
+  }
+
+  private saved(): Saved {
+    return { inscribed: this.inscribed.value, drafts: this.drafts.value, bindings: this.bindings.value, telemetry: this.telemetry, encounters: this.encounters };
+  }
+
   private persist(): void {
-    const data: Saved = { inscribed: this.inscribed.value, drafts: this.drafts.value, bindings: this.bindings.value, telemetry: this.telemetry, encounters: this.encounters };
-    try { localStorage.setItem(KEY, JSON.stringify(data)); } catch { /* storage unavailable */ }
+    try { localStorage.setItem(KEY, JSON.stringify(this.saved())); } catch { /* storage unavailable */ }
+  }
+
+  private apply(s: Partial<Saved>): void {
+    this.inscribed.value = (s.inscribed ?? []).filter((p) => validatePact(p).ok);
+    this.drafts.value = (s.drafts ?? []).filter((p) => validatePact(p).ok);
+    this.bindings.value = s.bindings ?? {};
+    this.telemetry = { ...DEFAULT_TELEMETRY, ...(s.telemetry ?? {}) };
+    this.encounters = s.encounters ?? 0;
   }
 
   private load(): void {
     try {
       const raw = localStorage.getItem(KEY);
       const s = raw ? (JSON.parse(raw) as Partial<Saved>) : this.legacy();
-      if (!s) return;
-      this.inscribed.value = (s.inscribed ?? []).filter((p) => validatePact(p).ok);
-      this.drafts.value = (s.drafts ?? []).filter((p) => validatePact(p).ok);
-      this.bindings.value = s.bindings ?? {};
-      this.telemetry = { ...DEFAULT_TELEMETRY, ...(s.telemetry ?? {}) };
-      this.encounters = s.encounters ?? 0;
+      if (s) this.apply(s);
     } catch { /* corrupt save: start fresh */ }
   }
 

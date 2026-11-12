@@ -2,6 +2,7 @@ import type { Game } from '../app/game';
 import { KITS } from '../techniques/techniques';
 import { readback } from '../pacts/readback';
 import { sacrificeTag, restrictions, validatePact, type Clause, type Pact, type TechniqueId } from '../pacts/schema';
+import { KEY_SLOTS, SLOT_DEFS, EXTRA_SLOTS, slotAccepts, type AbilityKind, type AbilitySlot } from '../pacts/slots';
 import type { ResolveEstimate, ResolveRead } from '../pacts/resolve';
 
 // The Pacts offered between waves (issues #34 and #5). Each offer is a real
@@ -9,13 +10,12 @@ import type { ResolveEstimate, ResolveRead } from '../pacts/resolve';
 // the Workshop uses. Only restrictions the engine enforces are offered, so a
 // sacrifice on a card is a sacrifice the player will feel.
 
-export type OfferSlot = 'primary' | 'secondary' | 'max';
 type R = `${'direction' | 'range' | 'target' | 'trigger' | 'duration' | 'resource' | 'body'}:${string}`;
 
 interface Template {
   id: string;
   name: string;
-  slots: OfferSlot[];
+  kinds: AbilityKind[];
   restrict: R[];
   extra?: Clause[];
   only?: TechniqueId;
@@ -26,37 +26,37 @@ interface Template {
 // Each Pact pairs two or three sacrifices, as a catalogue Ability does, so the
 // ones on offer are worth weighing against the Ability they would replace.
 const GENERIC: Template[] = [
-  { id: 'rooted', name: 'Rooted Vow', slots: ['primary'], restrict: ['trigger:still', 'direction:front', 'range:short'] },
-  { id: 'duelist', name: 'Duelist\'s Vow', slots: ['primary'], restrict: ['direction:front', 'range:short', 'target:single'] },
-  { id: 'footing', name: 'Firm Footing', slots: ['primary'], restrict: ['trigger:grounded', 'range:medium', 'resource:half'] },
-  { id: 'blood', name: 'Blood Price', slots: ['primary'], restrict: ['resource:health', 'direction:front'] },
-  { id: 'winded', name: 'Borrowed Breath', slots: ['primary'], restrict: ['resource:strain', 'trigger:grounded', 'target:single'] },
-  { id: 'gambler', name: 'Gambler\'s Hand', slots: ['primary'], restrict: ['direction:front', 'range:short'], extra: [{ kind: 'wager', predict: 'hit' }] },
-  { id: 'overreach', name: 'Overreach', slots: ['primary'], restrict: ['range:short', 'trigger:grounded'], extra: [{ kind: 'risk', beyond: 'range', cost: 'health' }] },
-  { id: 'stone', name: 'Stone Hands', slots: ['primary'], restrict: ['body:noMove', 'range:medium', 'direction:front'] },
-  { id: 'stillwater', name: 'Stillwater', slots: ['secondary'], restrict: ['trigger:still', 'resource:half'] },
-  { id: 'wall', name: 'Shield Wall', slots: ['secondary'], restrict: ['direction:front', 'trigger:grounded', 'resource:strain'] },
-  { id: 'door', name: 'Narrow Door', slots: ['secondary'], restrict: ['range:short', 'target:single'] },
-  { id: 'bargain', name: 'Hard Bargain', slots: ['secondary'], restrict: ['resource:health', 'trigger:grounded'] },
-  { id: 'lastbreath', name: 'Last Breath', slots: ['max'], restrict: ['trigger:lowHealth', 'direction:front'] },
-  { id: 'counter', name: 'Counterstroke', slots: ['max'], restrict: ['trigger:struck', 'range:medium'] },
-  { id: 'stonefoot', name: 'Stonefoot Oath', slots: ['max'], restrict: ['body:noMove', 'trigger:grounded'] },
-  { id: 'skybreak', name: 'Skybreak', slots: ['max'], restrict: ['trigger:airborne', 'resource:all'] },
-  { id: 'allin', name: 'All In', slots: ['max'], restrict: ['resource:all', 'direction:front'] },
+  { id: 'rooted', name: 'Rooted Vow', kinds: ['primary'], restrict: ['trigger:still', 'direction:front', 'range:short'] },
+  { id: 'duelist', name: 'Duelist\'s Vow', kinds: ['primary'], restrict: ['direction:front', 'range:short', 'target:single'] },
+  { id: 'footing', name: 'Firm Footing', kinds: ['primary'], restrict: ['trigger:grounded', 'range:medium', 'resource:half'] },
+  { id: 'blood', name: 'Blood Price', kinds: ['primary'], restrict: ['resource:health', 'direction:front'] },
+  { id: 'winded', name: 'Borrowed Breath', kinds: ['primary'], restrict: ['resource:strain', 'trigger:grounded', 'target:single'] },
+  { id: 'gambler', name: 'Gambler\'s Hand', kinds: ['primary'], restrict: ['direction:front', 'range:short'], extra: [{ kind: 'wager', predict: 'hit' }] },
+  { id: 'overreach', name: 'Overreach', kinds: ['primary'], restrict: ['range:short', 'trigger:grounded'], extra: [{ kind: 'risk', beyond: 'range', cost: 'health' }] },
+  { id: 'stone', name: 'Stone Hands', kinds: ['primary'], restrict: ['body:noMove', 'range:medium', 'direction:front'] },
+  { id: 'stillwater', name: 'Stillwater', kinds: ['secondary'], restrict: ['trigger:still', 'resource:half'] },
+  { id: 'wall', name: 'Shield Wall', kinds: ['secondary'], restrict: ['direction:front', 'trigger:grounded', 'resource:strain'] },
+  { id: 'door', name: 'Narrow Door', kinds: ['secondary'], restrict: ['range:short', 'target:single'] },
+  { id: 'bargain', name: 'Hard Bargain', kinds: ['secondary'], restrict: ['resource:health', 'trigger:grounded'] },
+  { id: 'lastbreath', name: 'Last Breath', kinds: ['max'], restrict: ['trigger:lowHealth', 'direction:front'] },
+  { id: 'counter', name: 'Counterstroke', kinds: ['max'], restrict: ['trigger:struck', 'range:medium'] },
+  { id: 'stonefoot', name: 'Stonefoot Oath', kinds: ['max'], restrict: ['body:noMove', 'trigger:grounded'] },
+  { id: 'skybreak', name: 'Skybreak', kinds: ['max'], restrict: ['trigger:airborne', 'resource:all'] },
+  { id: 'allin', name: 'All In', kinds: ['max'], restrict: ['resource:all', 'direction:front'] },
 ];
 
 // Technique-specific Pacts that use a shape or a behavior the generic ones do not.
 const SPECIFIC: Template[] = [
-  { id: 'debt', name: 'Debt Collector', only: 'recoil', slots: ['primary'], shape: 'punch', behaviors: ['store'], restrict: ['resource:half', 'direction:front'] },
-  { id: 'thunder', name: 'Stored Thunder', only: 'recoil', slots: ['secondary'], shape: 'absorb', behaviors: ['store', 'relaunch'], restrict: ['trigger:grounded', 'direction:front'] },
-  { id: 'needle', name: 'Needle Step', only: 'shift', slots: ['secondary'], shape: 'translate', behaviors: ['through'], restrict: ['range:short', 'trigger:grounded'] },
-  { id: 'quietcut', name: 'Quiet Cut', only: 'shift', slots: ['primary'], shape: 'cut', behaviors: ['quiet', 'momentum'], restrict: ['target:single', 'direction:front'] },
-  { id: 'hoarfrost', name: 'Hoarfrost', only: 'rime', slots: ['primary'], shape: 'icebreak', behaviors: ['sharp'], restrict: ['trigger:grounded', 'range:short'] },
-  { id: 'deepfreeze', name: 'Deep Freeze', only: 'rime', slots: ['secondary'], shape: 'coldStitch', behaviors: ['pin'], restrict: ['target:single', 'resource:half'] },
-  { id: 'wideeyes', name: 'Wide Eyes', only: 'blink', slots: ['primary'], shape: 'flinch', behaviors: ['wide'], restrict: ['trigger:still', 'direction:front'] },
-  { id: 'lance', name: 'Tear Lance', only: 'blink', slots: ['primary'], shape: 'flinch', behaviors: ['narrow'], restrict: ['direction:front', 'target:single'] },
-  { id: 'fork', name: 'Tuning Fork', only: 'echo', slots: ['primary'], shape: 'ring', behaviors: ['sharp', 'stack'], restrict: ['target:single', 'range:short'] },
-  { id: 'hush', name: 'Hush', only: 'echo', slots: ['secondary'], shape: 'quiet', restrict: ['duration:held', 'trigger:grounded'] },
+  { id: 'debt', name: 'Debt Collector', only: 'recoil', kinds: ['primary'], shape: 'punch', behaviors: ['store'], restrict: ['resource:half', 'direction:front'] },
+  { id: 'thunder', name: 'Stored Thunder', only: 'recoil', kinds: ['secondary'], shape: 'absorb', behaviors: ['store', 'relaunch'], restrict: ['trigger:grounded', 'direction:front'] },
+  { id: 'needle', name: 'Needle Step', only: 'shift', kinds: ['secondary'], shape: 'translate', behaviors: ['through'], restrict: ['range:short', 'trigger:grounded'] },
+  { id: 'quietcut', name: 'Quiet Cut', only: 'shift', kinds: ['primary'], shape: 'cut', behaviors: ['quiet', 'momentum'], restrict: ['target:single', 'direction:front'] },
+  { id: 'hoarfrost', name: 'Hoarfrost', only: 'rime', kinds: ['primary'], shape: 'icebreak', behaviors: ['sharp'], restrict: ['trigger:grounded', 'range:short'] },
+  { id: 'deepfreeze', name: 'Deep Freeze', only: 'rime', kinds: ['secondary'], shape: 'coldStitch', behaviors: ['pin'], restrict: ['target:single', 'resource:half'] },
+  { id: 'wideeyes', name: 'Wide Eyes', only: 'blink', kinds: ['primary'], shape: 'flinch', behaviors: ['wide'], restrict: ['trigger:still', 'direction:front'] },
+  { id: 'lance', name: 'Tear Lance', only: 'blink', kinds: ['primary'], shape: 'flinch', behaviors: ['narrow'], restrict: ['direction:front', 'target:single'] },
+  { id: 'fork', name: 'Tuning Fork', only: 'echo', kinds: ['primary'], shape: 'ring', behaviors: ['sharp', 'stack'], restrict: ['target:single', 'range:short'] },
+  { id: 'hush', name: 'Hush', only: 'echo', kinds: ['secondary'], shape: 'quiet', restrict: ['duration:held', 'trigger:grounded'] },
 ];
 
 // Two sacrifices are the same surrender when they name the same tag, or when
@@ -81,20 +81,25 @@ function clausesOf(restrict: R[], extra: Clause[] = []): Clause[] {
   return [...restrict.map((r): Clause => { const [param, value] = r.split(':') as [never, never]; return { kind: 'restrict', restriction: { param, value } }; }), ...extra];
 }
 
-function instantiate(t: Template, slot: OfferSlot, technique: TechniqueId): Pact {
+function instantiate(t: Template, kind: AbilityKind, slot: AbilitySlot, technique: TechniqueId): Pact {
   const kit = KITS[technique];
-  const shape = t.shape ?? Object.entries(kit.shapes).find(([, v]) => v.slot.includes(slot))![0];
+  const shape = t.shape ?? Object.entries(kit.shapes).find(([, v]) => v.kinds.includes(kind))![0];
   return { id: `roof.${technique}.${t.id}.${slot}`, technique, name: t.name, slot, grant: { shape, ...(t.behaviors ? { behaviors: t.behaviors } : {}) }, clauses: clausesOf(t.restrict, t.extra) };
 }
 
-export function candidates(technique: TechniqueId): Pact[] {
+// Every Pact a template can become: one on the slot that casts its kind
+// (replacing what is there), and one on the first of `empty` that takes the
+// kind (adding to the keys the player already has).
+export function candidates(technique: TechniqueId, empty: readonly AbilitySlot[] = []): Pact[] {
   const kit = KITS[technique];
   const out: Pact[] = [];
   for (const t of [...GENERIC, ...SPECIFIC]) {
     if (t.only && t.only !== technique) continue;
-    for (const slot of t.slots) {
-      if (!t.shape && !Object.values(kit.shapes).some((s) => s.slot.includes(slot))) continue;
-      out.push(instantiate(t, slot, technique));
+    for (const kind of t.kinds) {
+      if (!t.shape && !Object.values(kit.shapes).some((s) => s.kinds.includes(kind))) continue;
+      const own = SLOT_DEFS.find((s) => s.raw === kind)!.id;
+      const free = empty.find((s) => slotAccepts(s, [kind]));
+      for (const slot of new Set<AbilitySlot>(free ? [own, free] : [own])) out.push(instantiate(t, kind, slot, technique));
     }
   }
   for (const p of kit.catalogue) if (p.slot !== 'passive') out.push(structuredClone(p));
@@ -119,11 +124,12 @@ export function distinct(pacts: Pact[]): boolean {
 export function pickOffers(game: Game, taken: ReadonlySet<string>, rng: () => number = Math.random): Offer[] {
   const book = game.book;
   const kit = KITS[game.techniqueId];
-  const shapes = Object.keys(kit.shapes);
+  const shapes = kit.shapes;
   const label = (s: string) => kit.shapes[s]?.label ?? s;
   const behavior = (b: string) => kit.behaviors[b] ?? b;
-  const boundIds = new Set((['primary', 'secondary', 'max'] as const).map((s) => book.bound(s)?.id));
-  const pool = candidates(game.techniqueId).filter((p) => validatePact(p, shapes).ok);
+  const boundIds = new Set(KEY_SLOTS.map((s) => book.bound(s)?.id));
+  const empty = EXTRA_SLOTS.filter((s) => !book.bound(s));
+  const pool = candidates(game.techniqueId, empty).filter((p) => validatePact(p, shapes).ok);
 
   const offersFor = (strict: boolean): Offer[] => {
     const all: Offer[] = [];
@@ -131,7 +137,7 @@ export function pickOffers(game: Game, taken: ReadonlySet<string>, rng: () => nu
       if (strict && (taken.has(pact.id) || boundIds.has(pact.id))) continue;
       const after = book.estimate(pact);
       if (strict && after.total < 1) continue;
-      const current = book.bound(pact.slot as OfferSlot);
+      const current = pact.slot === 'passive' ? null : book.bound(pact.slot);
       const before = current ? book.estimate(current) : null;
       all.push({ pact, tags: tagsOf(pact), text: readback(pact, label, behavior), replaces: current?.name ?? null, before, after, stronger: !before || after.total > before.total + 0.25 });
     }
@@ -160,7 +166,7 @@ export function pickOffers(game: Game, taken: ReadonlySet<string>, rng: () => nu
 export function audit(game: Game, rounds: number, rng: () => number = Math.random): string[] {
   const bad: string[] = [];
   const saved = game.book.export();
-  const shapes = Object.keys(KITS[game.techniqueId].shapes);
+  const shapes = KITS[game.techniqueId].shapes;
   const taken = new Set<string>();
   for (let i = 0; i < rounds; i++) {
     const offers = pickOffers(game, i % 7 === 6 ? new Set() : taken, rng);

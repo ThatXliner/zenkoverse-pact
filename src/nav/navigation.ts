@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { signal, computed, effect } from '@preact/signals';
 import type { Game } from '../app/game';
 import { toast } from '../app/game';
+import { keyLabel } from '../app/keymap';
 import { appState, pause, resume, setState, worldRuns } from '../app/state';
 import { tutorialUi } from '../tutorial/tutorial';
 import { GROUP_WORLD } from '../physics/world';
@@ -184,7 +185,7 @@ export class Navigation {
       if (Math.abs(p.y - poi.shrine.y) > 4 || Math.hypot(p.x - poi.shrine.x, p.z - poi.shrine.z) > UNLOCK_RADIUS) continue;
       this.unlocked.value = new Set([...this.unlocked.value, poi.id]);
       this.game.waypoints.unlock(poi.id);
-      toast(`Waypoint unlocked: ${poi.name}. Fast travel from the map (M).`, 'good');
+      toast(`Waypoint unlocked: ${poi.name}. Fast travel from the map (${keyLabel('map')}).`, 'good');
       this.game.audio.play('confirmation_001', 0.5);
     }
   }

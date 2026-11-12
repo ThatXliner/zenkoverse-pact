@@ -50,11 +50,11 @@ export class Encounters {
     combatUi.boss.value = null;
   }
 
-  interactable(p: THREE.Vector3): { key: string; text: string; act: () => void } | null {
+  interactable(p: THREE.Vector3): { text: string; act: () => void } | null {
     if (this.active || this.cooldown > 0) return null;
     for (const d of DEFS) {
       if (!d.prompt) continue;
-      if (d.where.distanceTo(p) < 3.5) return { key: 'E', text: this.done.has(d.id) ? `${d.prompt} again` : d.prompt, act: () => this.begin(d.id) };
+      if (d.where.distanceTo(p) < 3.5) return { text: this.done.has(d.id) ? `${d.prompt} again` : d.prompt, act: () => this.begin(d.id) };
     }
     return null;
   }

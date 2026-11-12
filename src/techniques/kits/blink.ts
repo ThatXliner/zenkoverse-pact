@@ -34,9 +34,9 @@ export const blink: TechniqueKit = {
   primitive: { name: 'Blink', short: 'a weak forward pulse', description: 'A weak pressure pulse from the eyes when they close. Only forward. Only ever forward.' },
   parameters: ['direction', 'range', 'target', 'trigger', 'duration', 'resource', 'body'],
   shapes: {
-    flinch: { label: 'fires a forward pressure cone from the eyes', short: 'pressure cone from the eyes', slot: ['primary'], description: 'A forward cone that shoves people and objects.' },
-    doubletake: { label: 'blinks at the ground to launch you backward', short: 'blink to leap backward', slot: ['secondary'], description: 'A mobility pulse.' },
-    eyesShut: { label: 'empties both glands in one pulse and leaves you blind', short: 'empty both eyes, go blind', slot: ['max'], description: 'Everything in front, and a few seconds of darkness.' },
+    flinch: { label: 'fires a forward pressure cone from the eyes', short: 'pressure cone from the eyes', kinds: ['primary'], description: 'A forward cone that shoves people and objects.' },
+    doubletake: { label: 'blinks at the ground to launch you backward', short: 'blink to leap backward', kinds: ['secondary'], description: 'A mobility pulse.' },
+    eyesShut: { label: 'empties both glands in one pulse and leaves you blind', short: 'empty both eyes, go blind', kinds: ['max'], description: 'Everything in front, and a few seconds of darkness.' },
   },
   behaviors: { staring: 'every second you do not blink strengthens the next pulse', wide: 'a wider, weaker cone', narrow: 'a tight, longer lance' },
   catalogue,
@@ -45,7 +45,7 @@ export const blink: TechniqueKit = {
     secondary: gestureSet(0.45, 0.18, [{ t: 0, right: 'shieldEyes', left: 'palmDown', slow: true }, { t: 0.14, right: 'cupFlinch', left: 'landCatch', snap: true, camera: { fov: 9, pitch: 0.05 } }, { t: 0.35, right: 'rest', left: 'rest' }]),
     max: gestureSet(2.2, 1.6, [{ t: 0, right: 'cupEyes', left: 'cupEyes', slow: true }, { t: 0.9, right: 'shieldEyes', left: 'shieldEyes', slow: true }, { t: 1.55, right: 'cupFlinch', left: 'cupFlinch', snap: true, camera: { fov: 16, pitch: -0.04 } }, { t: 2.0, right: 'rest', left: 'rest' }]),
   },
-  avatarClips: { primary: 'Spell_Simple_Shoot', secondary: 'Hit_Chest', max: 'Spell_Simple_Enter', passive: 'Idle_Loop' },
+  avatarClips: { primary: 'Spell_Simple_Shoot', secondary: 'Hit_Chest', max: 'Spell_Simple_Enter' },
   traits: {},
   cutscene,
   effects: {
@@ -96,5 +96,5 @@ export const blink: TechniqueKit = {
       if (blinkUi.blind.value > 0) blinkUi.blind.value = Math.max(0, blinkUi.blind.value - dt);
     },
   },
-  audio: { primary: { cast: 'lowRandom', volume: 0.35, pitch: 1.2 }, secondary: { cast: 'lowRandom', volume: 0.3, pitch: 0.9 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 0.6 }, passive: { cast: 'tick_001' } },
+  audio: { primary: { cast: 'lowRandom', volume: 0.35, pitch: 1.2 }, secondary: { cast: 'lowRandom', volume: 0.3, pitch: 0.9 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 0.6 } },
 };

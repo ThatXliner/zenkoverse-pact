@@ -3,6 +3,7 @@ import { signal } from '@preact/signals';
 import type { Game } from '../app/game';
 import { hud, toast, banner } from '../app/game';
 import { setState } from '../app/state';
+import { KEY_SLOTS } from '../pacts/slots';
 import type { Enemy } from './enemies';
 
 export type EyeId = 'horizon' | 'empty' | 'thread' | 'vault' | 'covenant';
@@ -58,7 +59,7 @@ export class Combat {
 
   armWager(): void {
     if (this.wagerArmed || this.wagerCd > 0 || this.game.techniques.sealed > 0) return;
-    const pact = ['primary', 'secondary', 'max'].map((s) => this.game.book.bound(s as 'primary')).find((p) => p?.clauses.some((c) => c.kind === 'wager'));
+    const pact = KEY_SLOTS.map((s) => this.game.book.bound(s)).find((p) => p?.clauses.some((c) => c.kind === 'wager'));
     this.wagerArmed = true;
     combatUi.wagerArmed.value = true;
     this.game.audio.play('question_002', 0.5);

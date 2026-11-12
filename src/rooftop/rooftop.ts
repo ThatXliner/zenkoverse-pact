@@ -8,7 +8,8 @@ import type { Enemy } from '../combat/enemies';
 import type { Pact } from '../pacts/schema';
 import { buildArena, type Arena } from './arena';
 import { pickOffers, type Offer } from './offers';
-import { KEY_WORDS } from '../pacts/readback';
+import { slotWords } from '../pacts/readback';
+import { keyLabel } from '../app/keymap';
 import { WAVES, WAVE_COUNT, SPAWN_GAP, HEAL_BETWEEN, EYE_AFTER, AURA_AFTER, SCORE, CLEAR_BONUS, WAGER_BONUS, VICTORY_BONUS, roster, scaleFor } from './waves';
 
 // The rooftop trial: the classic arena loop (issue #34) on the new engine.
@@ -86,13 +87,13 @@ export class Rooftop {
   get offers(): Offer[] { const o = rooftopUi.offer.value; return o?.kind === 'pact' ? o.offers : []; }
   get alive(): number { return this.tracked.filter((e) => e.alive).length; }
 
-  interactable(p: THREE.Vector3): { key: string; text: string; act: () => void } | null {
+  interactable(p: THREE.Vector3): { text: string; act: () => void } | null {
     const a = this.arena;
     if (this.active || appState.value.kind === 'rooftop-end') return null;
-    if (p.distanceTo(a.liftBase) < 3) return { key: 'E', text: 'Ride the lift to the rooftop', act: () => this.rideUp() };
+    if (p.distanceTo(a.liftBase) < 3) return { text: 'Ride the lift to the rooftop', act: () => this.rideUp() };
     if (Math.abs(p.y - a.deckY) < 1.5) {
-      if (p.distanceTo(a.consoleAt) < 2.4) return { key: 'E', text: 'Begin the Rooftop trial, eight waves', act: () => this.begin() };
-      if (p.distanceTo(a.liftDownAt) < 2.2) return { key: 'E', text: 'Ride the lift down to the street', act: () => this.rideDown() };
+      if (p.distanceTo(a.consoleAt) < 2.4) return { text: 'Begin the Rooftop trial, eight waves', act: () => this.begin() };
+      if (p.distanceTo(a.liftDownAt) < 2.2) return { text: 'Ride the lift down to the street', act: () => this.rideDown() };
     }
     return null;
   }
@@ -279,7 +280,7 @@ export class Rooftop {
     if (rooftopUi.offer.value?.kind !== 'aura') return;
     this.auraUnlocked = true;
     this.game.audio.play('phaserUp3', 0.5, 0.5);
-    banner('気', 'Aura Expansion unlocked. Hold F.');
+    banner('気', `Aura Expansion unlocked. Hold ${keyLabel('aura')}.`);
     this.advance();
   }
 
@@ -290,12 +291,12 @@ export class Rooftop {
     if (!offer) return;
     const g = this.game;
     const kit = g.techniques.def;
-    const v = g.book.inscribe(offer.pact, Object.keys(kit.shapes));
+    const v = g.book.inscribe(offer.pact, kit.shapes);
     if (!v.ok) { toast(`The universe refused: ${v.errors[0]}`, 'bad'); return; }
     this.taken.push({ pact: offer.pact, text: offer.text });
     this.takenIds.add(offer.pact.id);
     g.audio.play('select_001', 0.6);
-    toast(`"${offer.pact.name}" is inscribed on ${KEY_WORDS[offer.pact.slot]}.`, 'good');
+    toast(`"${offer.pact.name}" is inscribed on ${slotWords(offer.pact.slot)}.`, 'good');
     this.advance();
   }
 

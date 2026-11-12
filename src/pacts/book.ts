@@ -1,5 +1,6 @@
 import { signal } from '@preact/signals';
-import { type Pact, type AbilitySlot, type TechniqueId, validatePact, type Validation } from './schema';
+import { type Pact, type TechniqueId, type ShapeTable, validatePact, type Validation } from './schema';
+import { type AbilitySlot, EXTRA_SLOTS } from './slots';
 import { estimateResolve, countedBefore, DEFAULT_TELEMETRY, type Telemetry, type ResolveEstimate } from './resolve';
 
 const KEY = 'zenko.pacts.v3';
@@ -9,16 +10,20 @@ const LEGACY_KEY = 'zenko.pacts.v2';
 // for the raw Technique after the player unbinds. A missing entry has never
 // been set, so the catalogue may still claim it.
 type Bindings = Partial<Record<TechniqueId, Partial<Record<AbilitySlot, string | null>>>>;
-interface Saved { inscribed: Pact[]; drafts: Pact[]; bindings: Bindings; telemetry: Telemetry; encounters: number }
+// `claimed` lists the catalogue Abilities that have had their turn at a slot,
+// so one the player unbinds stays unbound after a reload.
+interface Saved { inscribed: Pact[]; drafts: Pact[]; bindings: Bindings; claimed: string[]; telemetry: Telemetry; encounters: number }
 
 // The player's Pacts. Inscribed Pacts are permanent. Each key binds to one
 // inscribed Pact of the current Technique or to nothing, which is the raw
-// Technique. Every catalogue Ability arrives inscribed and bound (issue #3).
+// Technique. Every catalogue Ability arrives inscribed and bound (issue #3):
+// on its own slot, or on the first free extra slot when another Ability holds it (issue #41).
 export class PactBook {
   readonly inscribed = signal<Pact[]>([]);
   readonly drafts = signal<Pact[]>([]);
   readonly bindings = signal<Bindings>({});
   readonly preview = signal<Pact | null>(null);
+  private claimed = new Set<string>();
   telemetry: Telemetry = { ...DEFAULT_TELEMETRY };
   technique: TechniqueId = 'recoil';
   encounters = 0;
@@ -40,7 +45,13 @@ export class PactBook {
     if (add.length) this.inscribed.value = [...this.inscribed.value, ...add];
     const catalogueIds = new Set(cat.map((p) => p.id));
     if (this.drafts.value.some((d) => catalogueIds.has(d.id))) this.drafts.value = this.drafts.value.filter((d) => !catalogueIds.has(d.id));
-    for (const p of cat) if (p.slot !== 'passive' && this.binding(p.slot) === undefined) this.bind(p.slot, p.id);
+    for (const p of cat) {
+      if (p.slot === 'passive' || this.claimed.has(p.id)) continue;
+      this.claimed.add(p.id);
+      if (this.slotOf(p.id)) continue;
+      const home = this.binding(p.slot) === undefined ? p.slot : EXTRA_SLOTS.find((s) => this.binding(s) === undefined);
+      if (home) this.bind(home, p.id);
+    }
     this.persist();
   }
 
@@ -53,8 +64,31 @@ export class PactBook {
     return p && !this.expired(p) ? p : null;
   }
 
-  bind(slot: AbilitySlot, id: string | null): void {
-    this.bindings.value = { ...this.bindings.value, [this.technique]: { ...(this.bindings.value[this.technique] ?? {}), [slot]: id } };
+  slotOf(id: string): AbilitySlot | null {
+    const row = this.bindings.value[this.technique] ?? {};
+    return (Object.keys(row) as AbilitySlot[]).find((s) => row[s] === id) ?? null;
+  }
+
+  bind(slot: AbilitySlot, id: string | null): void { this.setSlots({ [slot]: id }); }
+
+  // Moves an inscribed Pact to `slot`. When the Pact is bound and another one
+  // holds `slot`, the two trade places; otherwise the one there is unbound.
+  place(id: string, slot: AbilitySlot, how: 'replace' | 'swap'): void {
+    const from = this.slotOf(id);
+    const occupant = this.binding(slot);
+    this.setSlots(how === 'swap' && from && occupant ? { [slot]: id, [from]: occupant } : { [slot]: id });
+  }
+
+  // One write for any set of slots. A Pact sits on one slot, so binding it
+  // empties the slot it left, and each bound Pact learns the slot it now holds.
+  private setSlots(changes: Partial<Record<AbilitySlot, string | null>>): void {
+    const row: Partial<Record<AbilitySlot, string | null>> = { ...(this.bindings.value[this.technique] ?? {}) };
+    const moved = new Set(Object.values(changes).filter((id): id is string => !!id));
+    for (const s of Object.keys(row) as AbilitySlot[]) if (!(s in changes) && moved.has(row[s] ?? '')) row[s] = null;
+    Object.assign(row, changes);
+    this.bindings.value = { ...this.bindings.value, [this.technique]: row };
+    const at = new Map((Object.keys(changes) as AbilitySlot[]).filter((s) => changes[s]).map((s) => [changes[s]!, s]));
+    if (this.inscribed.value.some((p) => at.has(p.id) && p.slot !== at.get(p.id))) this.inscribed.value = this.inscribed.value.map((p) => (at.has(p.id) ? { ...p, slot: at.get(p.id)! } : p));
     this.persist();
   }
 
@@ -86,7 +120,7 @@ export class PactBook {
     this.persist();
   }
 
-  inscribe(p: Pact, shapes: readonly string[]): Validation {
+  inscribe(p: Pact, shapes: ShapeTable): Validation {
     const v = validatePact(p, shapes);
     if (!v.ok) return v;
     const sealed: Pact = { ...structuredClone(p), inscribed: true, inscribedAt: this.encounters };
@@ -109,6 +143,7 @@ export class PactBook {
     this.inscribed.value = [];
     this.drafts.value = [];
     this.bindings.value = {};
+    this.claimed.clear();
     this.preview.value = null;
     this.telemetry = { ...DEFAULT_TELEMETRY };
     this.encounters = 0;
@@ -127,7 +162,7 @@ export class PactBook {
   }
 
   private saved(): Saved {
-    return { inscribed: this.inscribed.value, drafts: this.drafts.value, bindings: this.bindings.value, telemetry: this.telemetry, encounters: this.encounters };
+    return { inscribed: this.inscribed.value, drafts: this.drafts.value, bindings: this.bindings.value, claimed: [...this.claimed], telemetry: this.telemetry, encounters: this.encounters };
   }
 
   private persist(): void {
@@ -138,6 +173,7 @@ export class PactBook {
     this.inscribed.value = (s.inscribed ?? []).filter((p) => validatePact(p).ok);
     this.drafts.value = (s.drafts ?? []).filter((p) => validatePact(p).ok);
     this.bindings.value = s.bindings ?? {};
+    this.claimed = new Set(s.claimed ?? this.settled());
     this.telemetry = { ...DEFAULT_TELEMETRY, ...(s.telemetry ?? {}) };
     this.encounters = s.encounters ?? 0;
   }
@@ -148,6 +184,13 @@ export class PactBook {
       const s = raw ? (JSON.parse(raw) as Partial<Saved>) : this.legacy();
       if (s) this.apply(s);
     } catch { /* corrupt save: start fresh */ }
+  }
+
+  // A save from before extra slots has no `claimed` list. An Ability counts as
+  // placed when it holds its own slot or the player emptied that slot; one whose
+  // slot another Ability took has not had a slot yet, so it moves to a free one.
+  private settled(): string[] {
+    return this.inscribed.value.filter((p) => { const at = this.bindings.value[p.technique]?.[p.slot]; return at === p.id || at === null; }).map((p) => p.id);
   }
 
   // A v2 save bound each key to the last Pact inscribed for it.

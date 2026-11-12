@@ -64,9 +64,9 @@ export const shift: TechniqueKit = {
   primitive: { name: 'Shift', short: 'a short hop forward', description: 'Translate a short, imprecise distance in roughly the direction you face.' },
   parameters: ['direction', 'range', 'target', 'trigger', 'duration', 'resource', 'body'],
   shapes: {
-    cut: { label: 'translates a step forward and strikes with the arriving momentum', short: 'step in and strike', slot: ['primary'], description: 'A close arc coated in displacement.' },
-    translate: { label: 'translates you to the declared point, through what lies between', short: 'translate to your aim', slot: ['secondary'], description: 'Shift to the aim point. Occupied destinations displace what stood there.' },
-    longTranslation: { label: 'crosses a long line and cuts through everything on it', short: 'cross a long line, cutting', slot: ['max'], description: 'A line-crossing displacement.' },
+    cut: { label: 'translates a step forward and strikes with the arriving momentum', short: 'step in and strike', kinds: ['primary'], description: 'A close arc coated in displacement.' },
+    translate: { label: 'translates you to the declared point, through what lies between', short: 'translate to your aim', kinds: ['secondary'], description: 'Shift to the aim point. Occupied destinations displace what stood there.' },
+    longTranslation: { label: 'crosses a long line and cuts through everything on it', short: 'cross a long line, cutting', kinds: ['max'], description: 'A line-crossing displacement.' },
   },
   behaviors: { momentum: 'arriving at speed carries into the next strike', through: 'passes through walls and people', quiet: 'leaves no afterimage' },
   catalogue,
@@ -75,7 +75,7 @@ export const shift: TechniqueKit = {
     secondary: gestureSet(0.55, 0.22, [{ t: 0, right: 'point', left: 'crossChest', slow: true }, { t: 0.18, right: 'pointFar', snap: true, camera: { fov: 10, roll: 0.03 } }, { t: 0.4, right: 'rest', left: 'rest' }]),
     max: gestureSet(2.0, 1.5, [{ t: 0, right: 'crossChest', left: 'crossChest', slow: true }, { t: 0.7, right: 'point', left: 'point', slow: true }, { t: 1.45, right: 'pointFar', left: 'pointFar', snap: true, camera: { fov: 14 } }, { t: 1.9, right: 'rest', left: 'rest' }]),
   },
-  avatarClips: { primary: 'Punch_Jab', secondary: 'Spell_Simple_Shoot', max: 'Sword_Attack', passive: 'Idle_Loop' },
+  avatarClips: { primary: 'Punch_Jab', secondary: 'Spell_Simple_Shoot', max: 'Sword_Attack' },
   traits: {},
   cutscene,
   effects: {
@@ -137,5 +137,5 @@ export const shift: TechniqueKit = {
       return undefined;
     },
   },
-  audio: { primary: { cast: 'phaserUp3', volume: 0.3, pitch: 1.4 }, secondary: { cast: 'phaseJump1', volume: 0.3, pitch: 1.2 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 0.8 }, passive: { cast: 'tick_001' } },
+  audio: { primary: { cast: 'phaserUp3', volume: 0.3, pitch: 1.4 }, secondary: { cast: 'phaseJump1', volume: 0.3, pitch: 1.2 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 0.8 } },
 };

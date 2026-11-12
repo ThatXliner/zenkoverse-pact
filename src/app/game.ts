@@ -29,7 +29,8 @@ import { Tutorial } from '../tutorial/tutorial';
 import { Drills } from '../drills/drills';
 import { PactBook } from '../pacts/book';
 import type { Pact } from '../pacts/schema';
-import { KEY_WORDS } from '../pacts/readback';
+import { slotWords } from '../pacts/readback';
+import { keyLabel } from './keymap';
 import { Mastery } from '../mastery/mastery';
 import { Rooftop } from '../rooftop/rooftop';
 import { Navigation } from '../nav/navigation';
@@ -38,7 +39,7 @@ import { installDebug } from './debug';
 
 export const hud = {
   zone: signal<Zone | null>(null),
-  prompt: signal<{ key: string; text: string } | null>(null),
+  prompt: signal<{ text: string } | null>(null),
   toasts: signal<{ id: number; text: string; tone: 'info' | 'good' | 'bad' }[]>([]),
   banner: signal<{ big: string; small: string; id: number } | null>(null),
   plaque: signal<{ title: string; body: string } | null>(null),
@@ -159,7 +160,7 @@ export class Game {
       this.player.teleport(SPAWN.market.clone());
       this.cam.yaw = Math.PI / 2;
       setState({ kind: 'explore' });
-      toast('Explore the district. Tab opens the Pact Workshop anywhere.');
+      toast(`Explore the district. ${keyLabel('workshop')} opens the Pact Workshop anywhere.`);
     } else {
       this.player.teleport(SPAWN.academy.clone());
       this.cam.yaw = -Math.PI / 2;
@@ -190,7 +191,7 @@ export class Game {
     this.closeWorkshop();
     this.book.preview.value = p;
     if (appState.value.kind !== 'encounter') this.encounters.begin('dummy-room', true);
-    toast(`Trying "${p.name}" on ${KEY_WORDS[p.slot]}. Tab returns to the Workshop.`);
+    toast(`Trying "${p.name}" on ${slotWords(p.slot)}. ${keyLabel('workshop')} returns to the Workshop.`);
   }
 
   loop(on: boolean): void { this.renderer.gl.setAnimationLoop(on ? () => this.frame() : null); }
@@ -214,7 +215,7 @@ export class Game {
       else if (st.kind === 'workshop') this.closeWorkshop();
       else if (worldRuns.value) { pause(); this.input.releaseLock(); }
     }
-    if (worldRuns.value && !this.input.locked && !this.cam.inShot && this.input.hit('primary')) this.input.requestLock();
+    if (worldRuns.value && !this.input.locked && !this.cam.inShot && this.input.canvasPressed) this.input.requestLock();
 
     if (st.kind === 'title' || st.kind === 'boot') {
       this.titleOrbit += raw * 0.045;
@@ -290,19 +291,19 @@ export class Game {
   }
 
   private updateInteract(): void {
-    let best: { key: string; text: string; act: () => void } | null = null;
+    let best: { text: string; act: () => void } | null = null;
     for (const p of this.district.plaques) {
-      if (p.position.distanceTo(this.player.position) < 2.2) { best = { key: 'E', text: p.found ? `Reread: ${p.title}` : `Read plaque: ${p.title}`, act: () => { p.found = true; hud.plaque.value = { title: p.title, body: p.body }; this.audio.play('glass_002', 0.4); setTimeout(() => { hud.plaque.value = null; }, 7000); } }; break; }
+      if (p.position.distanceTo(this.player.position) < 2.2) { best = { text: p.found ? `Reread: ${p.title}` : `Read plaque: ${p.title}`, act: () => { p.found = true; hud.plaque.value = { title: p.title, body: p.body }; this.audio.play('glass_002', 0.4); setTimeout(() => { hud.plaque.value = null; }, 7000); } }; break; }
     }
     const dojoDesk = new THREE.Vector3(-23, 0, -70.6);
-    if (!best && dojoDesk.distanceTo(this.player.position) < 3.2) best = { key: 'E', text: 'Speak with the Pact Architect', act: () => this.openWorkshop() };
+    if (!best && dojoDesk.distanceTo(this.player.position) < 3.2) best = { text: 'Speak with the Pact Architect', act: () => this.openWorkshop() };
     const enc = this.encounters.interactable(this.player.position);
     if (!best && enc) best = enc;
     const roof = this.rooftop.interactable(this.player.position);
     if (!best && roof) best = roof;
     const drill = this.drills.interactable(this.player.position);
     if (!best && drill) best = drill;
-    hud.prompt.value = best ? { key: best.key, text: best.text } : null;
+    hud.prompt.value = best ? { text: best.text } : null;
     if (best && this.input.hit('interact')) best.act();
   }
 }

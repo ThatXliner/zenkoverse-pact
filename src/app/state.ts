@@ -1,6 +1,7 @@
 import { signal, computed } from '@preact/signals';
 
-export type TutorialStepId = 'move' | 'look' | 'camera' | 'primary' | 'secondary' | 'pact' | 'wager' | 'max' | 'done';
+export type TutorialStepId = 'move' | 'look' | 'camera' | 'primary' | 'secondary' | 'art' | 'pact' | 'wager' | 'max' | 'done';
+export type PauseTab = 'menu' | 'settings' | 'controls' | 'codex' | 'map';
 export type EncounterId = 'alley-thugs' | 'kuroda' | 'ancient-bridge' | 'dummy-room';
 export type DrillId = 'recoil-crane';
 
@@ -13,7 +14,7 @@ export type AppState =
   | { kind: 'drill'; id: DrillId }
   | { kind: 'encounter'; id: EncounterId }
   | { kind: 'cinematic'; resume: AppState }
-  | { kind: 'paused'; resume: AppState; tab: 'menu' | 'settings' | 'codex' | 'map' }
+  | { kind: 'paused'; resume: AppState; tab: PauseTab }
   | { kind: 'defeat' }
   | { kind: 'rooftop' }
   | { kind: 'rooftop-offer' }
@@ -35,7 +36,7 @@ export function setState(next: AppState): void {
   appState.value = next;
 }
 
-export function pause(tab: 'menu' | 'settings' | 'codex' | 'map' = 'menu'): void {
+export function pause(tab: PauseTab = 'menu'): void {
   const cur = appState.value;
   if (cur.kind === 'paused') { appState.value = { ...cur, tab }; return; }
   if (!worldRuns.value) return;

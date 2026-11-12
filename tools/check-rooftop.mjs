@@ -12,26 +12,18 @@
 // Offers, the Eye and the Aura are taken with real clicks and keys. The
 // ?debug hooks only teleport, switch the camera, give god mode, clear a wave
 // and read state. Wave 1 is fought by a pilot that aims and punches.
-// Usage: node tools/check-rooftop.mjs [--url http://localhost:4173/] [--out captures/rooftop] [--port 4173]
-// Without --url it serves dist/ itself (run `npm run build` first).
+// Usage: node tools/check-rooftop.mjs [url] [--url http://localhost:4173/] [--out captures/rooftop] [--port 4173]
+// Without a URL it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
-import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { resolveTarget } from './lib/target.mjs';
 
-const args = Object.fromEntries(process.argv.slice(2).map((a, i, all) => (a.startsWith('--') ? [a.slice(2), all[i + 1]?.startsWith('--') || all[i + 1] === undefined ? 'true' : all[i + 1]] : [])).filter((x) => x.length));
+const { url, args, stop } = await resolveTarget();
+
 const out = args.out ?? 'captures/rooftop';
 mkdirSync(out, { recursive: true });
 
-let server = null;
-let url = args.url;
-if (!url) {
-  if (!existsSync('dist/index.html')) throw new Error('dist/ missing: run npm run build first');
-  const port = args.port ?? '4173';
-  server = spawn('npx', ['vite', 'preview', '--port', port, '--strictPort'], { stdio: 'ignore' });
-  await new Promise((r) => setTimeout(r, 1800));
-  url = `http://localhost:${port}/`;
-}
 
 const WAVE_SIZES = [4, 6, 7, 4, 9, 10, 12, 1];
 const browser = await chromium.launch({ channel: 'chrome', args: ['--use-angle=metal', '--ignore-gpu-blocklist'] });
@@ -337,5 +329,5 @@ writeFileSync(join(out, 'report.json'), JSON.stringify({ url, failures, errors, 
 console.log(`\n${failures.length} failures, ${errors.length} page errors -> ${join(out, 'report.json')}`);
 for (const e of errors.slice(0, 20)) console.log('  ERROR', e);
 await browser.close();
-server?.kill();
+stop();
 process.exit(failures.length || errors.length ? 1 : 0);

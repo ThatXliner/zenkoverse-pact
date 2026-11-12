@@ -7,24 +7,15 @@
 // Usage: node tools/check-navigation.mjs [url] [--url http://localhost:4173/] [--out captures/navigation] [--port 4173]
 // Without a url it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
-import { spawn } from 'node:child_process';
-import { mkdirSync, existsSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { resolveTarget } from './lib/target.mjs';
 
-const positional = process.argv.slice(2).find((a) => /^https?:/.test(a));
-const args = Object.fromEntries(process.argv.slice(2).map((a, i, all) => (a.startsWith('--') ? [a.slice(2), all[i + 1]?.startsWith('--') || all[i + 1] === undefined ? 'true' : all[i + 1]] : [])).filter((x) => x.length));
+const { url, args, stop } = await resolveTarget();
+
 const out = args.out ?? 'captures/navigation';
 mkdirSync(out, { recursive: true });
 
-let server = null;
-let url = args.url ?? positional;
-if (!url) {
-  if (!existsSync('dist/index.html')) throw new Error('dist/ missing: run npm run build first');
-  const port = args.port ?? '4173';
-  server = spawn('npx', ['vite', 'preview', '--port', port, '--strictPort'], { stdio: 'ignore' });
-  await new Promise((r) => setTimeout(r, 1800));
-  url = `http://localhost:${port}/`;
-}
 
 const browser = await chromium.launch({ channel: 'chrome', args: ['--use-angle=metal', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
@@ -155,6 +146,6 @@ await shot('09-landmark-label');
 
 check(errors.length === 0, `zero page errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);
 await browser.close();
-server?.kill();
+stop();
 if (failures.length) { console.error(`\n${failures.length} navigation checks failed`); process.exit(1); }
 console.log(`\nnavigation ok, screenshots in ${out}`);

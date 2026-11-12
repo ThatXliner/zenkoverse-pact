@@ -1,8 +1,10 @@
 // Asserts that A/D strafe along the camera's left/right in both camera modes.
-// Usage: npm run check:controls -- [url]   (default: http://localhost:5173/)
+// Usage: npm run check:controls -- [url] [--url http://localhost:4173/] [--port 4173]
+// Without a URL it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
+import { resolveTarget } from './lib/target.mjs';
 
-const url = process.argv[2] ?? 'http://localhost:5173/';
+const { url, stop } = await resolveTarget();
 const browser = await chromium.launch({ channel: 'chrome', args: ['--use-angle=metal', '--enable-gpu'] });
 const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
 await page.goto(`${url}?debug`);
@@ -28,6 +30,7 @@ const results = await page.evaluate(() => {
   return out;
 });
 await browser.close();
+stop();
 const bad = results.filter((r) => !r.ok);
 for (const r of results) console.log(`${r.ok ? 'ok  ' : 'FAIL'} ${r.mode} yaw=${r.yaw} ${r.key}: ${r.along} m along camera-right`);
 if (bad.length) { console.error(`${bad.length} strafe checks failed`); process.exit(1); }

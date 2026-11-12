@@ -1,0 +1,66 @@
+/* Rooftop trial: run strip, offer sheets, end screen. Tokens come from styles.css. */
+
+.rt-strip { position: absolute; right: 36px; top: 36px; display: grid; justify-items: end; gap: 4px; padding: 12px 16px 12px 22px; border-right: 2px solid var(--accent); background: linear-gradient(270deg, rgba(10,11,16,0.62), rgba(10,11,16,0)); text-align: right; pointer-events: none; animation: rise 0.45s var(--ease); }
+.rt-strip .rt-wave { font-family: var(--serif); font-size: 15px; letter-spacing: 0.2em; color: var(--mist); }
+.rt-strip .rt-wave b { font-size: 44px; font-weight: 800; color: var(--paper); letter-spacing: 0; line-height: 1; margin-right: 4px; }
+.rt-strip .rt-title { font-size: 15px; letter-spacing: 0.14em; color: var(--paper); }
+.rt-strip .rt-row { display: flex; gap: 14px; font-style: normal; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--mist); }
+.rt-strip .rt-row i { font-style: normal; font-variant-numeric: tabular-nums; }
+.rt-strip .rt-eye { margin-top: 4px; font-family: var(--serif); font-size: 13px; letter-spacing: 0.18em; color: var(--c); }
+
+.rt-wrap { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(6,7,10,0.62); backdrop-filter: blur(14px); animation: fade 0.35s var(--ease); }
+.rt-sheet { width: min(1120px, calc(100vw - 48px)); max-height: calc(100vh - 48px); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; border: 1px solid var(--line); background: var(--glass); animation: rise 0.45s var(--ease); overflow: hidden; }
+.rt-sheet > header { display: grid; gap: 6px; padding: 22px 28px 16px; border-bottom: 1px solid var(--line); }
+.rt-sheet > header h2 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 30px; line-height: 1.1; }
+.rt-sheet > header h2 .jp { color: var(--accent); margin-right: 8px; }
+.rt-sheet > header h2 .big { font-size: 64px; font-weight: 800; margin: 0; }
+.rt-note { margin: 0; max-width: 78ch; font-size: 14px; line-height: 1.55; color: var(--mist); }
+.rt-sheet > footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 28px 18px; border-top: 1px solid var(--line); }
+.rt-hint { font-size: 12px; letter-spacing: 0.12em; color: var(--dim); }
+.rt-hint kbd, .rt-aura kbd, .rt-top kbd { font-family: var(--sans); font-size: 11px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 3px; color: var(--paper); }
+
+.rt-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 20px 28px; overflow: auto; min-height: 0; align-content: start; }
+.rt-cards.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.rt-offer { --c: var(--accent); position: relative; display: grid; align-content: start; gap: 12px; padding: 18px 18px 16px; min-width: 0; text-align: left; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0)); transition: transform 0.4s var(--ease), border-color 0.25s, background 0.25s; animation: rise 0.5s var(--ease) both; }
+.rt-offer:nth-child(2) { animation-delay: 0.06s; }
+.rt-offer:nth-child(3) { animation-delay: 0.12s; }
+.rt-offer:nth-child(4) { animation-delay: 0.18s; }
+.rt-offer:hover, .rt-offer:focus-visible { transform: translateY(-5px); border-color: var(--c); background: linear-gradient(180deg, color-mix(in oklab, var(--c) 14%, transparent), rgba(255,255,255,0)); outline: none; }
+.rt-offer.locked { opacity: 0.42; cursor: not-allowed; }
+.rt-offer.locked:hover { transform: none; border-color: var(--line); background: none; }
+.rt-top { display: flex; justify-content: space-between; align-items: center; }
+.rt-key { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--c); }
+.rt-key.jp { font-size: 30px; letter-spacing: 0; }
+.rt-offer h3 { margin: 0; font-family: var(--serif); font-size: 24px; font-weight: 600; color: var(--paper); }
+.rt-read { margin: 0; font-size: 14px; line-height: 1.6; color: var(--paper); opacity: 0.9; }
+.rt-foot { display: grid; gap: 3px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; letter-spacing: 0.04em; color: var(--mist); }
+.rt-foot b { font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; font-size: 11px; color: var(--mist); }
+.rt-foot b.up { color: #7dffb2; }
+.rt-foot i { font-style: normal; line-height: 1.45; }
+
+.rt-aura { display: grid; gap: 14px; padding: 22px 28px 26px; justify-items: start; }
+.rt-aura p { margin: 0; max-width: 70ch; font-size: 16px; line-height: 1.65; }
+
+.rt-sheet.end { width: min(760px, calc(100vw - 48px)); }
+.rt-sheet.end.lose > header h2 .big { color: #ff6b6b; }
+.rt-sheet.end.win > header h2 .big { color: #ffd34d; }
+.rt-sheet.end > footer { justify-content: flex-start; flex-wrap: wrap; }
+.rt-stats { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 8px 28px; padding: 22px 28px; overflow: auto; min-height: 0; align-content: start; }
+.rt-score { display: grid; gap: 4px; align-content: start; }
+.rt-score b { font-family: var(--serif); font-size: 72px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.rt-score i { font-style: normal; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--mist); }
+.rt-stats dl { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 18px; }
+.rt-stats dl div { display: grid; gap: 2px; }
+.rt-stats dt { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); }
+.rt-stats dd { margin: 0; font-family: var(--serif); font-size: 22px; font-variant-numeric: tabular-nums; }
+.rt-pacts { grid-column: 1 / -1; display: grid; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+.rt-pacts ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
+.rt-pacts li { padding: 6px 12px; border: 1px solid var(--line); font-size: 14px; }
+.rt-pacts li b { font-weight: 600; }
+.rt-none { margin: 0; font-size: 14px; color: var(--mist); }
+
+@media (max-width: 900px) {
+  .rt-cards, .rt-cards.four { grid-template-columns: 1fr; }
+  .rt-stats { grid-template-columns: 1fr; }
+  .rt-strip { right: 16px; top: 16px; }
+}

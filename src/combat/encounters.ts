@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Game } from '../app/game';
 import { appState, setState, type EncounterId } from '../app/state';
 import { banner, toast } from '../app/game';
-import { Enemy } from './enemies';
+import { Enemy, NO_SCALE, type EnemyScale } from './enemies';
 import { combatUi } from './combat';
 import { anchored } from '../techniques/kits/shift';
 
@@ -38,11 +38,12 @@ export class Encounters {
   private active: EncounterDef | null = null;
   private done = new Set<EncounterId>();
   private cooldown = 0;
+  private sinceAttack = 99;
 
   constructor(private game: Game) {}
 
   reset(): void {
-    for (const e of this.enemies) { e.die(); }
+    for (const e of this.enemies) { e.die(); e.dispose(); }
     this.enemies.length = 0;
     this.active = null;
     this.done.clear();
@@ -64,13 +65,7 @@ export class Encounters {
     const g = this.game;
     if (teleport) { g.player.teleport(d.where.clone()); g.cam.yaw = Math.atan2(-(d.spawns[0]!.offset[0]), -(d.spawns[0]!.offset[2])); }
     this.active = d;
-    for (const s of d.spawns) {
-      const pos = d.where.clone().add(new THREE.Vector3(...s.offset));
-      const e = new Enemy(g, s.key, pos);
-      e.yaw = Math.atan2(-(g.player.position.x - pos.x), -(g.player.position.z - pos.z));
-      if (s.key === 'ancient') e.aura.active = true;
-      this.enemies.push(e);
-    }
+    for (const s of d.spawns) this.spawn(s.key, d.where.clone().add(new THREE.Vector3(...s.offset)));
     if (appState.value.kind !== 'tutorial') setState({ kind: 'encounter', id });
     banner(d.jp, d.title);
     if (d.intro) toast(d.intro);
@@ -78,6 +73,29 @@ export class Encounters {
     const boss = this.enemies.find((e) => e.isBoss);
     if (boss) combatUi.boss.value = { name: boss.def.title ?? boss.def.name, frac: 1, color: boss.def.emissive ?? 0xff6a1a };
     g.tutorial.notify('encounter');
+  }
+
+  // Adds one enemy to the shared list, facing the player. Bosses raise their
+  // health bar and the Ancient opens its field, as in the district fights.
+  spawn(key: string, pos: THREE.Vector3, scale: EnemyScale = NO_SCALE, showBar = false): Enemy {
+    const g = this.game;
+    const e = new Enemy(g, key, pos, scale, showBar);
+    e.yaw = Math.atan2(-(g.player.position.x - pos.x), -(g.player.position.z - pos.z));
+    if (key === 'ancient') e.aura.active = true;
+    this.enemies.push(e);
+    if (e.isBoss) combatUi.boss.value = { name: e.def.title ?? e.def.name, frac: 1, color: e.def.emissive ?? 0xff6a1a };
+    return e;
+  }
+
+  // A crowd that all swings at once is unreadable, so the rooftop spaces out
+  // the wind-ups of the whole crowd. An enemy that is not granted the claim
+  // keeps circling and asks again next frame.
+  claimAttack(): boolean {
+    const gap = this.game.rooftop.attackGap;
+    if (gap === 0) return true;
+    if (this.sinceAttack < gap) return false;
+    this.sinceAttack = 0;
+    return true;
   }
 
   nearestEnemy(p: THREE.Vector3, max: number): Enemy | null {
@@ -107,6 +125,7 @@ export class Encounters {
   update(dt: number): void {
     const g = this.game;
     this.cooldown = Math.max(0, this.cooldown - dt);
+    this.sinceAttack += dt;
     if (!this.active && appState.value.kind === 'explore') {
       for (const d of DEFS) if (d.triggerRadius && !this.done.has(d.id) && d.where.distanceTo(g.player.position) < d.triggerRadius) this.begin(d.id);
     }
@@ -118,7 +137,7 @@ export class Encounters {
       else if (d.id === 'dummy-room' && g.player.position.distanceTo(d.where) > 12) this.finish();
       else if (d.id !== 'dummy-room' && g.player.position.distanceTo(d.where) > 60) { toast('You left the fight. It will wait.'); this.finish(false); }
     }
-    for (let i = this.enemies.length - 1; i >= 0; i--) if (!this.enemies[i]!.alive && !this.active) this.enemies.splice(i, 1);
+    for (let i = this.enemies.length - 1; i >= 0; i--) if (this.enemies[i]!.disposed) this.enemies.splice(i, 1);
   }
 
   private finish(victory = true): void {
@@ -127,7 +146,6 @@ export class Encounters {
     this.active = null;
     this.cooldown = 3;
     for (const e of this.enemies) if (e.alive) e.die();
-    this.enemies.length = 0;
     combatUi.boss.value = null;
     g.book.endEncounter();
     if (victory && d.id !== 'dummy-room') {

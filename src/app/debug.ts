@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import type { Game } from './game';
 import { SPAWN } from '../world/district';
 import { appState } from './state';
+import { validatePact } from '../pacts/schema';
+import { audit as auditOffers } from '../rooftop/offers';
 import type { TechniqueId } from '../techniques/kit';
 import type { PoseName } from '../hands/poses';
 
@@ -27,6 +29,14 @@ export interface DebugApi {
   step(frames: number, dt?: number): void;
   state(): string;
   errors: string[];
+  rooftop: {
+    begin(): void;
+    clearWave(): void;
+    ride(dir: 'up' | 'down'): void;
+    status(): { stage: string; wave: number; alive: number; hp: number; maxHp: number; auraAllowed: boolean; eye: string | null; app: string };
+    audit(technique: TechniqueId, rounds: number): string[];
+    offers(): { name: string; slot: string; tags: string[]; text: string; valid: boolean; errors: string[] }[];
+  };
   stats(): { fps: number; drawCalls: number; triangles: number; props: number; enemies: number };
 }
 
@@ -60,6 +70,17 @@ export function installDebug(game: Game): void {
     loop(on) { game.loop(on); },
     step(frames, dt) { game.step(frames, dt); },
     state() { return appState.value.kind; },
+    rooftop: {
+      begin() { game.rooftop.begin(); },
+      clearWave() { game.rooftop.clearWave(); },
+      ride(dir) { if (dir === 'up') game.rooftop.rideUp(); else game.rooftop.rideDown(); },
+      status() { const r = game.rooftop; return { stage: r.stage, wave: r.wave, alive: r.alive, hp: game.combat.hp, maxHp: game.combat.maxHp, auraAllowed: r.auraAllowed, eye: game.combat.eye, app: appState.value.kind }; },
+      audit(technique, rounds) { const was = game.techniqueId; game.setTechnique(technique); const bad = auditOffers(game, rounds); game.setTechnique(was); return bad; },
+      offers() {
+        const shapes = Object.keys(game.techniques.def.shapes);
+        return game.rooftop.offers.map((o) => { const v = validatePact(o.pact, shapes); return { name: o.pact.name, slot: o.pact.slot, tags: o.tags, text: o.text, valid: v.ok, errors: v.errors }; });
+      },
+    },
     stats() {
       const i = game.renderer.gl.info;
       return { fps: 0, drawCalls: i.render.calls, triangles: i.render.triangles, props: game.props.instances.length, enemies: game.encounters.enemies.length };

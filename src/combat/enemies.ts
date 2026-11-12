@@ -12,9 +12,42 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
   kuroda: { name: 'Kuroda Enforcer', model: 'parted', hp: 620, speed: 3.2, dmg: 15, ai: 'kuroda', boss: true, tint: 0xb04a2a, emissive: 0xff3a00, height: 1.9, title: 'Kuroda Enforcer, whose "fire" is fuel' },
   ancient: { name: 'The Ancient Echo Master', model: 'long', hp: 1300, speed: 2.6, dmg: 20, ai: 'ancient', boss: true, tint: 0xdfe8dc, emissive: 0x7dffb2, height: 1.7, title: 'The Ancient Echo Master' },
   dummy: { name: 'Training Dummy', model: 'buzzed', hp: 100000, speed: 0, dmg: 0, ai: 'dummy', tint: 0x3e5a78 },
+  // Rooftop-trial roster: the same thug AI at other speeds, weights and hit points.
+  runner: { name: 'Spring Leaper', model: 'buzzed', hp: 52, speed: 5.2, dmg: 14, ai: 'thug', tint: 0x4f8a58, height: 1.72 },
+  husk: { name: 'Husk Shell', model: 'beard', hp: 190, speed: 2.3, dmg: 20, ai: 'thug', tint: 0xb8ad94, height: 2.05 },
 };
 
+export interface EnemyScale { hp: number; dmg: number }
+export const NO_SCALE: EnemyScale = { hp: 1, dmg: 1 };
+
 const STILL = new THREE.Vector3();
+const CORPSE_SECONDS = 6;
+const CAM_RIGHT = new THREE.Vector3();
+
+// A thin bar above the head that appears once the enemy is hurt. The sprites
+// live in the scene, not on the avatar, so the avatar's yaw does not swing them.
+class HealthBar {
+  private back = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x05060a, transparent: true, opacity: 0.75, depthTest: false }));
+  private fill = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xff5a4a, transparent: true, depthTest: false }));
+  private static readonly W = 0.8;
+
+  constructor(scene: THREE.Object3D, private lift: number) {
+    for (const s of [this.back, this.fill]) { s.renderOrder = 20; s.visible = false; scene.add(s); }
+    this.back.scale.set(HealthBar.W + 0.04, 0.09, 1);
+  }
+
+  // `right` is the camera's right vector: a shrinking fill keeps its left edge by sliding that way.
+  update(at: THREE.Vector3, frac: number, right: THREE.Vector3): void {
+    const show = frac < 0.999 && frac > 0;
+    this.back.visible = this.fill.visible = show;
+    if (!show) return;
+    this.back.position.set(at.x, at.y + this.lift, at.z);
+    this.fill.position.copy(this.back.position).addScaledVector(right, -HealthBar.W * (1 - frac) / 2);
+    this.fill.scale.set(Math.max(0.001, HealthBar.W * frac), 0.06, 1);
+  }
+
+  dispose(): void { this.back.removeFromParent(); this.fill.removeFromParent(); }
+}
 
 type State = 'idle' | 'chase' | 'windup' | 'strike' | 'recover' | 'stagger' | 'knocked' | 'dead' | 'cast';
 
@@ -42,12 +75,17 @@ export class Enemy {
   damageTaken = 0;
   fuelPatch: THREE.Mesh | null = null;
   readonly key: string;
+  readonly dmg: number;
+  private bar: HealthBar | null = null;
+  private deadT = 0;
+  disposed = false;
 
-  constructor(private game: Game, key: string, pos: THREE.Vector3) {
+  constructor(private game: Game, key: string, pos: THREE.Vector3, scale: EnemyScale = NO_SCALE, showBar = false) {
     const def = ENEMY_DEFS[key]!;
     this.key = key;
     this.def = def;
-    this.hp = this.maxHp = def.hp;
+    this.hp = this.maxHp = def.hp * scale.hp;
+    this.dmg = def.dmg * scale.dmg;
     this.position = pos.clone();
     this.avatar = new Avatar(game.assets, def.model, { targetHeight: def.height ?? 1.8, tint: def.tint, emissive: def.emissive });
     this.avatar.root.position.copy(pos);
@@ -61,6 +99,7 @@ export class Enemy {
     this.ctrl.setApplyImpulsesToDynamicBodies(true);
     this.ctrl.setCharacterMass(90);
     (this.collider as RAPIER.Collider & { enemy?: Enemy }).enemy = this;
+    if (showBar && !def.boss && def.ai !== 'dummy') this.bar = new HealthBar(game.renderer.scene, h + 0.35);
   }
 
   get height(): number { return this.def.height ?? 1.8; }
@@ -92,7 +131,15 @@ export class Enemy {
     this.avatar.die();
     this.game.physics.world.removeCollider(this.collider, false);
     this.aura.active = false;
-    setTimeout(() => { this.game.renderer.scene.remove(this.avatar.root); this.game.physics.world.removeRigidBody(this.body); }, 6000);
+    this.bar?.dispose();
+  }
+
+  // The body lies where it fell for a few seconds, still animating, then goes.
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.game.renderer.scene.remove(this.avatar.root);
+    this.game.physics.world.removeRigidBody(this.body);
   }
 
   private face(target: THREE.Vector3, dt: number, rate = 8): void {
@@ -105,6 +152,8 @@ export class Enemy {
   }
 
   update(dt: number): void {
+    if (this.disposed) return;
+    if (!this.alive && (this.deadT += dt) > CORPSE_SECONDS) { this.dispose(); return; }
     const g = this.game;
     const p = g.player.position;
     const toP = p.clone().sub(this.position).setY(0);
@@ -129,7 +178,7 @@ export class Enemy {
           const reach = def.ai === 'ancient' ? 7 : 1.7;
           if (dist > reach) move.copy(toP).normalize().multiplyScalar(speed);
           if (def.ai === 'ancient' && dist < 5) move.copy(toP).normalize().multiplyScalar(-speed * 0.7);
-          if (dist <= reach + 0.3 && this.attackCd <= 0 && this.frozen <= 0) { this.state = 'windup'; this.t = 0; this.avatar.playUpper(def.ai === 'kuroda' ? 'Spell_Simple_Enter' : 'Punch_Jab', 1.1); }
+          if (dist <= reach + 0.3 && this.attackCd <= 0 && this.frozen <= 0 && g.encounters.claimAttack()) { this.state = 'windup'; this.t = 0; this.avatar.playUpper(def.ai === 'kuroda' ? 'Spell_Simple_Enter' : 'Punch_Jab', 1.1); }
           if (def.ai !== 'thug' && this.castCd <= 0 && dist < 22 && this.frozen <= 0) { this.state = 'cast'; this.t = 0; this.avatar.playUpper('Spell_Simple_Shoot', 1); this.beginCast(); }
           break;
         }
@@ -172,6 +221,7 @@ export class Enemy {
     this.avatar.setLocomotion(this.alive ? this.velocity : STILL, this.grounded, dt);
     if (this.resonance > 0) this.avatar.root.position.x += (Math.random() - 0.5) * this.resonance * 0.03;
     this.avatar.update(dt);
+    if (this.bar) this.bar.update(this.position, this.alive ? this.hp / this.maxHp : 0, CAM_RIGHT.set(1, 0, 0).applyQuaternion(this.game.renderer.camera.quaternion));
     if (this.aura.active) this.aura.radius = THREE.MathUtils.lerp(this.aura.radius, 13, 1 - Math.exp(-3 * dt));
     else this.aura.radius = THREE.MathUtils.lerp(this.aura.radius, 0, 1 - Math.exp(-3 * dt));
   }
@@ -183,7 +233,7 @@ export class Enemy {
     const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const reach = this.def.ai === 'ancient' ? 8 : 2.2;
     if (d < reach && toP.normalize().dot(fwd) > 0.3) {
-      g.combat.hurtPlayer(this.def.dmg, { from: this.center(), kinetic: true });
+      g.combat.hurtPlayer(this.dmg, { from: this.center(), kinetic: true });
       g.audio.play('impactPunch_medium_000', 0.6, 0.9 + Math.random() * 0.2);
     }
     if (this.def.ai === 'ancient') { g.vfx.ring(this.position.clone().add(new THREE.Vector3(0, 0.1, 0)), 0x7dffb2, 0.5, 9, 0.6); g.audio.play('impactBell_heavy_002', 0.6, 0.7); }
@@ -212,7 +262,7 @@ export class Enemy {
       g.vfx.ring(at.clone().add(new THREE.Vector3(0, 0.1, 0)), 0xff6a1a, 0.3, 3.2, 0.5);
       g.audio.play('impactMining_000', 0.8, 0.7);
       g.renderer.impactFrame(2, new THREE.Color(0xff6a1a));
-      if (g.player.position.distanceTo(at) < 2.6) g.combat.hurtPlayer(this.def.dmg * 1.6, { from: at, kinetic: false });
+      if (g.player.position.distanceTo(at) < 2.6) g.combat.hurtPlayer(this.dmg * 1.6, { from: at, kinetic: false });
       for (const e of g.encounters.enemies) if (e !== this && e.alive && e.position.distanceTo(at) < 2.6) e.hurt(20, { from: at, knock: 3 });
     } else if (this.def.ai === 'ancient') {
       if (this.hp < this.maxHp * 0.7 && Math.random() < 0.5) g.encounters.bossUltimate(this);
@@ -221,7 +271,7 @@ export class Enemy {
         g.vfx.ring(this.position.clone().add(new THREE.Vector3(0, 0.1, 0)), 0x7dffb2, 0.5, 14, 0.9);
         g.audio.play('impactBell_heavy_000', 0.8, 0.6);
         const d = g.player.position.distanceTo(this.position);
-        if (d < 14) g.combat.hurtPlayer(this.def.dmg * (1 - d / 16), { from: c, kinetic: true });
+        if (d < 14) g.combat.hurtPlayer(this.dmg * (1 - d / 16), { from: c, kinetic: true });
         for (const p of g.props.instances) if (p.mesh.position.distanceTo(this.position) < 14) p.body.applyImpulse(p.mesh.position.clone().sub(this.position).normalize().multiplyScalar(p.def.mass * 5).setY(p.def.mass * 3), true);
       }
     }

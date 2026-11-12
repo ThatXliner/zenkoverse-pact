@@ -1,5 +1,5 @@
 import type { ComponentChildren } from 'preact';
-import { type Param, type Restriction, PARAM_VALUES } from '../pacts/schema';
+import { type Param, type Restriction, type TechniqueId, PARAM_VALUES, valuesFor } from '../pacts/schema';
 import { describe, type ResolveLine } from '../pacts/resolve';
 
 // One picker per Pact parameter. Every picker shows all of its alternatives
@@ -8,6 +8,7 @@ import { describe, type ResolveLine } from '../pacts/resolve';
 
 export interface PickerProps {
   param: Param;
+  technique: TechniqueId;
   value: string | undefined;
   weigh(value: string): ResolveLine;
   onPick(value: string): void;
@@ -45,10 +46,10 @@ function Option({ on, onClick, children, cls }: { on: boolean; onClick(): void; 
 
 const words = (param: Param, value: string) => describe({ param, value } as Restriction);
 
-function LineOptions({ param, value, weigh, onPick, cls }: PickerProps & { cls: string }) {
+function LineOptions({ param, technique, value, weigh, onPick, cls }: PickerProps & { cls: string }) {
   return (
     <div class={`opts ${cls}`}>
-      {PARAM_VALUES[param].map((v) => (
+      {valuesFor(param, technique).map((v) => (
         <Option key={v} on={v === value} onClick={() => onPick(v)} cls="line">
           <span class="l">{words(param, v)}</span>
           <Worth line={weigh(v)} />
@@ -58,10 +59,10 @@ function LineOptions({ param, value, weigh, onPick, cls }: PickerProps & { cls: 
   );
 }
 
-function GlyphTiles({ param, value, weigh, onPick }: PickerProps) {
+function GlyphTiles({ param, technique, value, weigh, onPick }: PickerProps) {
   return (
     <div class="opts tiles four">
-      {PARAM_VALUES[param].map((v) => (
+      {valuesFor(param, technique).map((v) => (
         <Option key={v} on={v === value} onClick={() => onPick(v)} cls="glyph">
           <span class="g">{GLYPH[`${param}:${v}`] ?? ''}</span>
           <span class="l">{words(param, v)}</span>
@@ -73,7 +74,7 @@ function GlyphTiles({ param, value, weigh, onPick }: PickerProps) {
 }
 
 // Top-down figure with the covered region per option.
-function DirectionTiles({ param, value, weigh, onPick }: PickerProps) {
+function DirectionTiles({ param, technique, value, weigh, onPick }: PickerProps) {
   const figure = <g><circle cx="40" cy="40" r="7" fill="currentColor" /><path d="M28 48 L52 48" stroke="currentColor" stroke-width="3" stroke-linecap="round" /></g>;
   const art: Record<string, ComponentChildren> = {
     front: <path d="M40 40 L10 6 A45 45 0 0 1 70 6 Z" class="zone" />,
@@ -84,7 +85,7 @@ function DirectionTiles({ param, value, weigh, onPick }: PickerProps) {
   };
   return (
     <div class="opts tiles five">
-      {PARAM_VALUES[param].map((v) => (
+      {valuesFor(param, technique).map((v) => (
         <Option key={v} on={v === value} onClick={() => onPick(v)} cls="art">
           <svg viewBox="0 0 80 80" width="64" height="64" aria-hidden="true">{art[v]}{figure}</svg>
           <span class="l">{words(param, v)}</span>
@@ -110,11 +111,11 @@ function RangeRings(props: PickerProps) {
 }
 
 // A timeline: each option is how long the effect holds after the cast.
-function DurationTimeline({ param, value, weigh, onPick }: PickerProps) {
+function DurationTimeline({ param, technique, value, weigh, onPick }: PickerProps) {
   const bars: Record<string, { w: number; hand?: boolean }> = { instant: { w: 6 }, brief: { w: 36 }, held: { w: 80, hand: true }, sustained: { w: 140 } };
   return (
     <div class="opts list two">
-      {PARAM_VALUES[param].map((v) => (
+      {valuesFor(param, technique).map((v) => (
         <Option key={v} on={v === value} onClick={() => onPick(v)} cls="timeline">
           <svg viewBox="0 0 150 20" width="150" height="20" aria-hidden="true">
             <path d="M2 10 L148 10" stroke="currentColor" stroke-opacity="0.2" stroke-width="1" />

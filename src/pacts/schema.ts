@@ -61,6 +61,17 @@ export const PARAM_VALUES: Record<Param, readonly string[]> = {
   resource: ['all', 'half', 'health', 'strain'],
   body: ['bothHands', 'noMove', 'noDash', 'eyes', 'palmContact', 'maxHealth', 'barefoot', 'voice'],
 };
+// Values that only make sense for one Technique's mechanism. Every other value
+// is a sacrifice any fighter can make.
+const VALUE_OWNERS: Partial<Record<`${Param}:${string}`, readonly TechniqueId[]>> = {
+  'target:resonant': ['echo'],
+  'target:water': ['rime'],
+};
+
+export function valuesFor(param: Param, technique: TechniqueId): readonly string[] {
+  return PARAM_VALUES[param].filter((v) => VALUE_OWNERS[`${param}:${v}`]?.includes(technique) ?? true);
+}
+
 export const PREDICTIONS: readonly Prediction[] = ['hit', 'kill', 'untouched', 'firstStrike'];
 export const RISK_COSTS: readonly RiskCost[] = ['health', 'exhaustion', 'seal'];
 export const TECHNIQUE_IDS: readonly TechniqueId[] = ['recoil', 'shift', 'rime', 'blink', 'echo'];
@@ -94,6 +105,7 @@ export function validatePact(input: unknown, shapes?: ShapeTable): Validation {
     const restricted = (p.clauses as Clause[]).filter((c): c is Extract<Clause, { kind: 'restrict' }> => c?.kind === 'restrict');
     const seen = new Set<string>();
     for (const r of restricted) {
+      if (TECHNIQUE_IDS.includes(p.technique as TechniqueId) && PARAM_VALUES[r.restriction.param]?.includes(r.restriction.value) && !valuesFor(r.restriction.param, p.technique as TechniqueId).includes(r.restriction.value)) errors.push(`${r.restriction.param} ${r.restriction.value} does not apply to ${String(p.technique)}`);
       if (seen.has(r.restriction.param)) errors.push(`parameter ${r.restriction.param} is restricted twice`);
       seen.add(r.restriction.param);
     }

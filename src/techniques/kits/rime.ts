@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { TechniqueKit } from '../kit';
-import { gestureSet, rangeFor, hitCone, propsInCone } from './shared';
+import { signGesture, gestureSet, rangeFor, hitCone, propsInCone } from './shared';
 import { anchored } from './shift';
 import type { Pact } from '../../pacts/schema';
 import { RAPIER } from '../../physics/world';
@@ -81,6 +81,14 @@ export const rime: TechniqueKit = {
     secondary: gestureSet(0.6, 0.26, [{ t: 0, right: 'clawReady', slow: true }, { t: 0.2, right: 'clawReach', snap: true, camera: { fov: 4 } }, { t: 0.45, right: 'rest' }]),
     max: gestureSet(2.3, 1.7, [{ t: 0, right: 'clawReady', left: 'clawReady', slow: true }, { t: 0.8, right: 'raiseHigh', left: 'raiseHigh', slow: true }, { t: 1.6, right: 'slamDown', left: 'slamDown', snap: true, camera: { fov: 14, pitch: 0.06 } }, { t: 2.1, right: 'rest', left: 'rest' }]),
   },
+  // Claws out, then the palms press together and frost over. They fan open
+  // on release and settle back to claws.
+  sign: signGesture([
+    { t: 0, right: 'clawReady', left: 'clawReady', slow: true },
+    { t: 0.5, right: 'seal', left: 'seal', snap: true, camera: { fov: -4 }, event: 'seal' },
+    { t: 1.2, right: 'quietSpread', left: 'quietSpread', snap: true, camera: { fov: 7, pitch: -0.01 }, event: 'release' },
+    { t: 1.42, right: 'clawReady', left: 'clawReady' },
+  ]),
   avatarClips: { primary: 'Sword_Attack', secondary: 'Spell_Simple_Shoot', max: 'Spell_Simple_Enter' },
   traits: {
     freezable: (prop, ctx) => freezeProp(ctx, prop, 6),

@@ -29,7 +29,7 @@ export const ACTIONS: readonly ActionDef[] = [
   ...KEY_SLOTS.map((s): ActionDef => ({ id: s, label: slotDef(s).name, group: 'ability', defaults: [slotDef(s).defaultKey!] })),
   { id: 'wager', label: 'Declare a Wager', group: 'combat', defaults: ['KeyR'] },
   { id: 'aura', label: 'Aura Expansion', group: 'combat', defaults: ['KeyF'] },
-  { id: 'fullsign', label: 'Hold the full sign', group: 'combat', defaults: ['AltLeft'] },
+  { id: 'fullsign', label: 'Full hand sign', group: 'combat', defaults: ['AltLeft'] },
   { id: 'interact', label: 'Interact', group: 'interface', defaults: ['KeyE'] },
   { id: 'camera', label: 'First or third person', group: 'interface', defaults: ['KeyV'] },
   { id: 'map', label: 'Map', group: 'interface', defaults: ['KeyM'] },

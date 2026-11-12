@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { TechniqueKit } from '../kit';
-import { gestureSet, rangeFor, propsInCone, breakProp, targetsAllowed } from './shared';
+import { signGesture, gestureSet, rangeFor, propsInCone, breakProp, targetsAllowed } from './shared';
 import { anchored } from './shift';
 import type { Pact } from '../../pacts/schema';
 
@@ -55,6 +55,15 @@ export const echo: TechniqueKit = {
     secondary: gestureSet(0.5, 0.2, [{ t: 0, right: 'quietSpread', left: 'quietSpread', snap: true, camera: { fov: -3 } }], true),
     max: gestureSet(2.3, 1.7, [{ t: 0, right: 'raiseHigh', left: 'raiseHigh', slow: true }, { t: 0.9, right: 'flat', left: 'flat', slow: true }, { t: 1.65, right: 'palmPress', left: 'palmPress', snap: true, camera: { fov: 14, pitch: 0.08 } }, { t: 2.1, right: 'rest', left: 'rest' }]),
   },
+  // Palms press, then the right hand draws up to the ear while the left opens
+  // flat. The snap is the release; the stance keeps the fingers ready.
+  sign: signGesture([
+    { t: 0, right: 'sealGather', left: 'sealGather', slow: true },
+    { t: 0.45, right: 'seal', left: 'seal', snap: true, camera: { fov: -3 }, event: 'seal' },
+    { t: 0.85, right: 'snapReady', left: 'flat', slow: true },
+    { t: 1.2, right: 'snapped', snap: true, camera: { fov: 6 }, event: 'release' },
+    { t: 1.42, right: 'snapReady', left: 'palmSurface' },
+  ]),
   avatarClips: { primary: 'Spell_Simple_Shoot', secondary: 'Spell_Simple_Idle_Loop', max: 'Spell_Simple_Enter' },
   traits: {
     resonant: (prop, ctx) => {

@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { signal, effect } from '@preact/signals';
 import type { Game } from '../app/game';
 import { toast } from '../app/game';
-import { settings } from '../app/settings';
 import { keyLabel } from '../app/keymap';
 import type { TechniqueKit, AbilityContext, CastResult, TechniqueId } from './kit';
 import type { Pact, TriggerValue } from '../pacts/schema';
@@ -24,6 +23,17 @@ export const KITS: Record<TechniqueId, TechniqueKit> = { recoil, shift, rime, bl
 
 interface Cast { slot: KeySlot; ctx: AbilityContext; t: number; impactAt: number; duration: number; fired: boolean; held: boolean; result?: CastResult | void }
 
+// The full hand sign (issue #42). Alt starts it; nothing cancels it. While
+// signing the player is rooted and cannot cast, Wager or open the Workshop.
+// A finished sign primes the Technique for `MASTERY_CONFIG.sign.window`
+// seconds: the next cast skips its wind-up and carries the boost. A cast
+// consumes the prime; the window running out drops it.
+export type SignState =
+  | { kind: 'idle' }
+  | { kind: 'signing'; t: number; duration: number }
+  | { kind: 'primed'; left: number };
+const SIGN_IDLE: SignState = { kind: 'idle' };
+
 // What the HUD shows for a key: the Ability's name, a few words on what it
 // does, how it is cast, and whether it is the raw Technique, a draft being
 // tried, or nothing yet (an extra slot with no Pact).
@@ -39,6 +49,7 @@ export const techUi = {
   slots: signal<Record<KeySlot, SlotLabel>>(perSlot(() => EMPTY_LABEL)),
   variant: signal<GestureVariant>('long'),
   sealed: signal(0),
+  sign: signal<SignState>(SIGN_IDLE),
 };
 
 // Runs Abilities: resolves which Pact defines a key, checks its trigger,
@@ -53,6 +64,7 @@ export class Techniques {
   private cooldown: Record<KeySlot, number> = perSlot(() => 0);
   private struckRecently = 0;
   sealed = 0;
+  sign: SignState = SIGN_IDLE;
   readonly limbTrail: THREE.Vector3[] = [];
 
   constructor(private game: Game) {
@@ -65,14 +77,21 @@ export class Techniques {
     this.resource = this.def.resource.startsFull ? this.def.resource.max : 0;
     this.strain = 0;
     this.charge = 0;
-    this.cast_ = null;
-    this.game.hands.stop();
+    this.reset();
     this.refreshSlots();
     this.game.cutscenes.register(`max-${id}`, () => this.cast('max', true));
   }
 
+  // Drops any cast in flight and the sign state, for a new run or Technique.
+  reset(): void {
+    this.cast_ = null;
+    this.sign = SIGN_IDLE;
+    this.game.hands.stop();
+  }
+
   get casting(): boolean { return this.cast_ !== null; }
   get current(): Cast | null { return this.cast_; }
+  get signing(): boolean { return this.sign.kind === 'signing'; }
 
   private refreshSlots(): void {
     const book = this.game.book;
@@ -112,7 +131,7 @@ export class Techniques {
       case 'airborne': return !g.player.grounded;
       case 'struck': return this.struckRecently > 0;
       case 'lowHealth': return g.combat.hp / g.combat.maxHp <= 0.35;
-      case 'fullSign': return g.input.isDown('fullsign');
+      case 'fullSign': return this.sign.kind === 'primed';
       case 'eyesClosed': return true;
       case 'declared': return true;
     }
@@ -132,7 +151,7 @@ export class Techniques {
   triggerMet(pact: Pact | null): { ok: boolean; why?: string } {
     if (!pact) return { ok: true };
     const t = restriction(pact, 'trigger');
-    if (t && !this.triggerHolds(t)) return { ok: false, why: t === 'fullSign' ? `only with the full hand sign (hold ${keyLabel('fullsign')})` : describe({ param: 'trigger', value: t }) };
+    if (t && !this.triggerHolds(t)) return { ok: false, why: t === 'fullSign' ? `only with the full hand sign (${keyLabel('fullsign')} performs it first)` : describe({ param: 'trigger', value: t }) };
     if (restriction(pact, 'body') === 'noMove' && !this.triggerHolds('still')) return { ok: false, why: 'you vowed never to move for this' };
     return { ok: true };
   }
@@ -159,6 +178,7 @@ export class Techniques {
 
   cast(slot: KeySlot, force = false): boolean {
     const g = this.game;
+    if (this.signing) return false;
     if (this.cast_ && !force) return false;
     if (this.sealed > 0) { toast('Your Technique is sealed', 'bad'); return false; }
     if (this.cooldown[slot] > 0 && !force) return false;
@@ -173,8 +193,10 @@ export class Techniques {
       if (g.combat.flags.bloodDraw) cost.health += 5;
       else { toast(`Not enough ${this.def.resource.name}`, 'bad'); g.audio.play('error_004', 0.3); return false; }
     }
-    const fullSign = kind === 'max' || g.input.isDown('fullsign') || !settings.value.fullSignHold;
-    const variant = kind === 'max' ? 'long' : g.mastery.variant(this.def.id, fullSign);
+    // A primed cast skips its wind-up and carries the sign's boost. Maximum
+    // Output always plays its full sign in the cutscene, boosted or not.
+    const primed = this.sign.kind === 'primed';
+    const variant = kind === 'max' ? 'long' : primed ? 'none' : g.mastery.variant(this.def.id);
     const shape = pact?.grant.shape ?? this.baselineShape(kind);
     const behaviors = pact?.grant.behaviors ?? [];
     const dir = g.cam.aimDirection();
@@ -182,9 +204,10 @@ export class Techniques {
     const origin = g.player.eye();
     const aimHit = g.physics.castRay(origin, dir, 60, GROUP_WORLD | GROUP_PROP | GROUP_ENEMY, g.player.body);
     const ctx: AbilityContext = {
-      game: g, pact, slot, kind, shape, behaviors, potency: this.potency(pact) * (fullSign && variant === 'long' && g.mastery.get(this.def.id, 'activation') >= MASTERY_CONFIG.shortSignAt ? 1 + MASTERY_CONFIG.fullSignBoost : 1),
-      variant, fullSign, origin, dir, aim: aimHit ? aimHit.point : origin.clone().addScaledVector(dir, 30), targets: [], wagered: g.combat.wagerArmed,
+      game: g, pact, slot, kind, shape, behaviors, potency: this.potency(pact) * (primed ? 1 + g.mastery.signBoost(this.def.id) : 1),
+      variant, origin, dir, aim: aimHit ? aimHit.point : origin.clone().addScaledVector(dir, 30), targets: [], wagered: g.combat.wagerArmed,
     };
+    if (primed) this.sign = SIGN_IDLE;
     this.resource = Math.max(0, this.resource - cost.resource);
     if (cost.health > 0) g.combat.hurtPlayer(cost.health, { self: true });
     this.strain = Math.min(1, this.strain + cost.strain);
@@ -247,16 +270,20 @@ export class Techniques {
     this.def.effects.passive?.(g, dt);
 
     if (!g.cutscenes.active && inp.enabled) {
-      for (const s of KEY_SLOTS) {
-        if (!inp.hit(s)) continue;
-        if (this.kindOf(s) !== 'max') { this.cast(s); continue; }
-        if (this.charge >= (g.combat.flags.overextension ? 0.5 : 1) && this.sealed <= 0 && !this.cast_) {
-          if (g.combat.flags.overextension && this.charge < 1) g.combat.hurtPlayer(g.combat.maxHp * 0.25, { self: true });
-          this.beginMax();
-        } else this.cast(s);
+      if (inp.hit('fullsign')) this.beginSign();
+      if (!this.signing) {
+        for (const s of KEY_SLOTS) {
+          if (!inp.hit(s)) continue;
+          if (this.kindOf(s) !== 'max') { this.cast(s); continue; }
+          if (this.charge >= (g.combat.flags.overextension ? 0.5 : 1) && this.sealed <= 0 && !this.cast_) {
+            if (g.combat.flags.overextension && this.charge < 1) g.combat.hurtPlayer(g.combat.maxHp * 0.25, { self: true });
+            this.beginMax();
+          } else this.cast(s);
+        }
+        if (inp.hit('wager')) g.combat.armWager();
       }
-      if (inp.hit('wager')) g.combat.armWager();
     }
+    this.tickSign(dt);
     for (const p of g.book.inscribed.value) for (const c of p.clauses) if (c.kind === 'program' && c.then === 'activate' && c.when === 'struck' && this.struckRecently > 2.4 && !this.cast_ && p.technique === this.def.id && p.slot !== 'passive') this.cast(p.slot, true);
 
     const c = this.cast_;
@@ -274,7 +301,65 @@ export class Techniques {
     techUi.charge.value = this.charge;
     techUi.cooldowns.value = { ...this.cooldown };
     techUi.sealed.value = this.sealed;
-    techUi.variant.value = g.mastery.variant(this.def.id, false);
+    techUi.variant.value = g.mastery.variant(this.def.id);
+    techUi.sign.value = { ...this.sign };
+  }
+
+  // Alt. The sign is a commitment: once begun it runs to its end, with the
+  // player rooted for its length. The hands play the kit's sign and hold its
+  // last key as the primed stance; the avatar raises its hands for the seal.
+  beginSign(): boolean {
+    const g = this.game;
+    if (this.sign.kind !== 'idle' || this.cast_) return false;
+    if (this.sealed > 0) { toast('Your Technique is sealed', 'bad'); return false; }
+    const gesture = this.def.sign;
+    this.sign = { kind: 'signing', t: 0, duration: gesture.duration };
+    g.player.rooted = Math.max(g.player.rooted, gesture.duration);
+    g.hands.play(gesture, 1, (e) => this.onSignBeat(e), (k) => g.cam.kick(k));
+    if (!g.cam.isFirst) this.signShot(gesture.impactAt + 0.1);
+    g.audio.play('minimize_006', 0.3, 0.8);
+    return true;
+  }
+
+  // Third person: the camera swings to a front three-quarter close-up for the
+  // sign and dollies in on the seal, then blends back on the release.
+  private signShot(duration: number): void {
+    const g = this.game;
+    const p = g.player.position.clone(), yaw = g.cam.yaw;
+    const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)), right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+    const from = p.clone().addScaledVector(right, 1.05).addScaledVector(fwd, 2.4).add(new THREE.Vector3(0, 1.6, 0));
+    const to = p.clone().addScaledVector(right, 0.75).addScaledVector(fwd, 1.7).add(new THREE.Vector3(0, 1.45, 0));
+    const look = p.clone().add(new THREE.Vector3(0, 1.3, 0));
+    const ease = (t: number) => 1 - Math.pow(1 - t, 2.4);
+    g.cam.play({ duration, position: (t, out) => out.lerpVectors(from, to, ease(t)), lookAt: (_t, out) => out.copy(look), fov: (t) => THREE.MathUtils.lerp(44, 36, ease(t)), roll: (t) => -0.035 * t });
+  }
+
+  private onSignBeat(beat: string): void {
+    const g = this.game;
+    if (beat === 'seal') {
+      g.hands.pulse(0.7);
+      g.audio.play('impactSoft_heavy_001', 0.5, 1.25);
+    } else if (beat === 'release') {
+      g.hands.pulse(0.8);
+      g.avatar.playUpper('Spell_Simple_Shoot', 1.2);
+      g.renderer.impactFrame(1, new THREE.Color(this.def.color));
+      const aim = g.cam.aimDirection();
+      g.vfx.ring(g.player.eye().add(new THREE.Vector3(0, -0.35, 0)).addScaledVector(aim, 1.3), this.def.color, 0.1, 0.5, 0.25, aim);
+      g.audio.play('phaserUp3', 0.45, 0.9);
+    }
+  }
+
+  private tickSign(dt: number): void {
+    const s = this.sign, g = this.game;
+    if (s.kind === 'signing') {
+      s.t += dt;
+      // The avatar's arms gather to the seal through the anticipation, hold it, and break on the release.
+      g.avatar.seal = s.t < this.def.sign.impactAt ? Math.min(1, s.t / 0.45) : 0.3;
+      if (s.t >= s.duration) { this.sign = { kind: 'primed', left: MASTERY_CONFIG.sign.window }; g.audio.play('tick_001', 0.35, 1.1); }
+    } else if (s.kind === 'primed') {
+      s.left -= dt;
+      if (s.left <= 0) { this.sign = SIGN_IDLE; g.hands.stop(); g.avatar.playUpper('Spell_Simple_Exit', 1); }
+    } else g.avatar.seal = 0;
   }
 
   // Maximum Output routes through the cutscene player: the world freezes, the

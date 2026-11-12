@@ -172,12 +172,15 @@ export class Avatar {
     this.current = (Object.entries(targets)[0]?.[0] as Locomotion) ?? 'idle';
   }
 
-  playUpper(clipName: string, timeScale = 1): void {
+  // The locomotion loops also write the upper bones, and the mixer shares a
+  // bone by weight, so `weight` is this clip's share against theirs: 1 is
+  // an even blend, 3 lets the clip own three quarters of the pose.
+  playUpper(clipName: string, timeScale = 1, weight = 1): void {
     const a = this.upper.get(clipName);
     if (!a) return;
     a.reset();
     a.setEffectiveTimeScale(timeScale);
-    a.setEffectiveWeight(1);
+    a.setEffectiveWeight(weight);
     a.fadeIn(0.06).play();
     for (const [n, other] of this.upper) if (n !== clipName && other.isRunning()) other.fadeOut(0.08);
   }
@@ -205,6 +208,30 @@ export class Avatar {
   // Pitch of the aim in radians, positive looking up.
   setAimPitch(p: number): void { this.aimPitch = p; }
 
+  // How far the arms are drawn into the hand seal, 0 to 1. The full sign
+  // drives it, because no clip in the library brings the hands together.
+  seal = 0;
+  private sealAmt = 0;
+
+  // World-axis turns on top of the clip pose: the upper arms lift forward
+  // and swing in, the forearms fold across, and the hands meet at the chin.
+  // The idle clip holds the left arm a little forward, so the left lifts
+  // less to land level with the right (measured, not mirrored).
+  private applySeal(dt: number): void {
+    this.sealAmt += (this.seal - this.sealAmt) * (1 - Math.exp(-(this.seal > this.sealAmt ? 9 : 14) * dt));
+    const s = this.sealAmt;
+    if (s < 0.002) return;
+    const rootQ = this.root.getWorldQuaternion(new THREE.Quaternion());
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(rootQ);
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(rootQ);
+    for (const [side, m, raise] of [['r', 1, 1.3], ['l', -1, 0.7]] as const) {
+      this.rotateAbout(`upperarm_${side}`, right, raise * s);
+      this.rotateAbout(`upperarm_${side}`, UP, m * 0.5 * s);
+      this.rotateAbout(`upperarm_${side}`, fwd, m * -0.15 * s);
+      this.rotateAbout(`lowerarm_${side}`, UP, m * 1.6 * s);
+    }
+  }
+
   flash(intensity: number): void { this.flashT = intensity; }
 
   update(dt: number): void {
@@ -224,6 +251,7 @@ export class Avatar {
       this.rotateAbout('spine_02', right, this.aimPitch * 0.3);
       this.rotateAbout('spine_03', right, this.aimPitch * 0.25);
       this.rotateAbout('Head', right, this.aimPitch * 0.35);
+      this.applySeal(dt);
     }
     this.flashT *= Math.exp(-12 * dt);
     for (const m of this.materials) m.emissive.setScalar(this.flashT);

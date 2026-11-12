@@ -58,7 +58,7 @@ export class Combat {
   }
 
   armWager(): void {
-    if (this.wagerArmed || this.wagerCd > 0 || this.game.techniques.sealed > 0) return;
+    if (this.wagerArmed || this.wagerCd > 0 || this.game.techniques.sealed > 0 || this.game.techniques.signing) return;
     const pact = KEY_SLOTS.map((s) => this.game.book.bound(s)).find((p) => p?.clauses.some((c) => c.kind === 'wager'));
     this.wagerArmed = true;
     combatUi.wagerArmed.value = true;

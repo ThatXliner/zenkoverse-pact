@@ -2,7 +2,7 @@ import type * as THREE from 'three';
 import type { Pact, Param, TechniqueId } from '../pacts/schema';
 import type { AbilityKind, AbilitySlot } from '../pacts/slots';
 import type { PropTrait, PropInstance } from '../world/props';
-import type { GestureSet } from '../hands/gestures';
+import type { Gesture, GestureSet } from '../hands/gestures';
 import type { CutsceneDef } from '../cutscene/cutscene';
 import type { DrillDef } from '../drills/drills';
 import type { Game } from '../app/game';
@@ -30,6 +30,10 @@ export interface TechniqueKit {
   behaviors: Record<string, string>;
   catalogue: Pact[];
   gestures: Record<string, GestureSet>;
+  // The signature full hand sign Alt performs: a committed sequence that
+  // roots the player and primes the next cast. Its last key is the primed
+  // stance the hands hold until that cast.
+  sign: Gesture;
   avatarClips: Record<AbilityKind, string>;
   traits: Partial<Record<PropTrait, (prop: PropInstance, ctx: AbilityContext) => void>>;
   drill?: DrillDef;
@@ -54,7 +58,6 @@ export interface AbilityContext {
   behaviors: string[];
   potency: number;
   variant: GestureVariant;
-  fullSign: boolean;
   origin: THREE.Vector3;
   dir: THREE.Vector3;
   aim: THREE.Vector3 | null;

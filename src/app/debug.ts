@@ -8,6 +8,7 @@ import type { Action } from './keymap';
 import { audit as auditOffers } from '../rooftop/offers';
 import type { TechniqueId } from '../techniques/kit';
 import type { PoseName } from '../hands/poses';
+import { MASTERY_CONFIG } from '../mastery/mastery';
 
 export interface DebugApi {
   game: Game;
@@ -30,6 +31,10 @@ export interface DebugApi {
   loop(on: boolean): void;
   step(frames: number, dt?: number): void;
   state(): string;
+  // The full sign as the check scripts read it: its state, how far along the
+  // sign or the primed window is, and the boost the next primed cast earns
+  // at the current Activation.
+  sign(): { kind: 'idle' | 'signing' | 'primed'; duration: number; progress: number; left: number; window: number; boost: number };
   errors: string[];
   rooftop: {
     begin(): void;
@@ -72,6 +77,11 @@ export function installDebug(game: Game): void {
     loop(on) { game.loop(on); },
     step(frames, dt) { game.step(frames, dt); },
     state() { return appState.value.kind; },
+    sign() {
+      const t = game.techniques, s = t.sign;
+      const duration = t.def.sign.duration, window = MASTERY_CONFIG.sign.window;
+      return { kind: s.kind, duration, window, progress: s.kind === 'signing' ? s.t / s.duration : s.kind === 'primed' ? 1 : 0, left: s.kind === 'primed' ? s.left : 0, boost: game.mastery.signBoost(game.techniqueId) };
+    },
     rooftop: {
       begin() { game.rooftop.begin(); },
       clearWave() { game.rooftop.clearWave(); },

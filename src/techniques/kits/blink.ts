@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { signal } from '@preact/signals';
 import type { TechniqueKit } from '../kit';
-import { gestureSet, rangeFor, hitCone, propsInCone, shoveProps } from './shared';
+import { signGesture, gestureSet, rangeFor, hitCone, propsInCone, shoveProps } from './shared';
 import { anchored } from './shift';
 import type { Pact } from '../../pacts/schema';
 
@@ -45,6 +45,14 @@ export const blink: TechniqueKit = {
     secondary: gestureSet(0.45, 0.18, [{ t: 0, right: 'shieldEyes', left: 'palmDown', slow: true }, { t: 0.14, right: 'cupFlinch', left: 'landCatch', snap: true, camera: { fov: 9, pitch: 0.05 } }, { t: 0.35, right: 'rest', left: 'rest' }]),
     max: gestureSet(2.2, 1.6, [{ t: 0, right: 'cupEyes', left: 'cupEyes', slow: true }, { t: 0.9, right: 'shieldEyes', left: 'shieldEyes', slow: true }, { t: 1.55, right: 'cupFlinch', left: 'cupFlinch', snap: true, camera: { fov: 16, pitch: -0.04 } }, { t: 2.0, right: 'rest', left: 'rest' }]),
   },
+  // Hands rise from low and veil the eyes, hold the dark, then tear away. One
+  // hand settles by the temple, the other low and open.
+  sign: signGesture([
+    { t: 0, right: 'palmDown', left: 'palmDown', slow: true },
+    { t: 0.5, right: 'veilEyes', left: 'veilEyes', snap: true, camera: { fov: -5 }, event: 'seal' },
+    { t: 1.2, right: 'cupFlinch', left: 'cupFlinch', snap: true, camera: { fov: 9, pitch: -0.03 }, event: 'release' },
+    { t: 1.42, left: 'flat' },
+  ]),
   avatarClips: { primary: 'Spell_Simple_Shoot', secondary: 'Hit_Chest', max: 'Spell_Simple_Enter' },
   traits: {},
   cutscene,

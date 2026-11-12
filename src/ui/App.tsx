@@ -6,7 +6,8 @@ import { settings, setSetting, type Quality } from '../app/settings';
 import { keyLabel } from '../app/keymap';
 import { KEY_SLOTS, EXTRA_SLOTS, KIND_DEFS, slotDef, type AbilityKind, type KeySlot } from '../pacts/slots';
 import { Controls } from './Controls';
-import { KITS, techUi, type SlotLabel } from '../techniques/techniques';
+import { KITS, techUi, type SlotLabel, type SignState } from '../techniques/techniques';
+import { MASTERY_CONFIG } from '../mastery/mastery';
 import { TECHNIQUE_IDS, type TechniqueId } from '../pacts/schema';
 import { combatUi, EYES } from '../combat/combat';
 import { auraUi } from '../combat/aura';
@@ -145,7 +146,8 @@ function Hud({ game }: { game: Game }) {
         </div>
       )}
       {!cut && (
-        <div class="abilities">
+        <div class={`abilities ${techUi.sign.value.kind}`}>
+          <SignRing sign={techUi.sign.value} />
           <div class="xs" role="group" aria-label="Extra Abilities">
             {EXTRA_SLOTS.map((s) => <Extra key={s} slot={s} label={slots[s]} glyph={glyphs[slots[s].kind ?? 'primary']} cd={cooldownOf(s, slots[s].kind, cd)} />)}
           </div>
@@ -176,6 +178,27 @@ function Hud({ game }: { game: Game }) {
 }
 
 const MAIN_SLOTS = KEY_SLOTS.filter((s) => slotDef(s).raw !== null);
+
+// The full sign above the cards: a ring that fills while the sign plays,
+// then drains over the primed window while the label reads the time left.
+const RING = 2 * Math.PI * 20;
+function SignRing({ sign }: { sign: SignState }) {
+  if (sign.kind === 'idle') return null;
+  const signing = sign.kind === 'signing';
+  const fill = sign.kind === 'signing' ? sign.t / sign.duration : sign.left / MASTERY_CONFIG.sign.window;
+  return (
+    <div class={`sign ${sign.kind}`} data-sign={sign.kind}>
+      <div class="txt">
+        <span class="k">{signing ? 'Full sign' : 'Primed'}</span>
+        <span class="v">{signing ? 'committed' : `${Math.max(0, sign.left).toFixed(1)} s`}</span>
+      </div>
+      <div class="ring">
+        <svg viewBox="0 0 48 48" aria-hidden="true"><circle class="trk" cx="24" cy="24" r="20" /><circle class="arc" cx="24" cy="24" r="20" style={{ strokeDasharray: RING, strokeDashoffset: RING * (1 - Math.max(0, Math.min(1, fill))) }} /></svg>
+        <span class="glyph">印</span>
+      </div>
+    </div>
+  );
+}
 
 // How far a slot is from ready: Maximum Output waits on the charge ring, the
 // rest on their cooldown. `cd` is the share still to wait.
@@ -216,7 +239,7 @@ const CODEX: { id: string; title: string; jp: string; body: string | (() => stri
   { id: 'risk', title: 'Risk', jp: '危', body: 'An escape clause on a Pact. The enhanced effect continues past its limit and you pay the consequence: health, exhaustion, or a sealed Technique.' },
   { id: 'wager', title: 'Wager', jp: '賭', body: () => `A declared prediction with a reward and a forfeit. Press ${keyLabel('wager')} to declare that the next strike connects. Correct, the universe pays out. Wrong, your Technique seals.` },
   { id: 'programming', title: 'Programming', jp: '式', body: 'A small IF/THEN layer over your own Pacts: triggers, precedence when Pacts conflict, autonomous execution. Pact Architects use it to sustain allies.' },
-  { id: 'training', title: 'Training', jp: '修行', body: () => `Drills raise Output, Precision, Efficiency, Range, Speed, Control, Activation, and Tolerance. A beginner needs the full hand sign. As Activation rises the sign shortens until activation is silent. The original sign still enhances the grown baseline: hold ${keyLabel('fullsign')} to perform it deliberately.` },
+  { id: 'training', title: 'Training', jp: '修行', body: () => `Drills raise Output, Precision, Efficiency, Range, Speed, Control, Activation, and Tolerance. A beginner needs the full hand sign. As Activation rises the sign shortens until activation is silent. The original sign still enhances the grown baseline: ${keyLabel('fullsign')} performs it deliberately. You are rooted until it completes, and the next cast within a few seconds skips its wind-up and carries the boost, which grows with Activation.` },
   { id: 'max', title: 'Maximum Output', jp: '全力', body: 'The greatest concentrated expression of a Technique: everything you can presently commit, in one formulation. The full sign always plays. The world waits.' },
   { id: 'eyes', title: 'Eyes', jp: '眼', body: 'Five finite physical artifacts. Installing one permanently replaces a natural eye. They are not Techniques, and most people do not know they exist.' },
   { id: 'aura', title: 'Aurabending', jp: '気', body: () => `A separate universal faculty, formalized only twenty years ago despite five thousand years of Technique history. Aura does not fuel Techniques. Hold ${keyLabel('aura')} to expand your field; two fields meeting become an Aura Clash.` },
@@ -258,7 +281,6 @@ function Pause({ game, tab }: { game: Game; tab: PauseTab }) {
               <div class="row"><label>Camera</label><Seg value={s.camera} options={['first', 'third']} onChange={(v) => { setSetting('camera', v as 'first'); game.cam.mode = v as 'first'; }} /><span /></div>
               <div class="row"><label>Invert Y</label><Seg value={s.invertY ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('invertY', v === 'on')} /><span /></div>
               <div class="row"><label>Mastery numbers</label><Seg value={s.showMastery ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('showMastery', v === 'on')} /><span /></div>
-              <div class="row"><label>{keyLabel('fullsign')} holds full sign</label><Seg value={s.fullSignHold ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('fullSignHold', v === 'on')} /><span /></div>
               <div class="row"><label>Skip cutscenes</label><Seg value={s.skipCutscenes ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('skipCutscenes', v === 'on')} /><span /></div>
             </div>
           )}

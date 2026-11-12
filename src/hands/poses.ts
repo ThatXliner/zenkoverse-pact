@@ -23,6 +23,7 @@ const point2 = f([0.5, 0.7, 0.5], [0, 0, 0], [0, 0, 0], [1, 1, 0.9], [1, 1, 0.9]
 const snapReady = f([0.35, 0.3, 0.2], [0.3, 0.3, 0.2], [0.55, 0.7, 0.4], [0.9, 1, 0.9], [0.95, 1, 0.9]);
 const snapped = f([0.1, 0.1, 0.1], [0.2, 0.2, 0.15], [0.95, 1, 0.9], [1, 1, 0.9], [1, 1, 0.9]);
 const cup = f([0.3, 0.3, 0.2], [0.35, 0.3, 0.2], [0.35, 0.3, 0.2], [0.35, 0.3, 0.2], [0.4, 0.3, 0.2]);
+const sealed = f([0.15, 0.1, 0.05], [0.04, 0.06, 0.04], [0.02, 0.05, 0.04], [0.04, 0.06, 0.04], [0.08, 0.1, 0.06]);
 
 export const POSES = {
   rest: { pos: [0.21, -0.24, -0.46], rot: [-0.2, -0.3, 0.3], fingers: relaxed, spread: 0.1 },
@@ -54,6 +55,17 @@ export const POSES = {
   crossChest: { pos: [-0.06, -0.14, -0.30], rot: [-0.5, -0.9, -0.9], fingers: fist, spread: 0 },
   flat: { pos: [0.18, -0.24, -0.46], rot: [-0.25, -0.3, 0.2], fingers: open, spread: 0.2 },
   landCatch: { pos: [0.22, -0.36, -0.42], rot: [-0.45, -0.3, 0.3], fingers: open, spread: 0.3 },
+  // The full hand sign. `sealGather` is the anticipation: both hands sink and
+  // open, palms starting to turn toward each other. `seal` presses the palms
+  // together at the sternum, fingers up and in frame. `kuji` is the same seal
+  // with the index and middle fingers raised. `fistToPalm` drives the right
+  // fist into the left palm, knuckles inward, thumb up. `veilEyes` lays the
+  // backs of the hands over the eyes, far enough out to stay in view.
+  sealGather: { pos: [0.15, -0.31, -0.40], rot: [0.55, 0.25, -0.85], fingers: open, spread: 0.25 },
+  seal: { pos: [0.035, -0.24, -0.47], rot: [1.35, 0.04, -1.55], fingers: sealed, spread: 0.03 },
+  kuji: { pos: [0.03, -0.22, -0.46], rot: [1.4, 0.04, -1.55], fingers: point2, spread: 0 },
+  fistToPalm: { pos: [0.06, -0.19, -0.40], rot: [0.1, 1.35, -1.5], fingers: fist, spread: 0 },
+  veilEyes: { pos: [0.075, -0.1, -0.31], rot: [1.15, -0.25, 3.0], fingers: cup, spread: 0.12 },
 } satisfies Record<string, HandPose>;
 
 export type PoseName = keyof typeof POSES;

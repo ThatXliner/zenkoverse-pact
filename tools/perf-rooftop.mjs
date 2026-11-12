@@ -1,0 +1,65 @@
+#!/usr/bin/env node
+// Frame times on the rooftop with a whole wave on screen (issue #34: 60 fps at
+// High). Plays the trial up to wave 7 (twelve enemies) and measures 180 frames
+// in both camera modes at 1440x900, device pixel ratio 2. A second pass runs
+// with the frame limiter off, so the number shows the headroom and not only
+// the 60 fps cap. The street at the market is measured the same way for
+// comparison.
+// Usage: node tools/perf-rooftop.mjs [--url http://localhost:4173/] [--port 4173]
+import { chromium } from 'playwright';
+import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+
+const args = Object.fromEntries(process.argv.slice(2).map((a, i, all) => (a.startsWith('--') ? [a.slice(2), all[i + 1]?.startsWith('--') || all[i + 1] === undefined ? 'true' : all[i + 1]] : [])).filter((x) => x.length));
+let server = null;
+let url = args.url;
+if (!url) {
+  if (!existsSync('dist/index.html')) throw new Error('dist/ missing: run npm run build first');
+  const port = args.port ?? '4173';
+  server = spawn('npx', ['vite', 'preview', '--port', port, '--strictPort'], { stdio: 'ignore' });
+  await new Promise((r) => setTimeout(r, 1800));
+  url = `http://localhost:${port}/`;
+}
+
+const measure = (page, label) => page.evaluate(async (label) => {
+  const g = window.game;
+  await new Promise((r) => setTimeout(r, 1500));
+  const times = [];
+  let last = performance.now();
+  await new Promise((res) => { let n = 0; const f = (t) => { times.push(t - last); last = t; if (++n < 180) requestAnimationFrame(f); else res(); }; requestAnimationFrame(f); });
+  times.sort((a, b) => a - b);
+  const s = g.stats();
+  const med = times[90];
+  return `${label}: median ${med.toFixed(1)}ms p95 ${times[171].toFixed(1)}ms (${(1000 / med).toFixed(0)} fps) calls ${s.drawCalls} tris ${s.triangles} enemies ${g.rooftop.status().alive}`;
+}, label);
+
+for (const uncapped of [false, true]) {
+  const flags = ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist', ...(uncapped ? ['--disable-frame-rate-limit', '--disable-gpu-vsync'] : [])];
+  const browser = await chromium.launch({ channel: 'chrome', headless: true, args: flags });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(e.message));
+  await page.goto(`${url}?debug`);
+  await page.waitForFunction(() => window.game?.game?.ready, null, { timeout: 120000 });
+  console.log(uncapped ? '\nframe limiter off' : 'vsync (60 Hz cap)');
+  await page.evaluate(() => { const g = window.game; g.technique('recoil'); g.game.renderer.setQuality('high'); g.god(true); g.game.startRun({ skipTutorial: true }); g.teleport('market'); g.camera('first'); });
+  console.log(await measure(page, 'street, market, 1P '));
+  await page.evaluate(() => {
+    const g = window.game;
+    g.loop(false);
+    g.rooftop.begin();
+    for (let w = 1; w < 7; w++) {
+      for (let i = 0; i < 800 && g.rooftop.status().app !== 'rooftop-offer'; i++) { g.rooftop.clearWave(); g.step(2); }
+      const r = g.game.rooftop;
+      if (g.rooftop.offers().length) r.choose(0); else { r.chooseEye('horizon'); r.acceptAura(); if (g.rooftop.offers().length) r.choose(0); }
+    }
+    for (let i = 0; i < 800 && g.rooftop.status().alive < 12; i++) g.step(2);
+    g.loop(true);
+  });
+  console.log(await measure(page, 'rooftop wave 7, 1P'));
+  await page.evaluate(() => window.game.camera('third'));
+  console.log(await measure(page, 'rooftop wave 7, 3P'));
+  if (errs.length) console.log('errors', errs.slice(0, 5));
+  await browser.close();
+}
+server?.kill();

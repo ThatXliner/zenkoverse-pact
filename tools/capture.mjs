@@ -3,7 +3,7 @@
 // `?debug` hooks to fixed scenarios and saves screenshots and short frame
 // sequences per piece. Usage:
 //   node tools/capture.mjs [url] [--out captures] [--only hands,district] [--url http://...] [--port 4173] [--gpu]
-// Pieces: ui, hud, nav, hands, variants, poses, third-person, district, vfx, encounters, workshop, tutorial, drill, perf.
+// Pieces: ui, hud, nav, hands, variants, sign, poses, third-person, district, vfx, encounters, workshop, tutorial, drill, perf.
 // Without a URL it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -139,22 +139,37 @@ if (run('hands')) {
   }
 }
 
-// Trained activation shortens the sign (short), then drops it (none); Alt
-// forces the full sign back. Each variant must still read as its gesture.
+// Trained activation shortens the sign (short), then drops it (none). Each
+// variant must still read as its gesture. `primed` is the cast after a full
+// sign: the flick, with the hands coming out of the primed stance.
 if (run('variants')) {
   await startRun('recoil');
   await api((g) => { g.teleport('market'); g.camera('first'); g.look(Math.PI / 2, -0.05); });
   const setActivation = (a) => api((g, v) => { const m = g.game.mastery; m.stats.value = { ...m.stats.value, recoil: { ...m.stats.value.recoil, activation: v } }; }, a);
-  for (const [name, act, full] of [['short', 0.5, false], ['none', 0.9, false], ['fullsign', 0.9, true]]) {
+  for (const [name, act, primed] of [['short', 0.5, false], ['none', 0.9, false], ['primed', 0.9, true]]) {
     await setActivation(act);
-    await api((g, f) => g.hold('fullsign', f), full);
+    if (primed) { await api((g) => g.hold('fullsign', true)); await step(1); await api((g) => g.hold('fullsign', false)); await step(110); }
     await step(20);
     await api((g) => g.cast('primary'));
     for (const f of [3, 8, 14, 24]) { await step(f === 3 ? 3 : f === 24 ? 10 : 6); await shot('variants', `recoil-${name}-f${f}`); }
-    await api((g) => g.hold('fullsign', false));
     await step(40);
   }
   await setActivation(0);
+}
+
+// The full sign (Alt) per Technique, first person, at its beats: the
+// anticipation, the seal, the hold, the release and the primed stance.
+if (run('sign')) {
+  for (const t of TECHS) {
+    await startRun(t);
+    await api((g) => { g.teleport('market'); g.camera('first'); g.look(Math.PI / 2, -0.05); });
+    await step(20);
+    await api((g) => g.hold('fullsign', true));
+    await step(1);
+    await api((g) => g.hold('fullsign', false));
+    let at = 1;
+    for (const [name, f] of [['anticipation', 18], ['seal', 36], ['hold', 60], ['release', 74], ['stance', 100]]) { await step(f - at); at = f; await shot('sign', `${t}-${name}`); }
+  }
 }
 
 // One frame per authored hand pose, held on both hands, for judging the rig.

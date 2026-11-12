@@ -14,6 +14,7 @@
     "check:locomotion": "node tools/check-locomotion.mjs",
     "check:navigation": "node tools/check-navigation.mjs",
     "check:rooftop": "node tools/check-rooftop.mjs",
+    "check:sign": "node tools/check-sign.mjs",
     "check:tints": "node tools/check-tints.mjs"
   },
   "dependencies": {

@@ -9,7 +9,11 @@ export type GestureVariant = 'long' | 'short' | 'none';
 export const MASTERY_CONFIG = {
   shortSignAt: 0.35,
   silentSignAt: 0.75,
-  fullSignBoost: 0.25,
+  // The deliberate full sign (Alt). A completed sign primes the next cast for
+  // `window` seconds. Its boost is the old condition applied to the grown
+  // baseline, so it rises with Activation: `novice` at 0, `master` at 1,
+  // along activation^curve.
+  sign: { window: 4, boost: { novice: 0.15, master: 0.75, curve: 1.6 } },
   diminishing: 2.2,
   strainPerDrill: 0.12,
   strainRecoveryPerSecond: 0.01,
@@ -49,10 +53,15 @@ export class Mastery {
 
   addStrain(a: number): void { this.strain = Math.min(1, this.strain + a); }
 
-  variant(t: TechniqueId, forceFull: boolean): GestureVariant {
-    if (forceFull) return 'long';
+  variant(t: TechniqueId): GestureVariant {
     const a = this.get(t, 'activation');
     return a >= MASTERY_CONFIG.silentSignAt ? 'none' : a >= MASTERY_CONFIG.shortSignAt ? 'short' : 'long';
+  }
+
+  // The potency multiplier a primed cast earns, minus one.
+  signBoost(t: TechniqueId): number {
+    const { novice, master, curve } = MASTERY_CONFIG.sign.boost;
+    return novice + (master - novice) * Math.pow(this.get(t, 'activation'), curve);
   }
 
   update(dt: number): void { this.strain = Math.max(0, this.strain - MASTERY_CONFIG.strainRecoveryPerSecond * dt); }

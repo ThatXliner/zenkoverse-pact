@@ -11,6 +11,14 @@ export function gestureSet(duration: number, impactAt: number, keys: GestureKey[
   return variants(long);
 }
 
+// Every full sign shares one shape: anticipation from 0, the seal snapping in
+// around 0.5 s, a hold, the release snapping at 1.2 s, and the primed stance
+// settled by 1.6 s. It holds that stance until the primed cast or the window
+// runs out. The `seal` and `release` events fire the light and sound beats.
+export function signGesture(keys: GestureKey[]): Gesture {
+  return { duration: 1.6, impactAt: 1.2, hold: true, keys };
+}
+
 // Range in metres from the Pact's range restriction, the kit's base, and the
 // Range mastery stat. A Pact that gives up range gets it back as potency.
 export function rangeFor(ctx: AbilityContext, base: number): number {

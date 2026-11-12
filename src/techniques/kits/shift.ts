@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { toast } from '../../app/game';
 import type { TechniqueKit } from '../kit';
-import { gestureSet, rangeFor, hitCone, propsInCone, shoveProps } from './shared';
+import { signGesture, gestureSet, rangeFor, hitCone, propsInCone, shoveProps } from './shared';
 import type { Pact } from '../../pacts/schema';
 import type { CutsceneDef } from '../../cutscene/cutscene';
 import { GROUP_WORLD } from '../../physics/world';
@@ -75,6 +75,14 @@ export const shift: TechniqueKit = {
     secondary: gestureSet(0.55, 0.22, [{ t: 0, right: 'point', left: 'crossChest', slow: true }, { t: 0.18, right: 'pointFar', snap: true, camera: { fov: 10, roll: 0.03 } }, { t: 0.4, right: 'rest', left: 'rest' }]),
     max: gestureSet(2.0, 1.5, [{ t: 0, right: 'crossChest', left: 'crossChest', slow: true }, { t: 0.7, right: 'point', left: 'point', slow: true }, { t: 1.45, right: 'pointFar', left: 'pointFar', snap: true, camera: { fov: 14 } }, { t: 1.9, right: 'rest', left: 'rest' }]),
   },
+  // Arms crossed, then both hands snap into the two-finger seal. The right
+  // hand breaks it to point at the horizon and settles to a near point.
+  sign: signGesture([
+    { t: 0, right: 'crossChest', left: 'crossChest', slow: true },
+    { t: 0.5, right: 'kuji', left: 'kuji', snap: true, camera: { fov: -4 }, event: 'seal' },
+    { t: 1.2, right: 'pointFar', left: 'guard', snap: true, camera: { fov: 8, roll: 0.03 }, event: 'release' },
+    { t: 1.42, right: 'point' },
+  ]),
   avatarClips: { primary: 'Punch_Jab', secondary: 'Spell_Simple_Shoot', max: 'Sword_Attack' },
   traits: {},
   cutscene,

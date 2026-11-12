@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { TechniqueKit, AbilityContext } from '../kit';
-import { gestureSet, rangeFor, hitCone, propsInCone, shoveProps, frontOnly } from './shared';
+import { signGesture, gestureSet, rangeFor, hitCone, propsInCone, shoveProps, frontOnly } from './shared';
 import type { PropInstance } from '../../world/props';
 import { RAPIER } from '../../physics/world';
 import type { Pact } from '../../pacts/schema';
@@ -119,6 +119,14 @@ export const recoil: TechniqueKit = {
     secondary: gestureSet(0.5, 0.2, [{ t: 0, right: 'bracePalm', left: 'bracePalm', snap: true, camera: { fov: -3 } }, { t: 0.3, right: 'braceWide', left: 'braceWide' }], true),
     max: gestureSet(2.2, 1.6, [{ t: 0, right: 'crossChest', left: 'crossChest', slow: true }, { t: 0.8, right: 'raiseHigh', left: 'raiseHigh', slow: true }, { t: 1.55, right: 'punch', left: 'punch', snap: true, camera: { fov: 12, pitch: 0.04 } }, { t: 2.0, right: 'rest', left: 'rest' }]),
   },
+  // The martial salute: the left palm presents at the sternum, the right fist
+  // draws back, then drives into it. The hands break to a guard on release.
+  sign: signGesture([
+    { t: 0, right: 'sealGather', left: 'sealGather', slow: true },
+    { t: 0.3, right: 'chamber', left: 'seal', slow: true },
+    { t: 0.55, right: 'fistToPalm', snap: true, camera: { fov: -4, pitch: 0.012 }, event: 'seal' },
+    { t: 1.2, right: 'guard', left: 'guard', snap: true, camera: { fov: 6, roll: 0.02 }, event: 'release' },
+  ]),
   avatarClips: { primary: 'Punch_Jab', secondary: 'Spell_Simple_Enter', max: 'Punch_Cross' },
   traits: {
     'kinetic-source': (prop, ctx) => { ctx.game.techniques.resource += prop.def.mass * 0.1; },

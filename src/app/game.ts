@@ -153,6 +153,7 @@ export class Game {
   startRun(opts: { skipTutorial?: boolean } = {}): void {
     this.rooftop.abandon();
     this.combat.resetPlayer();
+    this.techniques.reset();
     this.encounters.reset();
     this.book.preview.value = null;
     if (opts.skipTutorial) {
@@ -171,6 +172,7 @@ export class Game {
   }
 
   openWorkshop(): void {
+    if (this.techniques.signing) return;
     this.input.releaseLock();
     this.book.preview.value = null;
     openWorkshop();

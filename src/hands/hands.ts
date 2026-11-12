@@ -64,6 +64,9 @@ export class Hands {
   private light: THREE.PointLight;
   frost = 0;
   glow = 0;
+  // A beat of Technique-coloured light on the skin and the hand light, set by
+  // the full sign on its seal and release keys and decaying over a few frames.
+  private pulseT = 0;
   // Holds one named pose on both hands, for the capture harness.
   debugPose: PoseName | null = null;
   // Orbits the view around the right hand, for judging a pose from the side or above.
@@ -154,6 +157,7 @@ export class Hands {
   land(v: number): void { this.landDip += Math.min(0.09, v * 0.012); }
   jump(): void { this.jumpLift = 0.05; }
   dash(): void { this.dashT = 0.3; }
+  pulse(amount: number): void { this.pulseT = Math.max(this.pulseT, amount); }
   twitch(): void { this.rainTwitch.push({ finger: FINGERS[Math.floor(Math.random() * 5)]!, side: Math.random() < 0.5 ? 1 : -1, t: 0.3 }); }
 
   update(rawDt: number, player: PlayerController, cam: CameraRig, input: Input): void {
@@ -245,8 +249,10 @@ export class Hands {
 
     const glowTarget = this.gesture ? 1 : 0;
     this.glow += (glowTarget - this.glow) * (1 - Math.exp(-8 * dtc));
-    this.light.intensity = this.glow * 0.03;
-    this.clawMat.emissiveIntensity = 0.3 + this.glow * 0.8;
+    this.pulseT *= Math.exp(-5 * dtc);
+    this.light.intensity = this.glow * 0.03 + this.pulseT * 2.5;
+    this.skin.emissive.copy(this.color).multiplyScalar(this.pulseT * 0.26);
+    this.clawMat.emissiveIntensity = 0.3 + this.glow * 0.8 + this.pulseT;
   }
 
   // Camera space to the rig's model space (character faces +Z).

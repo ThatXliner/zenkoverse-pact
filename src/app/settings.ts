@@ -12,12 +12,11 @@ export interface Settings {
   camera: CameraMode;
   invertY: boolean;
   showMastery: boolean;
-  fullSignHold: boolean;
   skipCutscenes: boolean;
 }
 
 const KEY = 'zenko.settings.v2';
-const defaults: Settings = { sensitivity: 1, fov: 80, quality: 'high', volume: 0.8, music: 0.6, camera: 'first', invertY: false, showMastery: true, fullSignHold: true, skipCutscenes: false };
+const defaults: Settings = { sensitivity: 1, fov: 80, quality: 'high', volume: 0.8, music: 0.6, camera: 'first', invertY: false, showMastery: true, skipCutscenes: false };
 
 function load(): Settings {
   try {

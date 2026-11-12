@@ -28,7 +28,7 @@ export function TopLeft({ game }: { game: Game }) {
       )}
       {s.showMastery && (
         <div class="hint">
-          <span>{kit.name} · {sign}{s.fullSignHold ? ` · ${keyLabel('fullsign')} holds the full sign` : ''}</span>
+          <span>{kit.name} · {sign} · {keyLabel('fullsign')} performs the full sign</span>
           <span class="keys">{KEYS.map(([action, what]) => <span key={action}><b>{keyLabel(action)}</b> {what}</span>)}</span>
           {MASTERY_CONFIG.showNumbers && <div class="mastery">{MASTERY_STATS.map((st) => <span key={st}>{st} <b>{Math.round(mast[st] * 100)}</b></span>)}</div>}
         </div>

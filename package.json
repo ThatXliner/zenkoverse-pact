@@ -10,6 +10,7 @@
     "assets": "node tools/build-assets.mjs",
     "capture": "node tools/capture.mjs",
     "check:controls": "node tools/check-controls.mjs",
+    "check:keybinds": "node tools/check-keybinds.mjs",
     "check:locomotion": "node tools/check-locomotion.mjs",
     "check:navigation": "node tools/check-navigation.mjs",
     "check:rooftop": "node tools/check-rooftop.mjs",

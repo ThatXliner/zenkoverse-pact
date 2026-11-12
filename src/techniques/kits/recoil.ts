@@ -106,10 +106,10 @@ export const recoil: TechniqueKit = {
   primitive: { name: 'Recoil', short: 'a weak shove', description: 'Absorb a little kinetic energy from any direction and leak most of it. Release what is left as a shove.' },
   parameters: ['direction', 'range', 'target', 'trigger', 'duration', 'resource', 'body'],
   shapes: {
-    punch: { label: 'releases stored energy as a strike', short: 'strike with stored energy', slot: ['primary'], description: 'A close strike powered by the Reserve.' },
-    line: { label: 'releases stored energy as a shock along the ground', short: 'shock along the ground', slot: ['primary'], description: 'A ground wave that throws props and people along one line.' },
-    absorb: { label: 'takes incoming motion into the Reserve', short: 'hold to take in blows', slot: ['secondary'], description: 'Hold to brace. Blows and falling objects fill the Reserve instead of hurting you.' },
-    zeroHour: { label: 'dumps every stored joule in one declared motion', short: 'release everything at once', slot: ['max'], description: 'Everything at once, in every direction.' },
+    punch: { label: 'releases stored energy as a strike', short: 'strike with stored energy', kinds: ['primary'], description: 'A close strike powered by the Reserve.' },
+    line: { label: 'releases stored energy as a shock along the ground', short: 'shock along the ground', kinds: ['primary'], description: 'A ground wave that throws props and people along one line.' },
+    absorb: { label: 'takes incoming motion into the Reserve', short: 'hold to take in blows', kinds: ['secondary'], description: 'Hold to brace. Blows and falling objects fill the Reserve instead of hurting you.' },
+    zeroHour: { label: 'dumps every stored joule in one declared motion', short: 'release everything at once', kinds: ['max'], description: 'Everything at once, in every direction.' },
   },
   behaviors: { store: 'stores more of each absorbed blow', relaunch: 'relaunches caught objects at the aim', anchor: 'the release does not move you' },
   catalogue,
@@ -119,7 +119,7 @@ export const recoil: TechniqueKit = {
     secondary: gestureSet(0.5, 0.2, [{ t: 0, right: 'bracePalm', left: 'bracePalm', snap: true, camera: { fov: -3 } }, { t: 0.3, right: 'braceWide', left: 'braceWide' }], true),
     max: gestureSet(2.2, 1.6, [{ t: 0, right: 'crossChest', left: 'crossChest', slow: true }, { t: 0.8, right: 'raiseHigh', left: 'raiseHigh', slow: true }, { t: 1.55, right: 'punch', left: 'punch', snap: true, camera: { fov: 12, pitch: 0.04 } }, { t: 2.0, right: 'rest', left: 'rest' }]),
   },
-  avatarClips: { primary: 'Punch_Jab', secondary: 'Spell_Simple_Enter', max: 'Punch_Cross', passive: 'Idle_Loop' },
+  avatarClips: { primary: 'Punch_Jab', secondary: 'Spell_Simple_Enter', max: 'Punch_Cross' },
   traits: {
     'kinetic-source': (prop, ctx) => { ctx.game.techniques.resource += prop.def.mass * 0.1; },
   },
@@ -193,6 +193,6 @@ export const recoil: TechniqueKit = {
       return 0;
     },
   },
-  audio: { primary: { cast: 'impactSoft_medium_000', volume: 0.35, pitch: 1.2 }, secondary: { cast: 'highUp', volume: 0.25, pitch: 0.7 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 0.7 }, passive: { cast: 'tick_001' } },
+  audio: { primary: { cast: 'impactSoft_medium_000', volume: 0.35, pitch: 1.2 }, secondary: { cast: 'highUp', volume: 0.25, pitch: 0.7 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 0.7 } },
 };
 

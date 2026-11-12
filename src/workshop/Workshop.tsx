@@ -2,8 +2,10 @@ import { useState, useMemo } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import type { Game } from '../app/game';
 import { toast } from '../app/game';
-import { type Pact, type Clause, type Param, type AbilitySlot, type Restriction, PARAM_VALUES, PREDICTIONS, RISK_COSTS, SLOTS, validatePact, restrictions } from '../pacts/schema';
-import { readback, readbackSegments, KEY_WORDS, riskCost, prediction, triggerWords, type Focus as ReadbackFocus } from '../pacts/readback';
+import { type Pact, type Clause, type Param, type Restriction, PARAM_VALUES, PREDICTIONS, RISK_COSTS, validatePact, restrictions } from '../pacts/schema';
+import { SLOTS, slotAccepts, slotDef, slotFor, type AbilitySlot } from '../pacts/slots';
+import { keyLabel } from '../app/keymap';
+import { readback, readbackSegments, slotWords, riskCost, prediction, triggerWords, type Focus as ReadbackFocus } from '../pacts/readback';
 import { lineFor, type ResolveEstimate } from '../pacts/resolve';
 import { KITS } from '../techniques/techniques';
 import { tutorialUi } from '../tutorial/tutorial';
@@ -18,7 +20,15 @@ type Focus = ReadbackFocus | { kind: 'add'; param?: Param } | null;
 const selectedId = signal<string | null>(null);
 
 const SUNSETS: Extract<Clause, { kind: 'sunset' }>[] = [{ kind: 'sunset', term: { encounters: 1 } }, { kind: 'sunset', term: { encounters: 3 } }, { kind: 'sunset', term: { encounters: 10 } }, { kind: 'sunset', term: { seconds: 30 } }, { kind: 'sunset', term: { seconds: 60 } }, { kind: 'sunset', term: { seconds: 180 } }];
-const KEY_TITLE: Record<AbilitySlot, string> = { primary: 'Left click', secondary: 'Right click', max: 'Q, Maximum Output', passive: 'No key' };
+const keyTitle = (s: AbilitySlot): string => (s === 'passive' ? 'No key' : slotWords(s).replace(/^./, (c) => c.toUpperCase()));
+
+// What is bound to a slot right now, in the words the key picker shows.
+function holder(book: Game['book'], kit: (typeof KITS)[keyof typeof KITS], slot: AbilitySlot): { name: string | null; text: string } {
+  if (slot === 'passive') return { name: null, text: 'always on, no key' };
+  const p = book.bound(slot);
+  if (p) return { name: p.name, text: p.name };
+  return { name: null, text: slotDef(slot).raw ? `raw ${kit.name}` : 'empty' };
+}
 
 export function Workshop({ game }: { game: Game }) {
   const kit = KITS[game.techniqueId];
@@ -31,14 +41,15 @@ export function Workshop({ game }: { game: Game }) {
   const isDraft = !!pact && !pact.inscribed;
   const [focus, setFocus] = useState<Focus>(null);
   const [confirm, setConfirm] = useState(false);
+  const [moveTo, setMoveTo] = useState<AbilitySlot | null>(null);
   const [hold, setHold] = useState(0);
   const est = useMemo(() => (pact ? book.estimate(pact) : null), [pact, inscribed.length, book.bindings.value]);
-  const valid = pact ? validatePact(pact, Object.keys(kit.shapes)) : { ok: false, errors: [] };
+  const valid = pact ? validatePact(pact, kit.shapes) : { ok: false, errors: [] };
   const shapeLabel = (s: string) => kit.shapes[s]?.label ?? s;
   const behaviorLabel = (b: string) => kit.behaviors[b] ?? b;
   const tutorial = tutorialUi.step.value?.id === 'pact';
 
-  const select = (id: string) => { selectedId.value = id; setFocus(null); setConfirm(false); };
+  const select = (id: string) => { selectedId.value = id; setFocus(null); setConfirm(false); setMoveTo(null); };
   const update = (p: Pact) => { book.saveDraft(p); selectedId.value = p.id; };
   const newDraft = (from?: Pact) => {
     const shape = Object.keys(kit.shapes)[0]!;
@@ -63,15 +74,27 @@ export function Workshop({ game }: { game: Game }) {
   const removeClause = (index: number) => { setClauses(pact!.clauses.filter((_, k) => k !== index)); setFocus(null); };
   const inscribe = () => {
     if (!pact) return;
-    const r = book.inscribe(pact, Object.keys(kit.shapes));
+    const r = book.inscribe(pact, kit.shapes);
     if (!r.ok) { toast(r.errors[0] ?? 'Invalid Pact', 'bad'); return; }
     game.audio.play('confirmation_002', 0.7);
-    toast(`${pact.name} is inscribed and bound to ${KEY_WORDS[pact.slot]}.`, 'good');
+    toast(`${pact.name} is inscribed and bound to ${slotWords(pact.slot)}.`, 'good');
     setConfirm(false);
   };
   const counted = pact ? book.counted(pact) : new Map<string, string>();
   const weigh = (param: Param) => (value: string) => lineFor({ param, value } as Restriction, counted, book.telemetry);
   const boundTo = (p: Pact) => p.slot !== 'passive' && book.binding(p.slot) === p.id;
+  const kindsOf = (p: Pact) => kit.shapes[p.grant.shape]?.kinds ?? [];
+  // A bound Pact moves to a slot that holds another Pact either by swapping
+  // places, when the other fits where this one sits, or by replacing it.
+  const pickSlot = (s: AbilitySlot) => {
+    if (!pact) return;
+    if (isDraft) { update({ ...pact, slot: s }); return; }
+    const occupant = s !== 'passive' ? book.bound(s) : null;
+    if (occupant && occupant.id !== pact.id) { setMoveTo(s); return; }
+    book.place(pact.id, s, 'replace');
+    setMoveTo(null);
+  };
+  const move = (how: 'replace' | 'swap') => { if (pact && moveTo) book.place(pact.id, moveTo, how); setMoveTo(null); };
   const focusKey = focus ? focusId(focus) : '';
 
   return (
@@ -87,7 +110,7 @@ export function Workshop({ game }: { game: Game }) {
               {all.map((p) => (
                 <button key={p.id} class={`bk ${p.id === sel ? 'on' : ''} ${boundTo(p) ? 'bound' : ''}`} onClick={() => select(p.id)}>
                   <span class="n">{p.name}</span>
-                  <span class="s">{p.inscribed ? `${KEY_TITLE[p.slot]} · ${boundTo(p) ? 'in use' : book.expired(p) ? 'term ended' : 'inscribed, not in use'}` : `Draft · ${restrictions(p).length} ${restrictions(p).length === 1 ? 'term' : 'terms'}`}</span>
+                  <span class="s">{p.inscribed ? `${keyTitle(p.slot)} · ${boundTo(p) ? 'in use' : book.expired(p) ? 'term ended' : 'inscribed, not in use'}` : `Draft · ${restrictions(p).length} ${restrictions(p).length === 1 ? 'term' : 'terms'}`}</span>
                 </button>
               ))}
               <button class={`bk new ${tutorial && !drafts.length ? 'pulse' : ''}`} onClick={() => newDraft()}><span class="n">+ New Pact</span><span class="s">start from the raw Technique</span></button>
@@ -99,23 +122,48 @@ export function Workshop({ game }: { game: Game }) {
                     {isDraft
                       ? <input value={pact.name} maxLength={48} aria-label="Pact name" onInput={(e) => update({ ...pact, name: (e.target as HTMLInputElement).value })} onFocus={(e) => (e.target as HTMLInputElement).select()} />
                       : <span class="fixed">{pact.name}</span>}
-                    <span class={`pill ${isDraft ? '' : 'sealed'}`}>{isDraft ? 'Draft' : boundTo(pact) ? `Inscribed · on ${KEY_WORDS[pact.slot]}` : 'Inscribed'}</span>
+                    <span class={`pill ${isDraft ? '' : 'sealed'}`}>{isDraft ? 'Draft' : boundTo(pact) ? `Inscribed · on ${slotWords(pact.slot)}` : 'Inscribed'}</span>
                   </div>
                   <p class="ws-sentence" aria-label="The terms, as the universe reads them">
-                    {readbackSegments(pact, shapeLabel, behaviorLabel).map((s, i) => s.focus && isDraft
-                      ? <button key={i} class={`ph ${focusKey === focusId(s.focus) ? 'on' : ''}`} onClick={() => setFocus(s.focus!)}>{s.text}</button>
+                    {readbackSegments(pact, shapeLabel, behaviorLabel).map((s, i) => s.focus && (isDraft || s.focus.kind === 'key')
+                      ? <button key={i} class={`ph ${focusKey === focusId(s.focus) ? 'on' : ''}`} onClick={() => { setFocus(s.focus!); setMoveTo(null); }}>{s.text}</button>
                       : s.focus ? <em key={i} class="ph ro">{s.text}</em> : <span key={i}>{s.text}</span>)}
                     {isDraft && <button class={`ph add ${focus?.kind === 'add' ? 'on' : ''}`} onClick={() => setFocus({ kind: 'add' })}>+ add a term</button>}
                   </p>
-                  {isDraft && focus && (
+                  {focus && (isDraft || focus.kind === 'key') && (
                     <div class="ws-panel" key={focusKey}>
                       {focus.kind === 'key' && <>
-                        <PanelHead title="Key" hint="which button fires it" />
-                        <div class="opts tiles four">{SLOTS.map((s) => <button key={s} class={`opt ${pact.slot === s ? 'on' : ''}`} onClick={() => update({ ...pact, slot: s })}><span class="l">{KEY_TITLE[s]}</span><span class="w">{s === 'passive' ? 'always on, no key' : `on ${KEY_WORDS[s]}`}</span></button>)}</div>
+                        <PanelHead title="Key" hint={isDraft ? 'which button fires it' : 'move it to another key'} />
+                        <div class="opts tiles four slots">{SLOTS.filter((s) => s !== 'passive' || isDraft).map((s) => {
+                          const h = holder(book, kit, s);
+                          const fits = s === 'passive' || slotAccepts(s, kindsOf(pact));
+                          const here = pact.slot === s;
+                          return (
+                            <button key={s} class={`opt ${here ? 'on' : ''}`} data-slot={s} disabled={!fits} onClick={() => pickSlot(s)}>
+                              <span class="l">{s === 'passive' ? 'No key' : keyLabel(s)}{s !== 'passive' && <small>{slotDef(s).name}</small>}</span>
+                              <span class="w">{!fits ? 'not for this shape' : isDraft ? (h.name ? `replaces ${h.name}` : h.text) : here ? 'where it sits' : h.text}</span>
+                            </button>
+                          );
+                        })}</div>
+                        {moveTo && (() => {
+                          const other = book.bound(moveTo);
+                          const from = book.slotOf(pact.id);
+                          const canSwap = !!other && !!from && slotAccepts(from, kindsOf(other));
+                          return (
+                            <div class="ws-swap" role="alert" data-swap={moveTo}>
+                              <span><b>{keyLabel(moveTo as never)}</b> holds <b>{other?.name}</b>.</span>
+                              <span class="acts">
+                                {canSwap && <button class="btn primary" onClick={() => move('swap')}>Swap · {other?.name} moves to {keyLabel(from as never)}</button>}
+                                <button class="btn" onClick={() => move('replace')}>Replace · {other?.name} stays inscribed, unbound</button>
+                                <button class="btn quiet" onClick={() => setMoveTo(null)}>Cancel</button>
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </>}
                       {focus.kind === 'grant' && <>
                         <PanelHead title="What it does" hint="the shape the Technique takes" />
-                        <div class="opts tiles four">{Object.entries(kit.shapes).map(([k, v]) => <button key={k} class={`opt ${pact.grant.shape === k ? 'on' : ''}`} onClick={() => update({ ...pact, grant: { ...pact.grant, shape: k }, slot: v.slot.includes(pact.slot) ? pact.slot : v.slot[0]! })}><span class="l">{v.label}</span><span class="w">{v.description}</span></button>)}</div>
+                        <div class="opts tiles four">{Object.entries(kit.shapes).map(([k, v]) => <button key={k} class={`opt ${pact.grant.shape === k ? 'on' : ''}`} onClick={() => update({ ...pact, grant: { ...pact.grant, shape: k }, slot: slotFor(v.kinds, pact.slot) })}><span class="l">{v.label}</span><span class="w">{v.description}</span></button>)}</div>
                         <div class="chips">
                           <span class="chips-l">And it also</span>
                           {Object.entries(kit.behaviors).map(([k, v]) => { const on = pact.grant.behaviors?.includes(k); return <button key={k} class={`chip ${on ? 'on' : ''}`} aria-pressed={on} onClick={() => update({ ...pact, grant: { ...pact.grant, behaviors: on ? pact.grant.behaviors!.filter((b) => b !== k) : [...(pact.grant.behaviors ?? []), k] } })}>{v}</button>; })}
@@ -155,7 +203,7 @@ export function Workshop({ game }: { game: Game }) {
           </div>
         </div>
         <footer>
-          <div class="kbd-hint"><button class="btn quiet" onClick={() => game.closeWorkshop()}>Close</button><span><kbd>Esc</kbd> closes</span></div>
+          <div class="kbd-hint"><button class="btn quiet" onClick={() => game.closeWorkshop()}>Close</button><span><kbd>{keyLabel('pause')}</kbd> closes</span></div>
           {pact && isDraft && (
             <div class="actions">
               <button class="btn quiet" onClick={() => { book.deleteDraft(pact.id); selectedId.value = null; }}>Discard draft</button>
@@ -168,7 +216,7 @@ export function Workshop({ game }: { game: Game }) {
               <button class="btn quiet" onClick={() => newDraft(pact)}>Copy to a new draft</button>
               {pact.slot !== 'passive' && (boundTo(pact)
                 ? <button class="btn" onClick={() => book.bind(pact.slot, null)} title={kit.primitive.description}>Unbind · fight with the raw {kit.name}</button>
-                : <button class="btn primary" disabled={book.expired(pact)} onClick={() => book.bind(pact.slot, pact.id)}>Bind to {KEY_WORDS[pact.slot]}</button>)}
+                : <button class="btn primary" disabled={book.expired(pact)} onClick={() => book.bind(pact.slot, pact.id)}>Bind to {slotWords(pact.slot)}</button>)}
             </div>
           )}
         </footer>

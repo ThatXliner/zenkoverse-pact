@@ -3,8 +3,9 @@
 // for external authoring surfaces (issue #16). No magnitudes live here; the
 // engine derives every number from a parsed Pact.
 
+import { SLOTS, slotAccepts, slotDef, type AbilitySlot, type AbilityKind } from './slots';
+
 export type TechniqueId = 'recoil' | 'shift' | 'rime' | 'blink' | 'echo';
-export type AbilitySlot = 'primary' | 'secondary' | 'max' | 'passive';
 export type Param = 'direction' | 'range' | 'target' | 'trigger' | 'duration' | 'resource' | 'body';
 
 export type Direction = 'front' | 'declared' | 'ground' | 'line' | 'behind';
@@ -63,11 +64,14 @@ export const PARAM_VALUES: Record<Param, readonly string[]> = {
 export const PREDICTIONS: readonly Prediction[] = ['hit', 'kill', 'untouched', 'firstStrike'];
 export const RISK_COSTS: readonly RiskCost[] = ['health', 'exhaustion', 'seal'];
 export const TECHNIQUE_IDS: readonly TechniqueId[] = ['recoil', 'shift', 'rime', 'blink', 'echo'];
-export const SLOTS: readonly AbilitySlot[] = ['primary', 'secondary', 'max', 'passive'];
 
 export interface Validation { ok: boolean; errors: string[] }
 
-export function validatePact(input: unknown, shapes?: readonly string[]): Validation {
+// `shapes` is a kit's shape table: a Pact must name one of its shapes, and sit
+// on a slot that can fire the kinds that shape allows.
+export type ShapeTable = Readonly<Record<string, { kinds: readonly AbilityKind[] }>>;
+
+export function validatePact(input: unknown, shapes?: ShapeTable): Validation {
   const errors: string[] = [];
   if (typeof input !== 'object' || input === null) return { ok: false, errors: ['pact must be an object'] };
   const p = input as Record<string, unknown>;
@@ -77,7 +81,8 @@ export function validatePact(input: unknown, shapes?: readonly string[]): Valida
   if (!SLOTS.includes(p.slot as AbilitySlot)) errors.push(`slot must be one of ${SLOTS.join(', ')}`);
   const grant = p.grant as Record<string, unknown> | undefined;
   if (!grant || typeof grant.shape !== 'string') errors.push('grant.shape must be a string');
-  else if (shapes && !shapes.includes(grant.shape)) errors.push(`grant.shape must be one of ${shapes.join(', ')}`);
+  else if (shapes && !(grant.shape in shapes)) errors.push(`grant.shape must be one of ${Object.keys(shapes).join(', ')}`);
+  else if (shapes && SLOTS.includes(p.slot as AbilitySlot) && p.slot !== 'passive' && !slotAccepts(p.slot as AbilitySlot, shapes[grant.shape]!.kinds)) errors.push(`${grant.shape} cannot be cast from ${slotDef(p.slot as AbilitySlot).name}`);
   if (grant?.behaviors !== undefined && (!Array.isArray(grant.behaviors) || grant.behaviors.some((b) => typeof b !== 'string'))) errors.push('grant.behaviors must be an array of strings');
   if (!Array.isArray(p.clauses)) errors.push('clauses must be an array');
   else {

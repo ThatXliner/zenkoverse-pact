@@ -12,26 +12,18 @@
 // Offers, the Eye and the Aura are taken with real clicks and keys. The
 // ?debug hooks only teleport, switch the camera, give god mode, clear a wave
 // and read state. Wave 1 is fought by a pilot that aims and punches.
-// Usage: node tools/check-rooftop.mjs [--url http://localhost:4173/] [--out captures/rooftop] [--port 4173]
-// Without --url it serves dist/ itself (run `npm run build` first).
+// Usage: node tools/check-rooftop.mjs [url] [--url http://localhost:4173/] [--out captures/rooftop] [--port 4173]
+// Without a URL it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
-import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { resolveTarget } from './lib/target.mjs';
 
-const args = Object.fromEntries(process.argv.slice(2).map((a, i, all) => (a.startsWith('--') ? [a.slice(2), all[i + 1]?.startsWith('--') || all[i + 1] === undefined ? 'true' : all[i + 1]] : [])).filter((x) => x.length));
+const { url, args, stop } = await resolveTarget();
+
 const out = args.out ?? 'captures/rooftop';
 mkdirSync(out, { recursive: true });
 
-let server = null;
-let url = args.url;
-if (!url) {
-  if (!existsSync('dist/index.html')) throw new Error('dist/ missing: run npm run build first');
-  const port = args.port ?? '4173';
-  server = spawn('npx', ['vite', 'preview', '--port', port, '--strictPort'], { stdio: 'ignore' });
-  await new Promise((r) => setTimeout(r, 1800));
-  url = `http://localhost:${port}/`;
-}
 
 const WAVE_SIZES = [4, 6, 7, 4, 9, 10, 12, 1];
 const browser = await chromium.launch({ channel: 'chrome', args: ['--use-angle=metal', '--ignore-gpu-blocklist'] });
@@ -66,7 +58,7 @@ const bookState = () => page.evaluate(() => { const b = window.game.game.book; r
 const family = (tag) => (tag === 'body:noMove' ? 'trigger:still' : tag);
 
 async function readOffers(label) {
-  const cards = await page.locator('.rt-offer').evaluateAll((els) => els.map((e) => ({ id: e.dataset.pact, slot: e.dataset.slot, tags: e.dataset.tags.split(',').filter(Boolean), text: e.querySelector('.rt-read').textContent, name: e.querySelector('h3').textContent })));
+  const cards = await page.locator('.rt-offer').evaluateAll((els) => els.map((e) => ({ id: e.dataset.pact, slot: e.dataset.slot, tags: e.dataset.tags.split(',').filter(Boolean), text: e.querySelector('.rt-read').textContent, name: e.querySelector('h3').textContent, foot: e.querySelector('.rt-foot i').textContent })));
   const valid = await page.evaluate(() => window.game.rooftop.offers());
   check(cards.length === 3, `${label}: three Pacts are offered`);
   check(valid.length === cards.length && valid.every((v) => v.valid), `${label}: every offer is valid in the Pact schema`);
@@ -330,6 +322,9 @@ console.log('\noffers across every run');
 const tagsSeen = new Set(offered.flatMap((o) => o.tags));
 check(offered.length >= 3 * 7 * 2, `${offered.length} offers were inspected`);
 check(tagsSeen.size >= 8, `the offers drew on ${tagsSeen.size} different sacrifices`);
+const adds = offered.filter((o) => /^art[1-4]$/.test(o.slot));
+check(adds.length > 0 && adds.every((o) => /^Adds to [1-4]\.$/.test(o.foot)), `${adds.length} offers add a Pact on an empty extra slot and say so ("${adds[0]?.foot}")`);
+check(offered.filter((o) => !/^art/.test(o.slot)).every((o) => !/^Adds to/.test(o.foot)), 'an offer that takes a main key never claims to add');
 
 const pageErrors = await page.evaluate(() => window.game.errors);
 errors.push(...pageErrors.map((e) => `window: ${e}`));
@@ -337,5 +332,5 @@ writeFileSync(join(out, 'report.json'), JSON.stringify({ url, failures, errors, 
 console.log(`\n${failures.length} failures, ${errors.length} page errors -> ${join(out, 'report.json')}`);
 for (const e of errors.slice(0, 20)) console.log('  ERROR', e);
 await browser.close();
-server?.kill();
+stop();
 process.exit(failures.length || errors.length ? 1 : 0);

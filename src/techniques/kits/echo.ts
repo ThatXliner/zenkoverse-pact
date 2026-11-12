@@ -44,9 +44,9 @@ export const echo: TechniqueKit = {
   primitive: { name: 'Echo', short: 'a faint vibration', description: 'Add a little vibration to whatever you touch. Keep the phase or lose the build-up.' },
   parameters: ['direction', 'range', 'target', 'trigger', 'duration', 'resource', 'body'],
   shapes: {
-    ring: { label: 'sends a wave that adds Resonance to what it touches', short: 'add resonance by touch', slot: ['primary'], description: 'Five stacks shatters.' },
-    quiet: { label: 'cancels incoming vibration while held', short: 'hold to cancel vibration', slot: ['secondary'], description: 'Active cancellation. Blows land soft; enemy rings die.' },
-    cathedral: { label: 'forces the whole street into one mode', short: 'break everything resonant', slot: ['max'], description: 'Everything resonant breaks. You share the vibration.' },
+    ring: { label: 'sends a wave that adds Resonance to what it touches', short: 'add resonance by touch', kinds: ['primary'], description: 'Five stacks shatters.' },
+    quiet: { label: 'cancels incoming vibration while held', short: 'hold to cancel vibration', kinds: ['secondary'], description: 'Active cancellation. Blows land soft; enemy rings die.' },
+    cathedral: { label: 'forces the whole street into one mode', short: 'break everything resonant', kinds: ['max'], description: 'Everything resonant breaks. You share the vibration.' },
   },
   behaviors: { stack: 'stacks hold longer between hits', sharp: 'the fifth stack hits harder', air: 'travels through air, not only contact' },
   catalogue,
@@ -55,7 +55,7 @@ export const echo: TechniqueKit = {
     secondary: gestureSet(0.5, 0.2, [{ t: 0, right: 'quietSpread', left: 'quietSpread', snap: true, camera: { fov: -3 } }], true),
     max: gestureSet(2.3, 1.7, [{ t: 0, right: 'raiseHigh', left: 'raiseHigh', slow: true }, { t: 0.9, right: 'flat', left: 'flat', slow: true }, { t: 1.65, right: 'palmPress', left: 'palmPress', snap: true, camera: { fov: 14, pitch: 0.08 } }, { t: 2.1, right: 'rest', left: 'rest' }]),
   },
-  avatarClips: { primary: 'Spell_Simple_Shoot', secondary: 'Spell_Simple_Idle_Loop', max: 'Spell_Simple_Enter', passive: 'Idle_Loop' },
+  avatarClips: { primary: 'Spell_Simple_Shoot', secondary: 'Spell_Simple_Idle_Loop', max: 'Spell_Simple_Enter' },
   traits: {
     resonant: (prop, ctx) => {
       prop.resonance += 1.2 * ctx.potency + 0.3;
@@ -107,5 +107,5 @@ export const echo: TechniqueKit = {
       return amount * 0.3;
     },
   },
-  audio: { primary: { cast: 'tick_001', volume: 0.5, pitch: 0.8 }, secondary: { cast: 'lowThreeTone', volume: 0.3, pitch: 0.8 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 0.5 }, passive: { cast: 'tick_001' } },
+  audio: { primary: { cast: 'tick_001', volume: 0.5, pitch: 0.8 }, secondary: { cast: 'lowThreeTone', volume: 0.3, pitch: 0.8 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 0.5 } },
 };

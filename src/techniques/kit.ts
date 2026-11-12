@@ -1,5 +1,6 @@
 import type * as THREE from 'three';
-import type { Pact, AbilitySlot, Param, TechniqueId } from '../pacts/schema';
+import type { Pact, Param, TechniqueId } from '../pacts/schema';
+import type { AbilityKind, AbilitySlot } from '../pacts/slots';
 import type { PropTrait, PropInstance } from '../world/props';
 import type { GestureSet } from '../hands/gestures';
 import type { CutsceneDef } from '../cutscene/cutscene';
@@ -21,15 +22,15 @@ export interface TechniqueKit {
   color: number;
   type: string;
   blurb: string;
-  resource: { name: string; max: number; regen: number; startsFull: boolean; free?: AbilitySlot[] };
+  resource: { name: string; max: number; regen: number; startsFull: boolean; free?: AbilityKind[] };
   // `short` is the HUD's few words on what a key does, in sentence case.
   primitive: { name: string; short: string; description: string };
   parameters: Param[];
-  shapes: Record<string, { label: string; short: string; slot: AbilitySlot[]; description: string }>;
+  shapes: Record<string, { label: string; short: string; kinds: AbilityKind[]; description: string }>;
   behaviors: Record<string, string>;
   catalogue: Pact[];
   gestures: Record<string, GestureSet>;
-  avatarClips: Record<AbilitySlot, string>;
+  avatarClips: Record<AbilityKind, string>;
   traits: Partial<Record<PropTrait, (prop: PropInstance, ctx: AbilityContext) => void>>;
   drill?: DrillDef;
   cutscene: CutsceneDef;
@@ -40,13 +41,15 @@ export interface TechniqueKit {
     passive?(game: Game, dt: number): void;
     onStruck?(game: Game, amount: number, from: THREE.Vector3): number;
   };
-  audio: Record<AbilitySlot, { cast: string; pitch?: number; volume?: number }>;
+  audio: Record<AbilityKind, { cast: string; pitch?: number; volume?: number }>;
 }
 
 export interface AbilityContext {
   game: Game;
   pact: Pact | null;
+  // Where the Ability sits and how it is cast.
   slot: AbilitySlot;
+  kind: AbilityKind;
   shape: string;
   behaviors: string[];
   potency: number;

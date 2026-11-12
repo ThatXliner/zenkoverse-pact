@@ -2,7 +2,9 @@ import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 import type { Game } from '../app/game';
 import { appState } from '../app/state';
 import { combatUi, EYES, type EyeId } from '../combat/combat';
-import { KEY_WORDS } from '../pacts/readback';
+import { slotWords } from '../pacts/readback';
+import { keyLabel } from '../app/keymap';
+import { slotDef } from '../pacts/slots';
 import { rooftopUi, type RunResult } from './rooftop';
 import { readFor, type Offer } from './offers';
 import { WAVE_COUNT, HEAL_BETWEEN, EYE_AFTER, AURA_AFTER } from './waves';
@@ -82,7 +84,8 @@ function PactStep({ game, offers }: { game: Game; offers: Offer[] }) {
   useEffect(() => { first.current?.focus(); }, [offers]);
   const pick = (i: number) => game.rooftop.choose(i);
   useDigits(offers.length, pick);
-  const keyName = (p: Offer['pact']) => KEY_WORDS[p.slot];
+  const keyName = (p: Offer['pact']) => slotWords(p.slot);
+  const gain = (o: Offer) => o.replaces ? (o.stronger ? `Stronger than ${o.replaces}, which it replaces.` : `Replaces ${o.replaces}.`) : o.pact.slot !== 'passive' && slotDef(o.pact.slot).raw === null ? `Adds to ${keyLabel(o.pact.slot)}.` : 'Fills an empty key.';
   return (
     <Shell
       kicker={`Wave ${cleared()} of ${WAVE_COUNT} cleared · health restored by ${Math.round(HEAL_BETWEEN * 100)}%`}
@@ -98,7 +101,7 @@ function PactStep({ game, offers }: { game: Game; offers: Offer[] }) {
             <p class="rt-read">{o.text}</p>
             <span class="rt-foot">
               <b class={o.stronger ? 'up' : ''}>{readFor(o.after.read)}</b>
-              <i>{o.replaces ? (o.stronger ? `Stronger than ${o.replaces}, which it replaces.` : `Replaces ${o.replaces}.`) : 'Fills an empty key.'}</i>
+              <i>{gain(o)}</i>
             </span>
           </button>
         ))}
@@ -143,8 +146,8 @@ function AuraStep({ game }: { game: Game }) {
     <Shell kicker={`Wave ${AURA_AFTER} cleared · something new`} title="Aura Expansion" jp="気"
       note="Aura is a separate faculty from your Technique, formalized only twenty years ago despite five thousand years of Technique history.">
       <div class="rt-aura">
-        <p>Hold <kbd>F</kbd> to expand a field around you. Enemies inside it move slower. It drains your Aura while it is open and refills when you let go.</p>
-        <p>The strongest opponents carry fields of their own. Where two fields meet you are in an Aura Clash. Keep your health high and keep holding F to push her field back.</p>
+        <p>Hold <kbd>{keyLabel('aura')}</kbd> to expand a field around you. Enemies inside it move slower. It drains your Aura while it is open and refills when you let go.</p>
+        <p>The strongest opponents carry fields of their own. Where two fields meet you are in an Aura Clash. Keep your health high and keep holding {keyLabel('aura')} to push her field back.</p>
         <button ref={btn} class="btn primary" onClick={() => game.rooftop.acceptAura()}>Continue</button>
       </div>
     </Shell>

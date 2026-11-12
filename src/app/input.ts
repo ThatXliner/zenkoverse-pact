@@ -1,11 +1,6 @@
-export type Action = 'forward' | 'back' | 'left' | 'right' | 'sprint' | 'jump' | 'dash' | 'primary' | 'secondary' | 'max' | 'wager' | 'aura' | 'interact' | 'camera' | 'pause' | 'fullsign' | 'workshop' | 'map';
+import { actionFor, capturing, type Action } from './keymap';
 
-const bindings: Record<string, Action> = {
-  KeyW: 'forward', ArrowUp: 'forward', KeyS: 'back', ArrowDown: 'back', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
-  ShiftLeft: 'sprint', ShiftRight: 'sprint', Space: 'jump', KeyC: 'dash', KeyQ: 'max', KeyR: 'wager', KeyF: 'aura', KeyE: 'interact', KeyV: 'camera',
-  Escape: 'pause', AltLeft: 'fullsign', Tab: 'workshop', KeyM: 'map',
-  Mouse0: 'primary', Mouse2: 'secondary',
-};
+export type { Action };
 
 export class Input {
   private down = new Set<Action>();
@@ -17,33 +12,34 @@ export class Input {
   onLockLost: (() => void) | null = null;
   private releasing = false;
   enabled = true;
+  // Any mouse press on the canvas, whatever it is bound to. The first one after the cursor is released takes the pointer lock back.
+  canvasPressed = false;
 
   constructor(private canvas: HTMLCanvasElement) {
-    window.addEventListener('keydown', (e) => {
-      const a = bindings[e.code];
+    const press = (code: string, e: Event): void => {
+      if (capturing.value) return;
+      const a = actionFor(code);
       if (!a) return;
       if (a === 'workshop' || a === 'fullsign') e.preventDefault();
       if (!this.down.has(a)) this.pressed.add(a);
       this.down.add(a);
-    });
-    window.addEventListener('keyup', (e) => {
-      const a = bindings[e.code];
+    };
+    const release = (code: string, e: Event): void => {
+      const a = actionFor(code);
       if (!a) return;
+      if (Number(code.slice(5)) > 2 && code.startsWith('Mouse') && e.cancelable) e.preventDefault();
       this.down.delete(a);
       this.released.add(a);
-    });
+    };
+    window.addEventListener('keydown', (e) => press(e.code, e));
+    window.addEventListener('keyup', (e) => release(e.code, e));
     canvas.addEventListener('mousedown', (e) => {
-      const a = bindings[`Mouse${e.button}`];
-      if (!a) return;
-      if (!this.down.has(a)) this.pressed.add(a);
-      this.down.add(a);
+      this.canvasPressed = true;
+      // Side buttons would step the browser back on release.
+      if (e.button > 2 && actionFor(`Mouse${e.button}`)) e.preventDefault();
+      press(`Mouse${e.button}`, e);
     });
-    window.addEventListener('mouseup', (e) => {
-      const a = bindings[`Mouse${e.button}`];
-      if (!a) return;
-      this.down.delete(a);
-      this.released.add(a);
-    });
+    window.addEventListener('mouseup', (e) => release(`Mouse${e.button}`, e));
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('mousemove', (e) => {
       if (!this.locked) return;
@@ -96,6 +92,7 @@ export class Input {
   endFrame(): void {
     this.pressed.clear();
     this.released.clear();
+    this.canvasPressed = false;
     this.wheel = 0;
   }
 

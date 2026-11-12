@@ -36,14 +36,14 @@ export class Drills {
 
   register(def: DrillDef): void { this.defs.set(def.id, def); }
 
-  interactable(p: THREE.Vector3): { key: string; text: string; act: () => void } | null {
+  interactable(p: THREE.Vector3): { text: string; act: () => void } | null {
     if (this.current) return null;
     for (const d of this.defs.values()) {
       if (d.technique !== this.game.techniqueId) continue;
       const pos = new THREE.Vector3(...d.position);
       if (pos.distanceTo(p) < 3) {
         const tier = Math.min(this.progress[d.id] ?? 0, d.tiers.length - 1);
-        return { key: 'E', text: `Begin drill: ${d.title} (${d.tiers[tier]!.name})`, act: () => this.begin(d.id) };
+        return { text: `Begin drill: ${d.title} (${d.tiers[tier]!.name})`, act: () => this.begin(d.id) };
       }
     }
     return null;

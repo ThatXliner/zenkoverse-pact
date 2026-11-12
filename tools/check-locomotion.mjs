@@ -3,10 +3,12 @@
 // along the line of travel, and pedestrians and thugs face the way they walk.
 // Facing is read from the model itself (authored facing +Z, which the idle
 // stance's toes confirm), not from any yaw the code stores.
-// Usage: npm run check:locomotion -- [url]   (default: http://localhost:5173/)
+// Usage: npm run check:locomotion -- [url] [--url http://localhost:4173/] [--port 4173]
+// Without a URL it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
+import { resolveTarget } from './lib/target.mjs';
 
-const url = process.argv[2] ?? 'http://localhost:5173/';
+const { url, stop } = await resolveTarget();
 const CHEST_LIMIT = 25;
 const FEET_LIMIT = 35;
 const browser = await chromium.launch({ channel: 'chrome', args: ['--use-angle=metal', '--enable-gpu'] });
@@ -108,6 +110,7 @@ const walkers = await page.evaluate(() => {
 });
 const debugErrors = await page.evaluate(() => window.game.errors);
 await browser.close();
+stop();
 
 let failed = 0;
 const report = (ok, line) => { if (!ok) failed++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${line}`); };

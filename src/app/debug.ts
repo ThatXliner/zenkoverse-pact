@@ -3,6 +3,8 @@ import type { Game } from './game';
 import { SPAWN } from '../world/district';
 import { appState } from './state';
 import { validatePact } from '../pacts/schema';
+import type { KeySlot } from '../pacts/slots';
+import type { Action } from './keymap';
 import { audit as auditOffers } from '../rooftop/offers';
 import type { TechniqueId } from '../techniques/kit';
 import type { PoseName } from '../hands/poses';
@@ -15,10 +17,10 @@ export interface DebugApi {
   technique(id: TechniqueId): void;
   camera(mode: 'first' | 'third'): void;
   look(yaw: number, pitch: number): void;
-  cast(slot: 'primary' | 'secondary' | 'max'): void;
+  cast(slot: KeySlot): void;
   pose(name: PoseName | null): void;
   handsView(yaw: number, pitch: number): void;
-  hold(action: 'primary' | 'secondary' | 'aura' | 'forward' | 'sprint' | 'fullsign', held: boolean): void;
+  hold(action: Action, held: boolean): void;
   encounter(id: 'alley-thugs' | 'kuroda' | 'ancient-bridge' | 'dummy-room'): void;
   drill(id: 'recoil-crane'): void;
   workshop(open: boolean): void;
@@ -77,7 +79,7 @@ export function installDebug(game: Game): void {
       status() { const r = game.rooftop; return { stage: r.stage, wave: r.wave, alive: r.alive, hp: game.combat.hp, maxHp: game.combat.maxHp, auraAllowed: r.auraAllowed, eye: game.combat.eye, app: appState.value.kind }; },
       audit(technique, rounds) { const was = game.techniqueId; game.setTechnique(technique); const bad = auditOffers(game, rounds); game.setTechnique(was); return bad; },
       offers() {
-        const shapes = Object.keys(game.techniques.def.shapes);
+        const shapes = game.techniques.def.shapes;
         return game.rooftop.offers.map((o) => { const v = validatePact(o.pact, shapes); return { name: o.pact.name, slot: o.pact.slot, tags: o.tags, text: o.text, valid: v.ok, errors: v.errors }; });
       },
     },

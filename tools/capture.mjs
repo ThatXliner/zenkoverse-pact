@@ -2,15 +2,16 @@
 // Capture harness for the gauntlet critics. Drives the built game through the
 // `?debug` hooks to fixed scenarios and saves screenshots and short frame
 // sequences per piece. Usage:
-//   node tools/capture.mjs [--out captures] [--only hands,district] [--url http://...] [--port 4173] [--gpu]
+//   node tools/capture.mjs [url] [--out captures] [--only hands,district] [--url http://...] [--port 4173] [--gpu]
 // Pieces: ui, hud, nav, hands, variants, poses, third-person, district, vfx, encounters, workshop, tutorial, drill, perf.
-// Without --url it serves dist/ itself (run `npm run build` first).
+// Without a URL it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
-import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { resolveTarget } from './lib/target.mjs';
 
-const args = Object.fromEntries(process.argv.slice(2).map((a, i, all) => (a.startsWith('--') ? [a.slice(2), all[i + 1]?.startsWith('--') || all[i + 1] === undefined ? 'true' : all[i + 1]] : [])).filter((x) => x.length));
+const { url, args, stop } = await resolveTarget();
+
 const out = args.out ?? 'captures';
 const only = args.only ? new Set(args.only.split(',')) : null;
 const TECHS = ['recoil', 'shift', 'rime', 'blink', 'echo'];
@@ -18,15 +19,6 @@ const MODAL_SIZES = [[1280, 720], [1920, 1080]];
 const HUD_SIZES = [[1280, 720], [1920, 1080], [2000, 1000], [2560, 1440]];
 mkdirSync(out, { recursive: true });
 
-let server = null;
-let url = args.url;
-if (!url) {
-  if (!existsSync('dist/index.html')) throw new Error('dist/ missing: run npm run build first');
-  const port = args.port ?? '4173';
-  server = spawn('npx', ['vite', 'preview', '--port', port, '--strictPort'], { stdio: 'ignore' });
-  await new Promise((r) => setTimeout(r, 1800));
-  url = `http://localhost:${port}/`;
-}
 
 // --gpu runs the installed Chrome on the real GPU (Metal), which is many times
 // faster than SwiftShader and matches what a player sees.
@@ -333,5 +325,5 @@ console.log(`\n${report.shots.length} screenshots, ${report.failures.length} fit
 for (const e of report.errors.slice(0, 20)) console.log('  ERROR', e);
 for (const f of report.failures) console.log('  FAIL', f.check, f.name, JSON.stringify(f.detail));
 await browser.close();
-server?.kill();
+stop();
 process.exit(report.errors.length || report.failures.length ? 1 : 0);

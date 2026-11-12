@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { Game } from '../app/game';
 import { hud } from '../app/game';
-import { appState, setState, pause, resume } from '../app/state';
+import { appState, setState, pause, resume, type PauseTab } from '../app/state';
 import { settings, setSetting, type Quality } from '../app/settings';
+import { keyLabel } from '../app/keymap';
+import { KEY_SLOTS, EXTRA_SLOTS, KIND_DEFS, slotDef, type AbilityKind, type KeySlot } from '../pacts/slots';
+import { Controls } from './Controls';
 import { KITS, techUi, type SlotLabel } from '../techniques/techniques';
 import { TECHNIQUE_IDS, type TechniqueId } from '../pacts/schema';
 import { combatUi, EYES } from '../combat/combat';
@@ -114,6 +117,7 @@ function Hud({ game }: { game: Game }) {
   const c = hex(kit.color);
   const slots = techUi.slots.value;
   const cd = techUi.cooldowns.value;
+  const glyphs: Record<AbilityKind, string> = { primary: kit.glyph, secondary: '構', max: '全' };
   const prompt = hud.prompt.value;
   const ban = hud.banner.value;
   const tut = tutorialUi.step.value;
@@ -142,25 +146,28 @@ function Hud({ game }: { game: Game }) {
       )}
       {!cut && (
         <div class="abilities">
-          <Ability k="Left click" label={slots.primary} glyph={kit.glyph} cd={cd.primary / 0.42} ready={cd.primary <= 0} />
-          <Ability k="Right click" label={slots.secondary} glyph="構" cd={cd.secondary / 0.9} ready={cd.secondary <= 0} />
-          <Ability k="Q" label={slots.max} glyph="全" cd={1 - techUi.charge.value} ready={techUi.charge.value >= 1} max />
+          <div class="xs" role="group" aria-label="Extra Abilities">
+            {EXTRA_SLOTS.map((s) => <Extra key={s} slot={s} label={slots[s]} glyph={glyphs[slots[s].kind ?? 'primary']} cd={cooldownOf(s, slots[s].kind, cd)} />)}
+          </div>
+          <div class="mains">
+            {MAIN_SLOTS.map((s) => { const r = cooldownOf(s, slots[s].kind, cd); return <Ability key={s} slot={s} label={slots[s]} glyph={glyphs[slots[s].kind!]} cd={r.cd} ready={r.ready} />; })}
+          </div>
         </div>
       )}
       {!cut && <NavHud />}
       {!cut && <TopLeft game={game} />}
       {combatUi.wagerArmed.value && !cut && <div class="wager-arm">WAGER DECLARED · THE NEXT STRIKE CONNECTS</div>}
       {auraUi.active.value && !cut && <div class="aura-ring" />}
-      {auraUi.clash.value !== null && !cut && <div class="clash"><span class="kicker">Aura clash · hold F</span><div class="track"><i style={{ left: `${50 + auraUi.clash.value * 50}%`, width: '3px' }} /></div></div>}
+      {auraUi.clash.value !== null && !cut && <div class="clash"><span class="kicker">Aura clash · hold {keyLabel('aura')}</span><div class="track"><i style={{ left: `${50 + auraUi.clash.value * 50}%`, width: '3px' }} /></div></div>}
       {boss && !cut && <div class="boss" style={{ '--c': hex(boss.color) } as never}><span class="n">{boss.name}</span><div class="track"><i style={{ width: `${boss.frac * 100}%` }} /></div></div>}
-      {prompt && !cut && <div class="prompt"><kbd>{prompt.key}</kbd><span>{prompt.text}</span></div>}
-      {tut && !cut && <div class="objective"><span class="step">Tutorial {tut.index} / {tut.total} · {tut.jp}</span><span class="t">{tut.title}</span><span class="b">{tut.body}</span><span class="step">Esc pauses · Skip tutorial is in the pause menu</span></div>}
+      {prompt && !cut && <div class="prompt"><kbd>{keyLabel('interact')}</kbd><span>{prompt.text}</span></div>}
+      {tut && !cut && <div class="objective"><span class="step">Tutorial {tut.index} / {tut.total} · {tut.jp}</span><span class="t">{tut.title}</span><span class="b">{tut.body()}</span><span class="step">{keyLabel('pause')} pauses · Skip tutorial is in the pause menu</span></div>}
       {drill && !cut && <div class="drill-hud"><span class="big">{drill.score} / {drill.needed}</span><span class="s">{drill.jp} · {drill.tier} · {drill.left} left</span></div>}
-      {pl && !cut && <div class="objective" style="top:auto;bottom:calc(var(--hud-pad) + 104px);right:var(--hud-pad);border-color:#9fdfff"><span class="step">Lore plaque</span><span class="t">{pl.title}</span><span class="b">{pl.body}</span></div>}
+      {pl && !cut && <div class="objective" style="top:auto;bottom:calc(var(--hud-pad) + 120px);right:var(--hud-pad);border-color:#9fdfff"><span class="step">Lore plaque</span><span class="t">{pl.title}</span><span class="b">{pl.body}</span></div>}
       <div class="toasts">{hud.toasts.value.map((t) => <div key={t.id} class={`toast ${t.tone}`}>{t.text}</div>)}</div>
       {ban && <div class="banner" key={ban.id}><div class="big jp">{ban.big}</div><div class="small">{ban.small}</div></div>}
       {title && <div class="cut-title" key={title.id} style={{ '--c': hex(title.color) } as never}><div class="jp">{title.jp}</div><div class="en">{title.en}</div></div>}
-      {cut && <div class="skip">SPACE · SKIP</div>}
+      {cut && <div class="skip">{keyLabel('jump').toUpperCase()} · SKIP</div>}
       <div style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none">
         {combatUi.numbers.value.map((n) => <span key={n.id} style={{ position: 'absolute', left: `${n.x}%`, top: `${n.y}%`, transform: 'translate(-50%,-50%)', color: n.color, fontFamily: 'var(--serif)', fontSize: n.big ? '34px' : '20px', fontWeight: 700, textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>{n.text}</span>)}
       </div>
@@ -168,12 +175,33 @@ function Hud({ game }: { game: Game }) {
   );
 }
 
-function Ability({ k, label, glyph, cd, ready, max }: { k: string; label: SlotLabel; glyph: string; cd: number; ready: boolean; max?: boolean }) {
+const MAIN_SLOTS = KEY_SLOTS.filter((s) => slotDef(s).raw !== null);
+
+// How far a slot is from ready: Maximum Output waits on the charge ring, the
+// rest on their cooldown. `cd` is the share still to wait.
+function cooldownOf(slot: KeySlot, kind: AbilityKind | null, cooldowns: Record<KeySlot, number>): { cd: number; ready: boolean } {
+  if (kind === 'max') return { cd: 1 - techUi.charge.value, ready: techUi.charge.value >= 1 };
+  return { cd: kind ? cooldowns[slot] / KIND_DEFS[kind].cooldown : 0, ready: kind !== null && cooldowns[slot] <= 0 };
+}
+
+// The compact cell for an extra slot: key, glyph, name. An empty slot shows
+// its key and stays dim.
+function Extra({ slot, label, glyph, cd }: { slot: KeySlot; label: SlotLabel; glyph: string; cd: { cd: number; ready: boolean } }) {
   return (
-    <div class={`ab ${ready ? 'ready' : ''} ${max ? 'max' : ''} ${label.preview ? 'preview' : ''}`}>
+    <div class={`x ${label.empty ? 'empty' : ''} ${cd.ready && !label.empty ? 'ready' : ''} ${label.preview ? 'preview' : ''}`} data-slot={slot}>
+      <kbd>{keyLabel(slot)}</kbd>
+      <div class="box"><span class="glyph">{label.empty ? '' : glyph}</span><div class="cool" style={{ height: `${Math.max(0, Math.min(1, cd.cd)) * 100}%` }} /></div>
+      <span class="name">{label.empty ? 'Empty' : label.name}</span>
+    </div>
+  );
+}
+
+function Ability({ slot, label, glyph, cd, ready }: { slot: KeySlot; label: SlotLabel; glyph: string; cd: number; ready: boolean }) {
+  return (
+    <div class={`ab ${ready ? 'ready' : ''} ${label.kind === 'max' ? 'max' : ''} ${label.preview ? 'preview' : ''}`} data-slot={slot}>
       <div class="box"><span class="glyph">{glyph}</span><div class="cool" style={{ height: `${Math.max(0, Math.min(1, cd)) * 100}%` }} /></div>
       <div class="txt">
-        <span class="key">{k}{label.preview ? ' · trying a draft' : ''}</span>
+        <span class="key">{keyLabel(slot)}{label.preview ? ' · trying a draft' : ''}</span>
         <span class="name">{label.name}</span>
         <span class="what">{label.what}</span>
       </div>
@@ -181,32 +209,32 @@ function Ability({ k, label, glyph, cd, ready, max }: { k: string; label: SlotLa
   );
 }
 
-const CODEX: { id: string; title: string; jp: string; body: string; after?: string }[] = [
+const CODEX: { id: string; title: string; jp: string; body: string | (() => string); after?: string }[] = [
   { id: 'technique', title: 'Technique', jp: '技', body: 'A person\'s underlying, unique supernatural capability. Everyone has one, usually exactly one. Most are weak, narrow, or useful only outside combat. A Technique is refined by training and shaped by Pacts.' },
   { id: 'pact', title: 'Pact', jp: '契約', body: 'Every application of a Technique is formulated through a Pact, down to the baseline "if I will activation, activate." A Pact is how an Ability exists at all. In the Workshop you write a Pact against the Technique\'s parameters: direction, range, target, trigger, duration, resource, and your body. Pacts are permanent once inscribed; a sunset ends the term, not the Pact.' },
   { id: 'resolve', title: 'Resolve', jp: '覚悟', body: 'The real capability surrendered, judged against your situation and your other Pacts. Restricting something you never use earns almost nothing. A sacrifice already counted by another Pact earns nothing again.' },
   { id: 'risk', title: 'Risk', jp: '危', body: 'An escape clause on a Pact. The enhanced effect continues past its limit and you pay the consequence: health, exhaustion, or a sealed Technique.' },
-  { id: 'wager', title: 'Wager', jp: '賭', body: 'A declared prediction with a reward and a forfeit. Press R to declare that the next strike connects. Correct, the universe pays out. Wrong, your Technique seals.' },
+  { id: 'wager', title: 'Wager', jp: '賭', body: () => `A declared prediction with a reward and a forfeit. Press ${keyLabel('wager')} to declare that the next strike connects. Correct, the universe pays out. Wrong, your Technique seals.` },
   { id: 'programming', title: 'Programming', jp: '式', body: 'A small IF/THEN layer over your own Pacts: triggers, precedence when Pacts conflict, autonomous execution. Pact Architects use it to sustain allies.' },
-  { id: 'training', title: 'Training', jp: '修行', body: 'Drills raise Output, Precision, Efficiency, Range, Speed, Control, Activation, and Tolerance. A beginner needs the full hand sign. As Activation rises the sign shortens until activation is silent. The original sign still enhances the grown baseline: hold Alt to perform it deliberately.' },
+  { id: 'training', title: 'Training', jp: '修行', body: () => `Drills raise Output, Precision, Efficiency, Range, Speed, Control, Activation, and Tolerance. A beginner needs the full hand sign. As Activation rises the sign shortens until activation is silent. The original sign still enhances the grown baseline: hold ${keyLabel('fullsign')} to perform it deliberately.` },
   { id: 'max', title: 'Maximum Output', jp: '全力', body: 'The greatest concentrated expression of a Technique: everything you can presently commit, in one formulation. The full sign always plays. The world waits.' },
   { id: 'eyes', title: 'Eyes', jp: '眼', body: 'Five finite physical artifacts. Installing one permanently replaces a natural eye. They are not Techniques, and most people do not know they exist.' },
-  { id: 'aura', title: 'Aurabending', jp: '気', body: 'A separate universal faculty, formalized only twenty years ago despite five thousand years of Technique history. Aura does not fuel Techniques. Hold F to expand your field; two fields meeting become an Aura Clash.' },
+  { id: 'aura', title: 'Aurabending', jp: '気', body: () => `A separate universal faculty, formalized only twenty years ago despite five thousand years of Technique history. Aura does not fuel Techniques. Hold ${keyLabel('aura')} to expand your field; two fields meeting become an Aura Clash.` },
   { id: 'kuroda', title: 'The Kuroda', jp: '黒田', body: 'A lineage whose "fire" is fuel. They manifest a volatile liquid and light it. The sheen on the ground comes before the flame.', after: 'kuroda' },
 ];
 
-function Pause({ game, tab }: { game: Game; tab: 'menu' | 'settings' | 'codex' | 'map' }) {
+function Pause({ game, tab }: { game: Game; tab: PauseTab }) {
   const s = settings.value;
   const [entry, setEntry] = useState(CODEX[0]!.id);
   const st = appState.value;
   const fromTitle = st.kind === 'paused' && st.resume.kind === 'title';
   const back = () => { if (fromTitle) setState({ kind: 'title' }); else { resume(); game.input.requestLock(); } };
-  const tabs = fromTitle ? (['settings', 'codex'] as const) : (['menu', 'settings', 'codex', 'map'] as const);
+  const tabs = fromTitle ? (['settings', 'controls', 'codex'] as const) : (['menu', 'settings', 'controls', 'codex', 'map'] as const);
   return (
     <div class="sheet-wrap">
       <div class="sheet" role="dialog" aria-label="Menu">
         <header>
-          <div><div class="kicker">{fromTitle ? 'Title' : 'Paused'}</div><h2>{tab === 'menu' ? '一時停止' : tab === 'settings' ? '設定' : tab === 'codex' ? '事典' : '地図'}</h2></div>
+          <div><div class="kicker">{fromTitle ? 'Title' : 'Paused'}</div><h2>{tab === 'menu' ? '一時停止' : tab === 'settings' ? '設定' : tab === 'controls' ? '操作' : tab === 'codex' ? '事典' : '地図'}</h2></div>
           <div class="tabs" role="tablist">{tabs.map((t) => <button key={t} role="tab" class={tab === t ? 'on' : ''} onClick={() => setState({ ...(st as Extract<typeof st, { kind: 'paused' }>), tab: t })}>{t}</button>)}</div>
         </header>
         <div class="body">
@@ -230,19 +258,20 @@ function Pause({ game, tab }: { game: Game; tab: 'menu' | 'settings' | 'codex' |
               <div class="row"><label>Camera</label><Seg value={s.camera} options={['first', 'third']} onChange={(v) => { setSetting('camera', v as 'first'); game.cam.mode = v as 'first'; }} /><span /></div>
               <div class="row"><label>Invert Y</label><Seg value={s.invertY ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('invertY', v === 'on')} /><span /></div>
               <div class="row"><label>Mastery numbers</label><Seg value={s.showMastery ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('showMastery', v === 'on')} /><span /></div>
-              <div class="row"><label>Alt holds full sign</label><Seg value={s.fullSignHold ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('fullSignHold', v === 'on')} /><span /></div>
+              <div class="row"><label>{keyLabel('fullsign')} holds full sign</label><Seg value={s.fullSignHold ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('fullSignHold', v === 'on')} /><span /></div>
               <div class="row"><label>Skip cutscenes</label><Seg value={s.skipCutscenes ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('skipCutscenes', v === 'on')} /><span /></div>
             </div>
           )}
+          {tab === 'controls' && <Controls />}
           {tab === 'codex' && (
             <div class="codex">
               <nav>{CODEX.map((c) => <button key={c.id} class={entry === c.id ? 'on' : ''} onClick={() => setEntry(c.id)}>{c.jp} · {c.title}</button>)}</nav>
-              <article>{(() => { const c = CODEX.find((x) => x.id === entry)!; return <><h3>{c.jp} · {c.title}</h3><p>{c.body}</p>{Object.values(EYES).length && c.id === 'eyes' && <p class="locked">{Object.values(EYES).map((e) => `${e.jp} ${e.name}`).join(' · ')}</p>}</>; })()}</article>
+              <article>{(() => { const c = CODEX.find((x) => x.id === entry)!; return <><h3>{c.jp} · {c.title}</h3><p>{typeof c.body === 'string' ? c.body : c.body()}</p>{Object.values(EYES).length && c.id === 'eyes' && <p class="locked">{Object.values(EYES).map((e) => `${e.jp} ${e.name}`).join(' · ')}</p>}</>; })()}</article>
             </div>
           )}
           {tab === 'map' && <NavMap game={game} />}
         </div>
-        <footer><div class="kbd-hint"><span><kbd>Esc</kbd> resume</span><span><kbd>Tab</kbd> workshop</span><span><kbd>M</kbd> map</span></div><button class="btn" onClick={back}>{fromTitle ? 'Back' : 'Resume'}</button></footer>
+        <footer><div class="kbd-hint"><span><kbd>{keyLabel('pause')}</kbd> resume</span><span><kbd>{keyLabel('workshop')}</kbd> workshop</span><span><kbd>{keyLabel('map')}</kbd> map</span></div><button class="btn" onClick={back}>{fromTitle ? 'Back' : 'Resume'}</button></footer>
       </div>
     </div>
   );

@@ -1,4 +1,6 @@
-import { type Pact, type Clause, type Param, type AbilitySlot } from './schema';
+import { type Pact, type Clause, type Param } from './schema';
+import { slotDef, type AbilitySlot } from './slots';
+import { keyPhrase } from '../app/keymap';
 import { describe } from './resolve';
 
 // The terms as the universe reads them, built from the parsed Pact and
@@ -7,13 +9,18 @@ import { describe } from './resolve';
 export type Focus = { kind: 'key' } | { kind: 'grant' } | { kind: 'term'; param: Param } | { kind: 'clause'; index: number };
 export interface Segment { text: string; focus?: Focus }
 
-export const KEY_WORDS: Record<AbilitySlot, string> = { primary: 'left click', secondary: 'right click', max: 'Q, Maximum Output', passive: 'no key, always' };
+// The key a slot is on, as a sentence names it. It follows the current binding.
+export function slotWords(slot: AbilitySlot): string {
+  if (slot === 'passive') return 'no key, always';
+  const role = slotDef(slot).role;
+  return role ? `${keyPhrase(slot)}, ${role}` : keyPhrase(slot);
+}
 
 export function readbackSegments(pact: Pact, shapeLabel: (shape: string) => string, behaviorLabel: (b: string) => string): Segment[] {
   const out: Segment[] = [];
   const restrict = pact.clauses.filter((c): c is Extract<Clause, { kind: 'restrict' }> => c.kind === 'restrict');
   const behaviors = (pact.grant.behaviors ?? []).map(behaviorLabel).filter(Boolean);
-  out.push({ text: `"${pact.name}" on ` }, { text: KEY_WORDS[pact.slot], focus: { kind: 'key' } }, { text: ' ' });
+  out.push({ text: `"${pact.name}" on ` }, { text: slotWords(pact.slot), focus: { kind: 'key' } }, { text: ' ' });
   out.push({ text: shapeLabel(pact.grant.shape) + (behaviors.length ? `, and ${joinAnd(behaviors)}` : ''), focus: { kind: 'grant' } });
   out.push({ text: '. ' });
   if (restrict.length) {

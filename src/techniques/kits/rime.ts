@@ -70,9 +70,9 @@ export const rime: TechniqueKit = {
   primitive: { name: 'Rime', short: 'frost what you touch', description: 'Frost whatever water your nails touch. Imprecise, and it takes the heat out of your hands.' },
   parameters: ['direction', 'range', 'target', 'trigger', 'duration', 'resource', 'body'],
   shapes: {
-    icebreak: { label: 'drives a ridge of ice spikes along the wet ground', short: 'ice ridge along the ground', slot: ['primary'], description: 'A growing ridge that advances along the ground.' },
-    coldStitch: { label: 'freezes the area at the aim and pins what stands in it', short: 'freeze the area you aim at', slot: ['secondary'], description: 'Freeze a patch at distance.' },
-    tenfold: { label: 'opens all ten nail beds at once into a glacier', short: 'a wide glacier around you', slot: ['max'], description: 'A wide frost field. You cannot move while it spreads.' },
+    icebreak: { label: 'drives a ridge of ice spikes along the wet ground', short: 'ice ridge along the ground', kinds: ['primary'], description: 'A growing ridge that advances along the ground.' },
+    coldStitch: { label: 'freezes the area at the aim and pins what stands in it', short: 'freeze the area you aim at', kinds: ['secondary'], description: 'Freeze a patch at distance.' },
+    tenfold: { label: 'opens all ten nail beds at once into a glacier', short: 'a wide glacier around you', kinds: ['max'], description: 'A wide frost field. You cannot move while it spreads.' },
   },
   behaviors: { pin: 'what it freezes stays frozen in place', bridge: 'freezes canal water into a walkable platform', sharp: 'spikes cut deeper' },
   catalogue,
@@ -81,7 +81,7 @@ export const rime: TechniqueKit = {
     secondary: gestureSet(0.6, 0.26, [{ t: 0, right: 'clawReady', slow: true }, { t: 0.2, right: 'clawReach', snap: true, camera: { fov: 4 } }, { t: 0.45, right: 'rest' }]),
     max: gestureSet(2.3, 1.7, [{ t: 0, right: 'clawReady', left: 'clawReady', slow: true }, { t: 0.8, right: 'raiseHigh', left: 'raiseHigh', slow: true }, { t: 1.6, right: 'slamDown', left: 'slamDown', snap: true, camera: { fov: 14, pitch: 0.06 } }, { t: 2.1, right: 'rest', left: 'rest' }]),
   },
-  avatarClips: { primary: 'Sword_Attack', secondary: 'Spell_Simple_Shoot', max: 'Spell_Simple_Enter', passive: 'Idle_Loop' },
+  avatarClips: { primary: 'Sword_Attack', secondary: 'Spell_Simple_Shoot', max: 'Spell_Simple_Enter' },
   traits: {
     freezable: (prop, ctx) => freezeProp(ctx, prop, 6),
   },
@@ -131,5 +131,5 @@ export const rime: TechniqueKit = {
       if (game.techniques.resource < 1 && game.techniques.casting) game.combat.hurtPlayer(dt * 6, { self: true });
     },
   },
-  audio: { primary: { cast: 'impactGlass_light_000', volume: 0.4, pitch: 0.8 }, secondary: { cast: 'highUp', volume: 0.3, pitch: 1.3 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 1.1 }, passive: { cast: 'tick_001' } },
+  audio: { primary: { cast: 'impactGlass_light_000', volume: 0.4, pitch: 0.8 }, secondary: { cast: 'highUp', volume: 0.3, pitch: 1.3 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 1.1 } },
 };

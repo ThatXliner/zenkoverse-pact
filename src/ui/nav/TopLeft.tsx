@@ -3,8 +3,9 @@ import { settings } from '../../app/settings';
 import { KITS, techUi } from '../../techniques/techniques';
 import { MASTERY_STATS, MASTERY_CONFIG } from '../../mastery/mastery';
 import { navUi } from '../../nav/navigation';
+import { keyLabel } from '../../app/keymap';
 
-const KEYS = [['V', 'camera'], ['Tab', 'workshop'], ['M', 'map'], ['R', 'wager'], ['F', 'aura'], ['Esc', 'menu']] as const;
+const KEYS = [['camera', 'camera'], ['workshop', 'workshop'], ['map', 'map'], ['wager', 'wager'], ['aura', 'aura'], ['pause', 'menu']] as const;
 const SOURCE = { goal: 'Goal', tutorial: 'Tutorial', pin: 'Pin' } as const;
 
 // The one column in the top-left corner: what you are tracking, then the
@@ -27,8 +28,8 @@ export function TopLeft({ game }: { game: Game }) {
       )}
       {s.showMastery && (
         <div class="hint">
-          <span>{kit.name} · {sign}{s.fullSignHold ? ' · Alt holds the full sign' : ''}</span>
-          <span class="keys">{KEYS.map(([k, what]) => <span key={k}><b>{k}</b> {what}</span>)}</span>
+          <span>{kit.name} · {sign}{s.fullSignHold ? ` · ${keyLabel('fullsign')} holds the full sign` : ''}</span>
+          <span class="keys">{KEYS.map(([action, what]) => <span key={action}><b>{keyLabel(action)}</b> {what}</span>)}</span>
           {MASTERY_CONFIG.showNumbers && <div class="mastery">{MASTERY_STATS.map((st) => <span key={st}>{st} <b>{Math.round(mast[st] * 100)}</b></span>)}</div>}
         </div>
       )}

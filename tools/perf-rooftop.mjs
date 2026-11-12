@@ -5,21 +5,12 @@
 // with the frame limiter off, so the number shows the headroom and not only
 // the 60 fps cap. The street at the market is measured the same way for
 // comparison.
-// Usage: node tools/perf-rooftop.mjs [--url http://localhost:4173/] [--port 4173]
+// Usage: node tools/perf-rooftop.mjs [url] [--url http://localhost:4173/] [--port 4173]
 import { chromium } from 'playwright';
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { resolveTarget } from './lib/target.mjs';
 
-const args = Object.fromEntries(process.argv.slice(2).map((a, i, all) => (a.startsWith('--') ? [a.slice(2), all[i + 1]?.startsWith('--') || all[i + 1] === undefined ? 'true' : all[i + 1]] : [])).filter((x) => x.length));
-let server = null;
-let url = args.url;
-if (!url) {
-  if (!existsSync('dist/index.html')) throw new Error('dist/ missing: run npm run build first');
-  const port = args.port ?? '4173';
-  server = spawn('npx', ['vite', 'preview', '--port', port, '--strictPort'], { stdio: 'ignore' });
-  await new Promise((r) => setTimeout(r, 1800));
-  url = `http://localhost:${port}/`;
-}
+const { url, args, stop } = await resolveTarget();
+
 
 const measure = (page, label) => page.evaluate(async (label) => {
   const g = window.game;
@@ -62,4 +53,4 @@ for (const uncapped of [false, true]) {
   if (errs.length) console.log('errors', errs.slice(0, 5));
   await browser.close();
 }
-server?.kill();
+stop();

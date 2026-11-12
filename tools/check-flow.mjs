@@ -3,27 +3,19 @@
 // title, Technique select, the Workshop, inscribing, the dummy room, and the
 // tutorial's Pact step. Times the 30-second test from issue #29 ("Absorption,
 // only from the front, while held") and fails on any page error.
-// Usage: node tools/check-flow.mjs [--url http://localhost:4173/] [--out captures/flow] [--port 4173]
-// Without --url it serves dist/ itself (run `npm run build` first). The
+// Usage: node tools/check-flow.mjs [url] [--url http://localhost:4173/] [--out captures/flow] [--port 4173]
+// Without a URL it serves dist/ itself (run `npm run build` first). The
 // `?debug` hooks are used only to read state and to skip walking.
 import { chromium } from 'playwright';
-import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { resolveTarget } from './lib/target.mjs';
 
-const args = Object.fromEntries(process.argv.slice(2).map((a, i, all) => (a.startsWith('--') ? [a.slice(2), all[i + 1]?.startsWith('--') || all[i + 1] === undefined ? 'true' : all[i + 1]] : [])).filter((x) => x.length));
+const { url, args, stop } = await resolveTarget();
+
 const out = args.out ?? 'captures/flow';
 mkdirSync(out, { recursive: true });
 
-let server = null;
-let url = args.url ?? process.argv.slice(2).find((a) => /^https?:/.test(a));
-if (!url) {
-  if (!existsSync('dist/index.html')) throw new Error('dist/ missing: run npm run build first');
-  const port = args.port ?? '4173';
-  server = spawn('npx', ['vite', 'preview', '--port', port, '--strictPort'], { stdio: 'ignore' });
-  await new Promise((r) => setTimeout(r, 1800));
-  url = `http://localhost:${port}/`;
-}
 
 const browser = await chromium.launch({ channel: 'chrome', args: ['--use-angle=metal', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
@@ -189,5 +181,5 @@ writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 2));
 console.log(`\n30-second test: ${seconds.toFixed(1)} s, ${clicks} clicks. ${failures.length} failures, ${errors.length} page errors -> ${join(out, 'report.json')}`);
 for (const e of errors.slice(0, 20)) console.log('  ERROR', e);
 await browser.close();
-server?.kill();
+stop();
 process.exit(failures.length || errors.length ? 1 : 0);

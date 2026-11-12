@@ -58,7 +58,7 @@ const bookState = () => page.evaluate(() => { const b = window.game.game.book; r
 const family = (tag) => (tag === 'body:noMove' ? 'trigger:still' : tag);
 
 async function readOffers(label) {
-  const cards = await page.locator('.rt-offer').evaluateAll((els) => els.map((e) => ({ id: e.dataset.pact, slot: e.dataset.slot, tags: e.dataset.tags.split(',').filter(Boolean), text: e.querySelector('.rt-read').textContent, name: e.querySelector('h3').textContent })));
+  const cards = await page.locator('.rt-offer').evaluateAll((els) => els.map((e) => ({ id: e.dataset.pact, slot: e.dataset.slot, tags: e.dataset.tags.split(',').filter(Boolean), text: e.querySelector('.rt-read').textContent, name: e.querySelector('h3').textContent, foot: e.querySelector('.rt-foot i').textContent })));
   const valid = await page.evaluate(() => window.game.rooftop.offers());
   check(cards.length === 3, `${label}: three Pacts are offered`);
   check(valid.length === cards.length && valid.every((v) => v.valid), `${label}: every offer is valid in the Pact schema`);
@@ -322,6 +322,9 @@ console.log('\noffers across every run');
 const tagsSeen = new Set(offered.flatMap((o) => o.tags));
 check(offered.length >= 3 * 7 * 2, `${offered.length} offers were inspected`);
 check(tagsSeen.size >= 8, `the offers drew on ${tagsSeen.size} different sacrifices`);
+const adds = offered.filter((o) => /^art[1-4]$/.test(o.slot));
+check(adds.length > 0 && adds.every((o) => /^Adds to [1-4]\.$/.test(o.foot)), `${adds.length} offers add a Pact on an empty extra slot and say so ("${adds[0]?.foot}")`);
+check(offered.filter((o) => !/^art/.test(o.slot)).every((o) => !/^Adds to/.test(o.foot)), 'an offer that takes a main key never claims to add');
 
 const pageErrors = await page.evaluate(() => window.game.errors);
 errors.push(...pageErrors.map((e) => `window: ${e}`));

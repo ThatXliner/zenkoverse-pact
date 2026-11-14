@@ -22,6 +22,9 @@ export type CharacterModel = keyof typeof LOOKS;
 const SKIN: Record<Look['skin'], number> = { light: 0xf7d9bf, warm: 0xe2b58f, dark: 0x9a6744 };
 const EYE_WHITE = 0xf8f6f2;
 
+export type Stance = 'push' | 'hold' | 'feint';
+const STANCES: Stance[] = ['push', 'hold', 'feint'];
+
 export type Locomotion = 'idle' | 'walk' | 'run' | 'sprint' | 'air' | 'land' | 'dead';
 
 // Backing up is the walk and jog clips played in reverse, not a clip of its own.
@@ -261,6 +264,61 @@ export class Avatar {
     }
   }
 
+  // A clash stance (src/combat/clash.ts), read from the whole body because a
+  // robe hides the legs, and shaped to read in profile from the side-on clash
+  // shot: a push leans in with both palms driven out level at the opponent;
+  // a hold settles back and low with the forearms crossed before the chest;
+  // a feint darts half in and out again, the chest turned away and the rear
+  // arm swept back. Null is the clip's own pose.
+  stance: Stance | null = null;
+  private stanceAmt: Record<Stance, number> = { push: 0, hold: 0, feint: 0 };
+  private stanceT = 0;
+
+  private applyStance(dt: number): void {
+    this.stanceT += dt;
+    let any = false;
+    for (const k of STANCES) {
+      const want = this.stance === k ? 1 : 0;
+      this.stanceAmt[k] += (want - this.stanceAmt[k]) * (1 - Math.exp(-(want ? 10 : 7) * dt));
+      if (this.stanceAmt[k] > 0.002) any = true;
+    }
+    if (!any) return;
+    const { push, hold, feint } = this.stanceAmt;
+    const rootQ = this.root.getWorldQuaternion(new THREE.Quaternion());
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(rootQ);
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(rootQ);
+    // The feint's dart: in toward the opponent and straight back out.
+    const dart = Math.max(0, Math.sin(this.stanceT * 9));
+    this.root.position.addScaledVector(fwd, push * 0.3 - hold * 0.08 + feint * (dart * 0.26 - 0.06));
+    this.root.position.y -= hold * 0.07;
+    this.model.updateMatrixWorld(true);
+    for (const sp of SPINE) {
+      // Negative about the right axis leans forward.
+      this.rotateAbout(sp, right, -push * 0.11 + hold * 0.06 + feint * (0.08 - dart * 0.1));
+      this.rotateAbout(sp, UP, feint * 0.16);
+    }
+    this.rotateAbout('Head', right, push * 0.3 - hold * 0.2);
+    this.rotateAbout('Head', UP, -feint * 0.35);
+    for (const [side, m] of [['r', 1], ['l', -1]] as const) {
+      const arm = `upperarm_${side}`, fore = `lowerarm_${side}`;
+      // Both palms driven out level at the opponent.
+      this.rotateAbout(arm, right, push * 1.2);
+      this.rotateAbout(arm, UP, m * push * 0.2);
+      this.rotateAbout(fore, UP, m * push * -0.2);
+      this.rotateAbout(fore, right, push * -0.35);
+      // Forearms crossed in an X before the chest.
+      this.rotateAbout(arm, right, hold * 0.55);
+      this.rotateAbout(arm, UP, m * hold * 0.75);
+      this.rotateAbout(fore, UP, m * hold * 1.7);
+      this.rotateAbout(fore, right, hold * 0.6);
+    }
+    // The rear arm swept back behind her, the lead hand up as a lure.
+    this.rotateAbout('upperarm_l', right, -feint * 1.1);
+    this.rotateAbout('upperarm_l', fwd, feint * 0.35);
+    this.rotateAbout('upperarm_r', right, feint * 1.1);
+    this.rotateAbout('lowerarm_r', right, feint * 0.6);
+  }
+
   flash(intensity: number): void { this.flashT = intensity; }
 
   update(dt: number): void {
@@ -281,6 +339,7 @@ export class Avatar {
       this.rotateAbout('spine_03', right, this.aimPitch * 0.25);
       this.rotateAbout('Head', right, this.aimPitch * 0.35);
       this.applySeal(dt);
+      this.applyStance(dt);
     }
     this.flashT *= Math.exp(-12 * dt);
     for (const m of this.materials) m.emissive.setScalar(this.flashT * 0.8);

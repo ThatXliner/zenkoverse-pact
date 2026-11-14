@@ -9,6 +9,13 @@
 // through (Recoil's brace, Echo's quiet, the Horizon Eye: rules that live in
 // the victim's Technique state), applies the result exactly once, and owns
 // downs, respawns and the score. Movement is relayed at a fixed tick.
+//
+// Physics props (issue #58): each moving prop is simulated by one client, its
+// owner, and the others follow the poses it streams. The server decides who
+// owns what (the last claim it hears wins, and a client that leaves or goes
+// quiet lets go of everything it held), relays only the owner's poses, keeps
+// each prop's health so a prop breaks once for the whole room, and remembers
+// where props came to rest for whoever joins later.
 import { WebSocketServer } from 'ws';
 import rules from '../src/net/rules.json' with { type: 'json' };
 import { ClashReferee, isPick } from '../src/net/clash.js';
@@ -21,12 +28,26 @@ const HITS_PER_SECOND = 40;
 const MESSAGES_PER_SECOND = 120;
 const MAX_CONNECTIONS = 128;
 const MAX_ROOMS = 32;
+// Props: the compound has a few dozen. Bounds on what a room tracks and on
+// what one client may send.
+const MAX_PROPS = 512;
+const MAX_PROP_ID = 4095;
+const PROP_ENTRIES = 64;
+const PROP_HITS_PER_SECOND = 40;
+const ICE_EVERY_MS = 500;
+const PROP_REST = 1, PROP_CLAIM = 4;
 
 const cleanRoom = (s) => (String(s ?? '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24) || rules.defaultRoom);
 const cleanName = (s) => (String(s ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 20) || 'Student');
 const num = (x, lo, hi) => (Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : lo);
 const vec = (v) => (Array.isArray(v) && v.length === 3 && v.every(Number.isFinite) ? v : null);
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+const propId = (x) => (Number.isInteger(x) && x >= 0 && x <= MAX_PROP_ID ? x : null);
+// One prop pose as src/net/protocol.ts describes it, bounded, or null.
+function propWire(e) {
+  if (!Array.isArray(e) || e.length !== 13 || !e.every(Number.isFinite) || propId(e[0]) === null) return null;
+  return [e[0], num(e[1], -500, 500), num(e[2], -500, 500), num(e[3], -500, 500), num(e[4], -1, 1), num(e[5], -1, 1), num(e[6], -1, 1), num(e[7], -1, 1), num(e[8], -60, 60), num(e[9], -60, 60), num(e[10], -60, 60), e[11] & (PROP_REST | PROP_CLAIM), num(e[12], 0, 30)];
+}
 
 export function attachRealtime(httpServer, { latency = 0, log = console.log } = {}) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
@@ -57,7 +78,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
     let room = rooms.get(code);
     if (!room) {
       if (rooms.size >= MAX_ROOMS) return null;
-      room = { code, players: new Map(), pending: new Map(), clashes: new Map(), timer: null };
+      room = { code, players: new Map(), pending: new Map(), clashes: new Map(), timer: null, propOwner: new Map(), propRest: new Map(), propHp: new Map(), broken: new Set() };
       room.timer = setInterval(() => tick(room), TICK_MS);
       rooms.set(code, room);
     }
@@ -184,6 +205,24 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
     broadcast(room, { type: 'clash', id, a: c.a, b: c.b });
   }
 
+  // Who owns which prop changes: everyone hears it, in the server's order.
+  function setOwner(room, prop, owner) {
+    if (owner === null) { if (!room.propOwner.delete(prop)) return; }
+    else room.propOwner.set(prop, owner);
+    broadcast(room, { type: 'prop-owner', prop, owner });
+  }
+  // A client that left or went quiet (a background tab sends nothing) hands
+  // its props to someone still playing, who carries on simulating them from
+  // the poses everyone last saw, so they still come to rest as one. With
+  // nobody else playing, they fall where they are.
+  function releaseProps(room, p) {
+    const now = Date.now();
+    let heir = null;
+    for (const q of present(room)) if (q !== p && now - q.stateAt <= AWAY_MS && (!heir || q.id < heir.id)) heir = q;
+    for (const [prop, o] of room.propOwner) if (o === p.id) setOwner(room, prop, heir?.id ?? null);
+  }
+  const propSnapshot = (room) => ({ rest: [...room.propRest.values()], broken: [...room.broken], owners: [...room.propOwner] });
+
   function tick(room) {
     const now = Date.now();
     for (const [id, h] of room.pending) {
@@ -196,6 +235,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
     }
     for (const p of room.players.values()) {
       if (p.down && now >= p.respawnAt && p.ws) respawn(room, p);
+      if (now - p.stateAt > AWAY_MS) releaseProps(room, p);
       if (!p.ws && now - p.leftAt > rules.reconnectGraceSeconds * 1000) room.players.delete(p.id);
     }
     for (const c of room.clashes.values()) for (const ev of c.ref.step(now)) clashStep(room, c, ev);
@@ -221,7 +261,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
         if (absent) room.players.delete(absent.id);
       }
       if (present(room).length >= rules.maxPlayers || freeSlot(room) < 0) { send(ws, { type: 'full', room: code, max: rules.maxPlayers }); return null; }
-      p = { id: nextId++, token, slot: freeSlot(room), hp: rules.maxHp, down: false, kills: 0, downs: 0, state: null, fresh: [], stateAt: 0, protectUntil: 0, respawnAt: 0, leftAt: 0, bucket: HITS_PER_SECOND, bucketAt: Date.now(), seen: new Set(), clash: null, clashAt: 0, max: null, maxAt: -Infinity };
+      p = { id: nextId++, token, slot: freeSlot(room), hp: rules.maxHp, down: false, kills: 0, downs: 0, state: null, fresh: [], stateAt: 0, protectUntil: 0, respawnAt: 0, leftAt: 0, bucket: HITS_PER_SECOND, bucketAt: Date.now(), seen: new Set(), clash: null, clashAt: 0, propBucket: PROP_HITS_PER_SECOND, propBucketAt: Date.now(), iceAt: 0, max: null, maxAt: -Infinity };
       room.players.set(p.id, p);
     }
     p.ws = ws;
@@ -230,7 +270,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
     p.stateAt = Date.now();
     const spawn = p.state && !p.down ? p.state.p : spawnPoint(room, p);
     if (!p.state) { p.protectUntil = Date.now() + rules.spawnProtectSeconds * 1000; p.state = { ct: 0, p: spawn, v: [0, 0, 0], yaw: 0, pitch: 0, g: true, sign: 0, cine: false }; }
-    send(ws, { type: 'welcome', id: p.id, room: code, you: info(p), players: present(room).filter((o) => o !== p).map(info), spawn, t: Date.now() });
+    send(ws, { type: 'welcome', id: p.id, room: code, you: info(p), players: present(room).filter((o) => o !== p).map(info), spawn, t: Date.now(), props: propSnapshot(room) });
     broadcast(room, { type: 'join', player: info(p) }, p);
     log(`[rt] ${p.name} (#${p.id}) joined ${code}: ${present(room).length}/${rules.maxPlayers}`);
     return { room, p };
@@ -245,6 +285,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
     p.leftAt = Date.now();
     if (chose) room.players.delete(p.id);
     for (const [id, h] of room.pending) if (h.by === p.id) room.pending.delete(id);
+    releaseProps(room, p);
     endMax(room, p);
     // Leaving mid-clash loses it.
     const c = p.clash !== null ? room.clashes.get(p.clash) : null;
@@ -334,6 +375,53 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
         if (!c || c.id !== Number(m.id) || c.ref.round !== Number(m.round) || !isPick(m.pick)) return;
         if (!c.ref.pick(c.a === p.id ? 0 : 1, m.pick, now)) return;
         for (const ev of c.ref.step(now)) clashStep(room, c, ev);
+        return;
+      }
+      case 'props': {
+        // Poses from the prop's owner are relayed; a claim makes the sender
+        // the owner; a rest entry sets the prop down and frees it.
+        if (!Array.isArray(m.s) || m.s.length > PROP_ENTRIES) return;
+        const out = [];
+        for (const e of m.s) {
+          const w = propWire(e);
+          if (!w || room.broken.has(w[0])) continue;
+          const id = w[0];
+          if (room.propOwner.get(id) !== p.id) {
+            if (!(w[11] & PROP_CLAIM) || (!room.propOwner.has(id) && room.propOwner.size >= MAX_PROPS)) continue;
+            setOwner(room, id, p.id);
+          }
+          if (w[11] & PROP_REST) {
+            setOwner(room, id, null);
+            if (room.propRest.has(id) || room.propRest.size < MAX_PROPS) room.propRest.set(id, w);
+          }
+          out.push(w);
+        }
+        if (out.length) broadcast(room, { type: 'props', id: p.id, s: out }, p);
+        return;
+      }
+      case 'prop-hit': {
+        const id = propId(m.prop);
+        if (id === null || room.broken.has(id)) return;
+        p.propBucket = Math.min(PROP_HITS_PER_SECOND, p.propBucket + ((now - p.propBucketAt) / 1000) * PROP_HITS_PER_SECOND);
+        p.propBucketAt = now;
+        if (p.propBucket < 1) return;
+        p.propBucket--;
+        const amount = num(m.amount, 0, 1000);
+        if (amount <= 0 || (!room.propHp.has(id) && room.propHp.size >= MAX_PROPS)) return;
+        const hp = (room.propHp.get(id) ?? num(m.max, 1, 1000)) - amount;
+        if (hp > 0) { room.propHp.set(id, hp); return; }
+        room.propHp.delete(id);
+        room.propRest.delete(id);
+        room.propOwner.delete(id);
+        if (room.broken.size < MAX_PROPS) room.broken.add(id);
+        broadcast(room, { type: 'prop-break', prop: id, by: p.id, from: vec(m.from) ?? p.state?.p ?? [0, 0, 0] });
+        return;
+      }
+      case 'ice': {
+        const secs = num(m.s, 0, 20);
+        if (secs <= 0 || now - p.iceAt < ICE_EVERY_MS) return;
+        p.iceAt = now;
+        broadcast(room, { type: 'ice', id: p.id, s: secs }, p);
         return;
       }
       case 'ping':

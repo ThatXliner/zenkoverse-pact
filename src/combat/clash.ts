@@ -5,6 +5,7 @@ import { banner } from '../app/game';
 import { uiBlocksInput } from '../app/state';
 import type { Enemy } from './enemies';
 import type { RemotePlayer } from '../net/remote';
+import type { Avatar } from '../character/avatar';
 import { ClashReferee, PICKS, type ClashEvent, type Pick, type Side } from '../net/clash';
 import { RULES } from '../net/protocol';
 import { AURA } from './field';
@@ -16,8 +17,10 @@ import { ClashSeam } from './fieldView';
 // two of them. The world keeps running at full speed for everyone else.
 //
 // The exchanges are the rules in src/net/clash.js. Against the Master the
-// browser runs the referee, and she picks with a tell: she leans in before a
-// push, roots before a hold, and her field flickers before a feint. Against
+// browser runs the referee, and she picks with a tell her whole body shows
+// (Avatar.stance): she leans in with both palms out before a push, settles
+// back with her forearms crossed before a hold, and twists away with an arm
+// flung wide before a feint, while her field bulges, draws tight or flickers. Against
 // another player the server runs it, and both screens play the events it
 // sends, so they agree on every pick and on the winner.
 //
@@ -54,11 +57,10 @@ export const PICK_WORDS: Record<Pick, { jp: string; en: string }> = {
 };
 // What the Master's body does before each pick, in words for the screen.
 export const TELL_WORDS: Record<Pick, string> = {
-  push: 'She leans in. Her field swells toward you.',
-  hold: 'She roots her stance. Her field draws tight.',
-  feint: 'Her far side flickers thin.',
+  push: 'She leans in, palms out. Her field swells toward you.',
+  hold: 'She settles back, arms crossed. Her field draws tight.',
+  feint: 'She darts in and out, one hand high. Her far side flickers thin.',
 };
-const PICK_CLIP: Record<Pick, string> = { push: 'Punch_Cross', hold: 'Spell_Simple_Enter', feint: 'Spell_Simple_Exit' };
 // The Master shows her pick this long after an exchange opens; later in the last.
 const TELL_AFTER = [0.3, 0.32, 0.45];
 const OUTRO = 0.9;
@@ -195,6 +197,7 @@ export class Clash {
     };
   }
 
+  private opponentAvatar(o: Opponent): Avatar { return o.kind === 'master' ? o.enemy.avatar : o.remote.avatar; }
   private opponentFeet(o: Opponent): THREE.Vector3 { return o.kind === 'master' ? o.enemy.position : o.remote.position; }
   private opponentField(o: Opponent): { radius: number; color: THREE.Color } {
     if (o.kind === 'master') return { radius: o.enemy.field?.radius ?? 0, color: new THREE.Color(o.enemy.def.emissive ?? 0x7dffb2) };
@@ -208,7 +211,7 @@ export class Clash {
     if (r.referee) { if (!r.referee.pick(r.me, pick, r.ms)) return; }
     else g.net?.clashPick(r.id!, r.round, pick);
     r.mine = pick;
-    g.avatar.playUpper(PICK_CLIP[pick], 1.4);
+    g.avatar.stance = pick;
     g.audio.play('click_003', 0.5, pick === 'push' ? 0.8 : pick === 'hold' ? 0.6 : 1.1);
     this.publish();
   }
@@ -221,6 +224,8 @@ export class Clash {
       r.round = ev.round;
       r.mine = r.theirs = r.tell = null;
       r.took = null;
+      g.avatar.stance = null;
+      this.opponentAvatar(r.opp).stance = null;
       r.window = ev.ms;
       r.closes = performance.now() + ev.ms;
       r.tellAt = r.opp.kind === 'master' ? r.t + (TELL_AFTER[ev.round - 1] ?? 0.4) : Infinity;
@@ -238,7 +243,8 @@ export class Clash {
       g.cam.shake(r.took === 'none' ? 0.15 : 0.35);
       g.cam.kick({ fov: r.took === 'me' ? -5 : 4 });
       g.audio.play(r.took === 'none' ? 'impactGlass_light_000' : 'impactBell_heavy_000', 0.6, r.took === 'me' ? 1.15 : 0.75);
-      if (r.opp.kind === 'player') r.opp.remote.avatar.playUpper(PICK_CLIP[r.theirs], 1.4);
+      g.avatar.stance = r.mine;
+      this.opponentAvatar(r.opp).stance = r.theirs;
       this.showTell(null);
     } else {
       const winner = ev.winner === null ? null : ev.winner === r.me ? 'me' : 'them';
@@ -300,6 +306,8 @@ export class Clash {
     const g = this.game;
     g.cam.release(0.45);
     this.seam.hide();
+    g.avatar.stance = null;
+    this.opponentAvatar(r.opp).stance = null;
     if (r.opp.kind === 'master') {
       const e = r.opp.enemy;
       e.hold(r.result === 'won' ? AURA.guardBreak.stun * 1.5 : 0);
@@ -326,6 +334,12 @@ export class Clash {
     g.player.velocity.set(0, Math.min(0, g.player.velocity.y), 0);
     g.combat.invuln = Math.max(g.combat.invuln, 0.25);
     if (r.opp.kind === 'master' && !r.opp.enemy.alive) { this.cancel(); return; }
+    // She is held in place for the clash, so she turns to face the player here.
+    if (r.opp.kind === 'master') {
+      const e = r.opp.enemy, d = g.player.position.clone().sub(e.position);
+      const turn = Math.atan2(-d.x, -d.z) - e.yaw;
+      e.yaw += Math.atan2(Math.sin(turn), Math.cos(turn)) * (1 - Math.exp(-10 * raw));
+    }
     if (r.opp.kind === 'player' && r.opp.remote.disposed && r.stage !== 'over') { this.cancel(); return; }
 
     if (r.stage === 'choose' && !r.mine && !uiBlocksInput.value) {
@@ -339,7 +353,7 @@ export class Clash {
       r.tell = pick;
       r.lastMasterPicks.push(pick);
       r.referee!.pick(r.me === 0 ? 1 : 0, pick, r.ms);
-      r.opp.enemy.avatar.playUpper(PICK_CLIP[pick], 1.2);
+      r.opp.enemy.avatar.stance = pick;
       this.showTell(pick);
       g.audio.play(pick === 'push' ? 'phaserUp3' : pick === 'hold' ? 'impactSoft_heavy_001' : 'glitch_001', 0.35, pick === 'feint' ? 1.4 : 0.7);
       this.publish();

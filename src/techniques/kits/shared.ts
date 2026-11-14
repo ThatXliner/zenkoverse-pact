@@ -62,23 +62,30 @@ export function shoveProps(ctx: AbilityContext, props: PropInstance[], impulse: 
   for (const p of props) {
     const dir = p.mesh.position.clone().sub(ctx.origin).normalize().lerp(ctx.dir, 0.5).normalize();
     dir.y += lift;
-    p.body.wakeUp();
-    p.body.applyImpulse(dir.multiplyScalar(impulse * p.def.mass), true);
-    p.body.applyTorqueImpulse({ x: (Math.random() - 0.5) * impulse * 0.4, y: (Math.random() - 0.5) * impulse * 0.4, z: (Math.random() - 0.5) * impulse * 0.4 }, true);
+    ctx.game.props.push(p, dir.multiplyScalar(impulse * p.def.mass), new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(impulse * 0.4));
     damageProp(ctx.game, p, impulse * 2.5, ctx.origin);
     n++;
   }
   return n;
 }
 
+// Online the server keeps every prop's health, so a crate two players hit
+// breaks once, on every screen, when the room's blows add up.
 export function damageProp(g: Game, p: PropInstance, amount: number, from?: THREE.Vector3): void {
   if (!p.def.breakable || !p.alive) return;
+  if (g.net?.connected) { g.net.props.hit(p, amount, from); return; }
   p.hp -= amount;
   if (p.hp <= 0) breakProp(g, p, from);
 }
 
-// Pre-broken pieces: debris of the prop's material fanning from the hit.
 export function breakProp(g: Game, p: PropInstance, from?: THREE.Vector3): void {
+  if (!p.alive) return;
+  if (g.net?.connected) { g.net.props.hit(p, Infinity, from); return; }
+  shatterProp(g, p, from);
+}
+
+// Pre-broken pieces: debris of the prop's material fanning from the hit.
+export function shatterProp(g: Game, p: PropInstance, from?: THREE.Vector3): void {
   if (!p.alive) return;
   const c = p.mesh.position.clone();
   const dir = from ? c.clone().sub(from).setY(0.3).normalize() : undefined;

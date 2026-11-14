@@ -22,6 +22,13 @@ export const auraUi = {
 
 type Owner = Enemy | RemotePlayer;
 
+// In a clash the side-on shot stands just outside or inside both fields, and
+// indoors a dome squashed under the ceiling fills the frame from there. The
+// two ground rings carry the boundaries and the tells; the domes keep only a
+// trace, and the paint inside each ring thins, so the two bodies read.
+const CLASH_DOME = 0.1;
+const CLASH_FILL = 0.35;
+
 // Aura Expansion on F (issue #4): the player's field, the fields of the
 // Master and of other players, what an open field does to the bodies in it,
 // and the clashes where two fields touch. The rules are in field.ts and
@@ -162,7 +169,7 @@ export class Aura {
       if (!view && radius > 0.05) { view = new FieldView(g.renderer.scene, this.colorOf(o)); this.views.set(o, view); }
       if (!view) continue;
       const zone = g.world.zoneAt(o.position);
-      view.draw(raw, g.clock.time, o.position, radius, density, { inside, dome: this.clash.active ? 0.3 : inside ? 0.5 : 0.9, ceiling: zone?.indoors ? zone.max.y - o.position.y : undefined });
+      view.draw(raw, g.clock.time, o.position, radius, density, { inside, dome: this.clash.active ? CLASH_DOME : inside ? 0.5 : 0.9, fill: this.clash.active ? CLASH_FILL : 1, ceiling: zone?.indoors ? zone.max.y - o.position.y : undefined });
     }
     for (const [o, v] of this.views) if (!owners.includes(o)) { v.dispose(); this.views.delete(o); }
     g.player.fieldScale = pressed;
@@ -172,7 +179,7 @@ export class Aura {
     const zone = g.world.zoneAt(me);
     this.mine.color = this.colorOf(null);
     if (this.lean > 0) this.mine.tell(null, this.leanTo);
-    this.mine.draw(raw, g.clock.time, me, this.field.radius, this.field.open ? this.field.density : 0.4, { inside: true, dome: this.clash.active ? 0.3 : g.cam.isFirst ? 0.5 : g.cam.isTop ? 0.6 : 0.85, ceiling: zone?.indoors ? zone.max.y - me.y : undefined, lean: this.lean });
+    this.mine.draw(raw, g.clock.time, me, this.field.radius, this.field.open ? this.field.density : 0.4, { inside: true, dome: this.clash.active ? CLASH_DOME : g.cam.isFirst ? 0.5 : g.cam.isTop ? 0.6 : 0.85, fill: this.clash.active ? CLASH_FILL : 1, ceiling: zone?.indoors ? zone.max.y - me.y : undefined, lean: this.lean });
     this.publish();
   }
 

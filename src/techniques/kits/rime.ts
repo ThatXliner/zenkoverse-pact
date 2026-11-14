@@ -33,9 +33,38 @@ const cutscene: CutsceneDef = {
 function freezeProp(ctx: { game: import('../../app/game').Game }, p: import('../../world/props').PropInstance, seconds: number): void {
   const g = ctx.game;
   if (!p.def.traits.includes('freezable') && !p.def.traits.includes('porous') && !p.def.traits.includes('wood')) return;
-  p.body.setBodyType(RAPIER.RigidBodyType.Fixed, true);
-  p.frozen = seconds;
+  g.props.freeze(p, seconds);
   g.vfx.patch(p.mesh.position.clone().setY(0), p.half.x * 1.6, 'frost', seconds);
+}
+
+// The pond's ice floor: one slab, held for as long as the longest freeze
+// on it lasts. Each freeze holds it for its own seconds; the last to end
+// (or the scene ending) takes it out.
+let pondIce: { holds: number; melt: () => void } | null = null;
+export function freezePond(g: import('../../app/game').Game, seconds: number): void {
+  let ice = pondIce;
+  if (!ice) {
+    const pond = g.world.pond;
+    const body = g.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(pond.center.x, pond.surfaceY - 0.1, pond.center.z));
+    g.physics.world.createCollider(RAPIER.ColliderDesc.cylinder(0.1, pond.radius + 0.4), body);
+    const slab = new THREE.Mesh(new THREE.CylinderGeometry(pond.radius + 0.4, pond.radius + 0.2, 0.2, 32), toon(0xdff6ff, { transparent: true, opacity: 0.9 }));
+    slab.position.set(pond.center.x, pond.surfaceY - 0.1, pond.center.z);
+    g.renderer.scene.add(slab);
+    const made = {
+      holds: 0,
+      melt: () => {
+        g.renderer.scene.remove(slab);
+        slab.geometry.dispose();
+        (slab.material as THREE.Material).dispose();
+        g.physics.world.removeRigidBody(body);
+        if (pondIce === made) pondIce = null;
+      },
+    };
+    ice = pondIce = made;
+  }
+  const held = ice;
+  held.holds++;
+  g.vfx.until(seconds, () => { if (--held.holds === 0) held.melt(); });
 }
 
 function freezeArea(g: import('../../app/game').Game, center: THREE.Vector3, radius: number, potency: number, pin: boolean, seconds: number): number {
@@ -57,17 +86,9 @@ function freezeArea(g: import('../../app/game').Game, center: THREE.Vector3, rad
   // a platform you can stand on until it thaws.
   const pond = g.world.pond;
   if (Math.hypot(center.x - pond.center.x, center.z - pond.center.z) < pond.radius + radius * 0.5 && center.y < pond.surfaceY + 1) {
-    const body = g.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(pond.center.x, pond.surfaceY - 0.1, pond.center.z));
-    g.physics.world.createCollider(RAPIER.ColliderDesc.cylinder(0.1, pond.radius + 0.4), body);
-    const slab = new THREE.Mesh(new THREE.CylinderGeometry(pond.radius + 0.4, pond.radius + 0.2, 0.2, 32), toon(0xdff6ff, { transparent: true, opacity: 0.9 }));
-    slab.position.set(pond.center.x, pond.surfaceY - 0.1, pond.center.z);
-    g.renderer.scene.add(slab);
-    g.vfx.until(seconds + 4, () => {
-      g.renderer.scene.remove(slab);
-      slab.geometry.dispose();
-      (slab.material as THREE.Material).dispose();
-      g.physics.world.removeRigidBody(body);
-    });
+    freezePond(g, seconds + 4);
+    // Online the floor is in everyone's world, so anyone can stand on it.
+    g.net?.ice(seconds + 4);
   }
   g.vfx.burst(center.clone().add(new THREE.Vector3(0, 0.3, 0)), 12, 'shard', 5);
   g.audio.play('impactGlass_medium_000', 0.7, 0.9);
@@ -120,7 +141,7 @@ export const rime: TechniqueKit = {
           at.y = start.y;
           g.vfx.after(i * 0.055, () => { g.vfx.iceSpike(at, 0.8 + i * 0.25 * ctx.potency, 7); g.vfx.patch(at, 0.9, 'frost', 8); if (i % 2 === 0) g.audio.play('impactGlass_light_000', 0.4, 1.1 - i * 0.05); });
         }
-        for (const p of propsInCone(g, ctx.origin, flat, range, 0.3)) { p.body.wakeUp(); p.body.applyImpulse(new THREE.Vector3(flat.x, 1.5, flat.z).multiplyScalar(p.def.mass * 3), true); if (ctx.behaviors.includes('pin')) freezeProp(ctx, p, 5); }
+        for (const p of propsInCone(g, ctx.origin, flat, range, 0.3)) { g.props.push(p, new THREE.Vector3(flat.x, 1.5, flat.z).multiplyScalar(p.def.mass * 3)); if (ctx.behaviors.includes('pin')) freezeProp(ctx, p, 5); }
         g.audio.play('impactGlass_heavy_001', 0.6, 1);
         g.mastery.gain('rime', 'control', 0.004);
         return { hits: hits.length, hitStop: hits.length ? 0.05 : 0, cameraKick: { fov: 6, pitch: 0.03 } };

@@ -46,9 +46,15 @@ export interface PropInstance {
   alive: boolean;
 }
 
+// Online, who simulates which prop is decided across the room
+// (src/net/propsync.ts). Before this screen acts on a prop it touches it, so
+// a prop another player is moving becomes this player's to move.
+export interface PropAuthority { touch(p: PropInstance): void }
+
 export class PropSystem {
   readonly instances: PropInstance[] = [];
   private nextId = 1;
+  authority: PropAuthority | null = null;
   private cache = new Map<string, { template: THREE.Object3D; half: THREE.Vector3; center: THREE.Vector3 }>();
   readonly byBody = new Map<number, PropInstance>();
 
@@ -131,4 +137,31 @@ export class PropSystem {
   }
 
   find(body: RAPIER.RigidBody): PropInstance | undefined { return this.byBody.get(body.handle); }
+  byId(id: number): PropInstance | undefined { return this.instances.find((p) => p.id === id); }
+
+  // This screen is about to move the prop.
+  touch(p: PropInstance): void { this.authority?.touch(p); }
+
+  // Every push a Technique or a blow gives a prop goes through here.
+  push(p: PropInstance, impulse: THREE.Vector3, torque?: THREE.Vector3): void {
+    if (!p.alive) return;
+    this.touch(p);
+    p.body.wakeUp();
+    p.body.applyImpulse(impulse, true);
+    if (torque) p.body.applyTorqueImpulse(torque, true);
+  }
+
+  launch(p: PropInstance, velocity: THREE.Vector3): void {
+    if (!p.alive) return;
+    this.touch(p);
+    p.body.setLinvel(velocity, true);
+  }
+
+  // Frozen in place for `seconds`: the ice holds it, then lets it fall.
+  freeze(p: PropInstance, seconds: number): void {
+    if (!p.alive) return;
+    this.touch(p);
+    p.body.setBodyType(RAPIER.RigidBodyType.Fixed, true);
+    p.frozen = seconds;
+  }
 }

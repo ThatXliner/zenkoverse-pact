@@ -55,7 +55,7 @@ export const BOSS_ULTIMATES: Partial<Record<EnemyAi, BossUltimate>> = {
       g.vfx.flash(e.center(), MASTER, 120, 0.7, 30);
       const d = g.player.position.distanceTo(c);
       if (d < 22) g.combat.hurtPlayer(e.dmg * 1.6 * (1 - d / 30), { from: c, kinetic: true, cutscene: true });
-      for (const p of g.props.instances) if (p.mesh.position.distanceTo(c) < 22) { p.body.wakeUp(); p.body.applyImpulse(p.mesh.position.clone().sub(c).setY(0.8).normalize().multiplyScalar(p.def.mass * 9), true); }
+      for (const p of g.props.instances) if (p.mesh.position.distanceTo(c) < 22) g.props.push(p, p.mesh.position.clone().sub(c).setY(0.8).normalize().multiplyScalar(p.def.mass * 9));
     },
   },
   // Once a fight, the first cast after he falls below half.

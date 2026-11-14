@@ -70,6 +70,14 @@ export class FxWire {
     } finally { this.replaying = false; }
   }
 
+  // Effects this screen draws for something the whole room already sees
+  // (a prop the server broke), so they are not sent on again.
+  quiet(fn: () => void): void {
+    const was = this.replaying;
+    this.replaying = true;
+    try { fn(); } finally { this.replaying = was; }
+  }
+
   // Offline again: the pool goes back to its own methods.
   dispose(): void {
     const pool = this.vfx as unknown as Record<Mirrored, (...a: unknown[]) => unknown>;

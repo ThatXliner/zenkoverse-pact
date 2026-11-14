@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Game } from '../app/game';
 import { hud } from '../app/game';
 import { appState, setState, pause, resume, type PauseTab } from '../app/state';
@@ -144,8 +144,10 @@ function Hud({ game }: { game: Game }) {
   const third = view !== 'first';
   const blind = blinkUi.blind.value;
   const pl = hud.plaque.value;
+  const root = useRef<HTMLDivElement>(null);
+  useBottomBand(root, cut);
   return (
-    <div class={`hud ${cine ? 'letterbox' : ''}`} style={{ '--c': c } as never}>
+    <div ref={root} class={`hud ${cine ? 'letterbox' : ''}`} style={{ '--c': c } as never}>
       <div class={`damage ${flash ? 'hit' : ''}`} />
       {blind > 0 && !cine && <div style={{ position: 'absolute', inset: 0, background: '#000', opacity: Math.min(1, blind / 1.5) }} />}
       {!cut && view !== 'top' && <div class={`reticle ${techUi.cooldowns.value.primary > 0 ? 'hot' : ''} ${third ? 'third' : ''}`} />}
@@ -211,6 +213,23 @@ function CutTitle({ title }: { title: NonNullable<typeof cutsceneUi.title.value>
 }
 
 const MAIN_SLOTS = KEY_SLOTS.filter((s) => slotDef(s).raw !== null);
+
+// How tall the bottom corners stand (the vitals on the left, the Ability
+// cards on the right), as --bottom-band on the HUD. The interact prompt sits
+// above it: at 1280 wide the extra Ability row reaches past the middle of
+// the screen, and on a narrow screen both corners do.
+function useBottomBand(root: { current: HTMLDivElement | null }, cut: boolean): void {
+  useEffect(() => {
+    const el = root.current;
+    if (!el || cut) return;
+    const corners = [...el.querySelectorAll<HTMLElement>(':scope > .vitals, :scope > .abilities')];
+    const measure = () => el.style.setProperty('--bottom-band', `${Math.max(0, ...corners.map((c) => c.offsetHeight))}px`);
+    const watch = new ResizeObserver(measure);
+    for (const c of corners) watch.observe(c);
+    measure();
+    return () => watch.disconnect();
+  }, [cut]);
+}
 
 // The top-down aim: a ring that rides the mouse. It is drawn here, not as a
 // CSS cursor, so it can take the Technique's colour and swell on a cast.

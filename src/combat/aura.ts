@@ -26,6 +26,8 @@ export class Aura {
     const mk = (color: number) => new THREE.ShaderMaterial({ uniforms: { color: { value: new THREE.Color(color) }, time: { value: 0 }, strength: { value: 1 } }, vertexShader: shellVert, fragmentShader: shellFrag, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
     this.mat = mk(0xffffff);
     this.bossMat = mk(0x7dffb2);
+    // Her field is wide enough to swallow the camera indoors; keep it a tint, not a wash.
+    this.bossMat.uniforms.strength!.value = 0.4;
     this.shell = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), this.mat);
     this.bossShell = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), this.bossMat);
     this.shell.visible = this.bossShell.visible = false;

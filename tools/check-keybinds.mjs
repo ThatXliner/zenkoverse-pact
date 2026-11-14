@@ -69,7 +69,7 @@ const rebind = async (action, press) => { await cell(action).click(); await page
 // Shockline reaches 11 m down a narrow cone and the punch reaches 3 m, so each
 // is thrown from where it can land: `stand` is the key held to close in or back off.
 const toDummies = async (stand = 'KeyW', ms = 420) => {
-  await page.evaluate(() => { window.game.encounter('dummy-room'); window.game.teleport([-26, 0, -63]); window.game.look(Math.PI / 2, 0); });
+  await page.evaluate(() => { window.game.encounter('dummy-room'); window.game.camera('first'); window.game.teleport([8, 0.3, -12]); window.game.look(Math.PI / 2, 0); });
   await page.waitForTimeout(600);
   await page.keyboard.down(stand);
   await page.waitForTimeout(ms);
@@ -143,11 +143,18 @@ await openControls();
 await rebind('camera', () => page.keyboard.press('KeyB'));
 await closeSheet();
 check((await texts('.top-left .keys b')).includes('B'), `the key hint shows B for the camera: ${(await texts('.top-left .keys b')).join(' ')}`);
+const VIEWS = ['top', 'third', 'first'];
+const next = (m) => VIEWS[(VIEWS.indexOf(m) + 1) % 3];
+const v0 = await page.evaluate(() => window.game.game.cam.mode);
 await page.keyboard.press('KeyB');
 await page.waitForTimeout(500);
-check((await page.evaluate(() => window.game.game.cam.mode)) === 'third', 'B toggles the camera');
+const v1 = await page.evaluate(() => window.game.game.cam.mode);
+check(v1 === next(v0), `B changes the camera view (${v0} to ${v1})`);
 await page.keyboard.press('KeyB');
 await page.waitForTimeout(300);
+const v2 = await page.evaluate(() => window.game.game.cam.mode);
+check(v2 === next(v1), `B again cycles on (${v1} to ${v2})`);
+check((await page.evaluate(() => JSON.parse(localStorage.getItem('zenko.settings.v3')).camera)) === v2, 'the view is saved in Settings');
 
 console.log('the Workshop shows the new key');
 await page.keyboard.press('Tab');

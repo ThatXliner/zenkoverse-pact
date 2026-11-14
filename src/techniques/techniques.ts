@@ -17,6 +17,7 @@ import { shift } from './kits/shift';
 import { rime } from './kits/rime';
 import { blink } from './kits/blink';
 import { echo } from './kits/echo';
+import { blinkUi } from './kits/blink';
 import { GROUP_PROP, GROUP_WORLD, GROUP_ENEMY } from '../physics/world';
 
 export const KITS: Record<TechniqueId, TechniqueKit> = { recoil, shift, rime, blink, echo };
@@ -83,9 +84,12 @@ export class Techniques {
   }
 
   // Drops any cast in flight and the sign state, for a new run or Technique.
+  // Blink's darkness only lifts while Blink is selected, so it is cleared
+  // here too, or a Technique change mid-blind would leave the screen black.
   reset(): void {
     this.cast_ = null;
     this.sign = SIGN_IDLE;
+    blinkUi.blind.value = 0;
     this.game.hands.stop();
   }
 

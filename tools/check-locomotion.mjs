@@ -1,6 +1,6 @@
 // Asserts that characters move like people: in third person the player's chest
 // stays square to the body in every movement direction and the feet point
-// along the line of travel, and pedestrians and thugs face the way they walk.
+// along the line of travel, and the sparring partners face the way they walk.
 // Facing is read from the model itself (authored facing +Z, which the idle
 // stance's toes confirm), not from any yaw the code stores.
 // Usage: npm run check:locomotion -- [url] [--url http://localhost:4173/] [--port 4173]
@@ -58,15 +58,17 @@ const torso = await page.evaluate((moves) => {
   const g = window.game; const { deg, wrap, heading, boneYaw, toes, facing } = window.loco;
   g.technique('recoil'); g.game.startRun({ skipTutorial: true }); g.loop(false); g.camera('third');
   const av = g.game.avatar;
-  g.teleport('academy'); g.step(60);
+  g.teleport([-3, 0, 6]); g.step(60);
   const out = [{ name: 'model', toesAtIdle: +toes(av).dot(facing(av)).toFixed(2) }];
   for (const [name, keys] of moves) {
-    g.teleport('academy'); g.look(0, -0.2); g.step(60);
+    g.teleport([-3, 0, 6]); g.look(0, -0.2); g.step(60);
     for (const k of keys) g.hold(k, true);
     g.step(40);
+    // Forty samples five frames apart cover several strides, so the mean does
+    // not depend on where in the stride the sampling starts.
     const chest = []; const feetOff = [];
-    for (let i = 0; i < 20; i++) {
-      g.step(7);
+    for (let i = 0; i < 40; i++) {
+      g.step(5);
       chest.push(boneYaw(av, 'spine_03'));
       const v = g.game.player.velocity;
       if (Math.hypot(v.x, v.z) < 1) continue;
@@ -83,7 +85,7 @@ const torso = await page.evaluate((moves) => {
 
 const walkers = await page.evaluate(() => {
   const g = window.game; const { deg, wrap, heading, facing } = window.loco;
-  g.teleport([0, 0.2, 0]); g.camera('third'); g.step(30);
+  g.teleport('courtyard'); g.camera('third'); g.step(30);
   // Velocity comes from the entity when it has one (an enemy can be pushed by
   // others while it runs), else from its motion over the window.
   const sample = (entries, frames) => {
@@ -103,10 +105,10 @@ const walkers = await page.evaluate(() => {
     }
     return res;
   };
-  const peds = sample(g.game.pedestrians.walkers.map((w) => ({ kind: 'pedestrian', av: w.avatar })), 600);
-  g.god(true); g.encounter('alley-thugs'); g.step(10);
-  const thugs = sample(g.game.encounters.enemies.map((e) => ({ kind: `enemy:${e.def.ai}`, av: e.avatar, velocity: e.velocity })), 150);
-  return [...peds, ...thugs];
+  g.god(true); g.encounter('sparring'); g.step(10);
+  // Stand across the ring so the partners have ground to cover.
+  g.teleport([-8, 0, 13]); g.step(4);
+  return sample(g.game.encounters.enemies.map((e) => ({ kind: `enemy:${e.def.ai}`, av: e.avatar, velocity: e.velocity })), 150);
 });
 const debugErrors = await page.evaluate(() => window.game.errors);
 await browser.close();
@@ -125,6 +127,6 @@ for (const kind of [...new Set(walkers.map((w) => w.kind))]) {
   const backward = s.filter((w) => w.dot <= 0).length;
   report(backward === 0, `${kind}: faces its direction of travel in ${s.length - backward}/${s.length} samples (min facing·velocity ${Math.min(...s.map((w) => w.dot))})`);
 }
-report(walkers.some((w) => w.kind === 'pedestrian') && walkers.some((w) => w.kind.startsWith('enemy')), 'sampled both pedestrians and enemies while they walked');
+report(walkers.some((w) => w.kind.startsWith('enemy')), 'sampled enemies while they walked');
 report(pageErrors.length === 0 && debugErrors.length === 0, `no page errors (${[...pageErrors, ...debugErrors].join('; ') || 'none'})`);
 if (failed) { console.error(`${failed} locomotion checks failed`); process.exit(1); }

@@ -4,6 +4,8 @@ import { KITS, techUi } from '../../techniques/techniques';
 import { MASTERY_STATS, MASTERY_CONFIG } from '../../mastery/mastery';
 import { navUi } from '../../nav/navigation';
 import { keyLabel } from '../../app/keymap';
+import { hud } from '../../app/game';
+import { CAMERA_LABEL } from '../../player/camera';
 
 const KEYS = [['camera', 'camera'], ['workshop', 'workshop'], ['map', 'map'], ['wager', 'wager'], ['aura', 'aura'], ['pause', 'menu']] as const;
 const SOURCE = { goal: 'Goal', tutorial: 'Tutorial', pin: 'Pin' } as const;
@@ -29,6 +31,7 @@ export function TopLeft({ game }: { game: Game }) {
       {s.showMastery && (
         <div class="hint">
           <span>{kit.name} · {sign} · {keyLabel('fullsign')} performs the full sign</span>
+          <span>{CAMERA_LABEL[hud.camera.value]} · {keyLabel('camera')} changes the view</span>
           <span class="keys">{KEYS.map(([action, what]) => <span key={action}><b>{keyLabel(action)}</b> {what}</span>)}</span>
           {MASTERY_CONFIG.showNumbers && <div class="mastery">{MASTERY_STATS.map((st) => <span key={st}>{st} <b>{Math.round(mast[st] * 100)}</b></span>)}</div>}
         </div>

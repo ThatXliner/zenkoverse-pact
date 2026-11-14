@@ -2,16 +2,16 @@ import { MathUtils } from 'three';
 import type { Assets } from '../app/assets';
 import { settings } from '../app/settings';
 
-// Web Audio mixer: decoded Kenney one-shots, a synthesized rain bed that
-// muffles indoors, a low drone, and per-surface footsteps.
+// Web Audio mixer: decoded Kenney one-shots, a synthesized wind bed that
+// drops indoors, a low drone, and per-surface footsteps.
 export class Audio {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
   private sfxBus!: GainNode;
   private musicBus!: GainNode;
   private buffers = new Map<string, AudioBuffer>();
-  private rainGain!: GainNode;
-  private rainFilter!: BiquadFilterNode;
+  private windGain!: GainNode;
+  private windFilter!: BiquadFilterNode;
   private pending: Promise<void> | null = null;
   private stepN = 0;
 
@@ -32,31 +32,35 @@ export class Audio {
         try { this.buffers.set(name, await ctx.decodeAudioData(buf.slice(0))); } catch { /* skip undecodable */ }
       }
     })();
-    this.startRain();
+    this.startWind();
     this.startDrone();
   }
 
-  private startRain(): void {
+  // Evening wind: brown noise through a low-pass whose cutoff breathes.
+  private startWind(): void {
     const ctx = this.ctx!;
     const len = ctx.sampleRate * 4;
     const buf = ctx.createBuffer(2, len, ctx.sampleRate);
     for (let c = 0; c < 2; c++) {
       const d = buf.getChannelData(c);
       let last = 0;
-      for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; last = last * 0.92 + w * 0.08; d[i] = (w * 0.35 + last * 1.4) * 0.5; }
+      for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; last = last * 0.985 + w * 0.015; d[i] = last * 3.2; }
     }
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.loop = true;
-    this.rainFilter = ctx.createBiquadFilter();
-    this.rainFilter.type = 'lowpass';
-    this.rainFilter.frequency.value = 5200;
-    const hp = ctx.createBiquadFilter();
-    hp.type = 'highpass';
-    hp.frequency.value = 350;
-    this.rainGain = ctx.createGain();
-    this.rainGain.gain.value = 0.16;
-    src.connect(hp).connect(this.rainFilter).connect(this.rainGain).connect(this.musicBus);
+    this.windFilter = ctx.createBiquadFilter();
+    this.windFilter.type = 'lowpass';
+    this.windFilter.frequency.value = 600;
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 0.09;
+    const lg = ctx.createGain();
+    lg.gain.value = 260;
+    lfo.connect(lg).connect(this.windFilter.frequency);
+    lfo.start();
+    this.windGain = ctx.createGain();
+    this.windGain.gain.value = 0.12;
+    src.connect(this.windFilter).connect(this.windGain).connect(this.musicBus);
     src.start();
   }
 
@@ -111,7 +115,6 @@ export class Audio {
     const s = settings.value;
     this.master.gain.value = s.volume;
     this.musicBus.gain.value = s.music;
-    this.rainFilter.frequency.value = MathUtils.lerp(5200, 700, indoors);
-    this.rainGain.gain.value = MathUtils.lerp(0.16, 0.05, indoors);
+    this.windGain.gain.value = MathUtils.lerp(0.12, 0.04, indoors);
   }
 }

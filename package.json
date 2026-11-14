@@ -1,7 +1,7 @@
 {
   "name": "zenkoverse-pact",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,12 +15,12 @@
     "check:navigation": "node tools/check-navigation.mjs",
     "check:rooftop": "node tools/check-rooftop.mjs",
     "check:sign": "node tools/check-sign.mjs",
-    "check:tints": "node tools/check-tints.mjs"
+    "check:tints": "node tools/check-tints.mjs",
+    "manifest": "node tools/manifest.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.14.0",
     "@preact/signals": "1.3.1",
-    "n8ao": "1.9.4",
     "postprocessing": "6.36.4",
     "preact": "10.25.4",
     "three": "0.170.0"

@@ -2,7 +2,7 @@ import { signal, computed } from '@preact/signals';
 
 export type TutorialStepId = 'move' | 'look' | 'camera' | 'primary' | 'secondary' | 'art' | 'pact' | 'wager' | 'max' | 'done';
 export type PauseTab = 'menu' | 'settings' | 'controls' | 'codex' | 'map';
-export type EncounterId = 'alley-thugs' | 'kuroda' | 'ancient-bridge' | 'dummy-room';
+export type EncounterId = 'sparring' | 'kuroda' | 'ancient' | 'dummy-room';
 export type DrillId = 'recoil-crane';
 
 export type AppState =

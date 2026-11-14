@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { signal, computed, effect } from '@preact/signals';
 import type { Game } from '../app/game';
 import { toast } from '../app/game';
-import { keyLabel } from '../app/keymap';
 import { appState, pause, resume, setState, worldRuns } from '../app/state';
 import { tutorialUi } from '../tutorial/tutorial';
 import { GROUP_WORLD } from '../physics/world';
@@ -35,15 +34,14 @@ const EMPTY_VIEW: NavView = { heading: 0, pips: [], target: null, marker: null, 
 
 export const navUi = {
   view: signal<NavView>(EMPTY_VIEW),
-  // Bumped on each fast travel so the fade overlay restarts.
-  travelFade: signal(0),
 };
 
-const STORE_KEY = 'zenko.nav.v1';
-const PIP_RANGE = 120;
-const MARKER_LIFT = 3.2;
-const LABEL_FAR = 56;
-const LABEL_NEAR = 12;
+// v2: the compound's places replaced the district's.
+const STORE_KEY = 'zenko.nav.v2';
+const PIP_RANGE = 80;
+const MARKER_LIFT = 2.6;
+const LABEL_FAR = 34;
+const LABEL_NEAR = 7;
 const MAX_LABELS = 3;
 const MARKER_INSET = { left: 64, right: 64, top: 150, bottom: 170 };
 // Screen areas other HUD pieces own. Edge markers and landmark names stay out of them.
@@ -105,34 +103,7 @@ export class Navigation {
   track(pin: Pin): void { this.pin.value = pin; this.game.audio.play('select_001', 0.35); }
   untrack(): void { this.pin.value = null; }
   isPinned(id: PoiId): boolean { const p = this.pin.value; return p?.kind === 'poi' && p.id === id; }
-
-  // Fast travel is for calm moments: the player is in the open world and the waypoint has been visited.
-  canTravel(id: PoiId): { ok: true } | { ok: false; reason: string } {
-    if (!this.unlocked.value.has(id)) return { ok: false, reason: 'Visit its shrine once to unlock this waypoint.' };
-    const st = appState.value;
-    const from = st.kind === 'paused' ? st.resume.kind : st.kind;
-    if (from === 'encounter') return { ok: false, reason: 'Not during a fight.' };
-    if (from === 'tutorial') return { ok: false, reason: 'Finish the tutorial first.' };
-    if (from !== 'explore') return { ok: false, reason: 'Not right now.' };
-    const poi = poiById(id);
-    if (this.game.player.position.distanceTo(poi.arrive) < 4) return { ok: false, reason: 'You are already here.' };
-    return { ok: true };
-  }
-
-  travel(id: PoiId): boolean {
-    if (!this.canTravel(id).ok) return false;
-    const g = this.game;
-    const poi = poiById(id);
-    resume();
-    g.player.teleport(poi.arrive);
-    g.cam.yaw = poi.yaw;
-    g.cam.pitch = 0;
-    g.input.requestLock();
-    navUi.travelFade.value++;
-    toast(`Fast travel: ${poi.name}`);
-    g.audio.play('confirmation_002', 0.5, 0.8);
-    return true;
-  }
+  visited(id: PoiId): boolean { return this.unlocked.value.has(id); }
 
   update(raw: number): void {
     if (this.game.input.hitAny('map')) this.toggleMap();
@@ -144,7 +115,9 @@ export class Navigation {
 
     const cam = g.renderer.camera;
     cam.updateMatrixWorld();
-    const heading = THREE.MathUtils.radToDeg(-g.cam.yaw);
+    // The compass reads the way the camera looks: the facing in first and
+    // third person, north in the top-down view.
+    const heading = THREE.MathUtils.radToDeg(-g.cam.heading);
     // A rooftop trial is its own arena: nothing outside it is worth tracking.
     const target = appState.value.kind.startsWith('rooftop') ? null : this.target.value;
     const targetDist = target ? p.distanceTo(target.position) : 0;
@@ -172,7 +145,7 @@ export class Navigation {
     const st = appState.value;
     if (st.kind === 'paused') {
       if (st.resume.kind === 'title') return;
-      if (st.tab === 'map') { resume(); g.input.requestLock(); } else setState({ ...st, tab: 'map' });
+      if (st.tab === 'map') { resume(); g.requestLock(); } else setState({ ...st, tab: 'map' });
     } else if (worldRuns.value && st.kind !== 'cinematic' && !g.cam.inShot) {
       pause('map');
       g.input.releaseLock();
@@ -185,7 +158,7 @@ export class Navigation {
       if (Math.abs(p.y - poi.shrine.y) > 4 || Math.hypot(p.x - poi.shrine.x, p.z - poi.shrine.z) > UNLOCK_RADIUS) continue;
       this.unlocked.value = new Set([...this.unlocked.value, poi.id]);
       this.game.waypoints.unlock(poi.id);
-      toast(`Waypoint unlocked: ${poi.name}. Fast travel from the map (${keyLabel('map')}).`, 'good');
+      toast(`Visited: ${poi.name}.`, 'good');
       this.game.audio.play('confirmation_001', 0.5);
     }
   }

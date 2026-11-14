@@ -3,11 +3,11 @@ import { signal } from '@preact/signals';
 import type { Game } from '../app/game';
 import { appState, setState, type AppState } from '../app/state';
 import { settings } from '../app/settings';
-import type { Shot } from '../player/camera';
+import type { Shot, CameraMode } from '../player/camera';
 
 // Cutscenes are data (issue #27). Anchors are relative to the caster or the
 // target in their facing frame, so one definition works anywhere in the
-// district. The world freezes; the hit resolves on the `resolveHit` beat.
+// compound. The world freezes; the hit resolves on the `resolveHit` beat.
 export interface Anchor { rel: 'caster' | 'target' | 'mid'; offset: [number, number, number] }
 export type CutEvent =
   | { at: number; kind: 'gesture' }
@@ -40,7 +40,7 @@ export class Cutscenes {
   private shotT = 0;
   private fired = new Set<string>();
   private resumeState: AppState | null = null;
-  private prevMode: 'first' | 'third' = 'first';
+  private prevMode: CameraMode = 'top';
   private resolved = false;
   private registry = new Map<string, (game: Game) => void>();
   private titleN = 0;
@@ -61,8 +61,7 @@ export class Cutscenes {
     this.resolved = false;
     this.resumeState = appState.value;
     this.prevMode = g.cam.mode;
-    g.cam.mode = 'third';
-    g.cam.blend = 1;
+    g.cam.snap('third');
     g.clock.slowMo = run.def.timeScale;
     cutsceneUi.active.value = true;
     setState({ kind: 'cinematic', resume: this.resumeState });
@@ -142,7 +141,7 @@ export class Cutscenes {
     const g = this.game, r = this.run!;
     this.run = null;
     g.cam.skipRequested = true;
-    g.cam.mode = this.prevMode;
+    g.cam.setMode(this.prevMode);
     g.clock.slowMo = 1;
     cutsceneUi.active.value = false;
     cutsceneUi.title.value = null;

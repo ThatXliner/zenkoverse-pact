@@ -3,7 +3,7 @@
 // `?debug` hooks to fixed scenarios and saves screenshots and short frame
 // sequences per piece. Usage:
 //   node tools/capture.mjs [url] [--out captures] [--only hands,district] [--url http://...] [--port 4173] [--gpu]
-// Pieces: ui, hud, nav, hands, variants, sign, poses, third-person, district, vfx, encounters, workshop, tutorial, drill, perf.
+// Pieces: ui, hud, hands, variants, sign, poses, third-person, views, compound, vfx, encounters, workshop, tutorial, drill, perf.
 // Without a URL it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -110,7 +110,7 @@ async function startRun(tech, opts = {}) {
 if (run('hud')) {
   for (const tutorial of [false, true]) {
     await startRun('recoil', { tutorial });
-    await api((g) => { g.teleport('market'); g.camera('first'); g.look(Math.PI / 2 + 0.3, -0.02); });
+    await api((g) => { g.teleport('courtyard'); g.camera('top'); g.look(0, 0); });
     for (const [w, h] of HUD_SIZES) {
       await page.setViewportSize({ width: w, height: h });
       await settle(150);
@@ -125,7 +125,7 @@ if (run('hud')) {
 if (run('hands')) {
   for (const t of TECHS) {
     await startRun(t);
-    await api((g) => { g.teleport('market'); g.camera('first'); g.look(Math.PI / 2, -0.05); });
+    await api((g) => { g.teleport('ring'); g.camera('first'); g.look(0.4, -0.05); });
     await step(20);
     await shot('hands', `${t}-idle`);
     await api((g) => g.cast('primary'));
@@ -144,7 +144,7 @@ if (run('hands')) {
 // sign: the flick, with the hands coming out of the primed stance.
 if (run('variants')) {
   await startRun('recoil');
-  await api((g) => { g.teleport('market'); g.camera('first'); g.look(Math.PI / 2, -0.05); });
+  await api((g) => { g.teleport('ring'); g.camera('first'); g.look(0.4, -0.05); });
   const setActivation = (a) => api((g, v) => { const m = g.game.mastery; m.stats.value = { ...m.stats.value, recoil: { ...m.stats.value.recoil, activation: v } }; }, a);
   for (const [name, act, primed] of [['short', 0.5, false], ['none', 0.9, false], ['primed', 0.9, true]]) {
     await setActivation(act);
@@ -162,7 +162,7 @@ if (run('variants')) {
 if (run('sign')) {
   for (const t of TECHS) {
     await startRun(t);
-    await api((g) => { g.teleport('market'); g.camera('first'); g.look(Math.PI / 2, -0.05); });
+    await api((g) => { g.teleport('ring'); g.camera('first'); g.look(0.4, -0.05); });
     await step(20);
     await api((g) => g.hold('fullsign', true));
     await step(1);
@@ -175,7 +175,7 @@ if (run('sign')) {
 // One frame per authored hand pose, held on both hands, for judging the rig.
 if (run('poses')) {
   await startRun('rime');
-  await api((g) => { g.teleport('market'); g.camera('first'); g.look(Math.PI / 2, -0.05); });
+  await api((g) => { g.teleport('ring'); g.camera('first'); g.look(0.4, -0.05); });
   for (const p of ['rest', 'restLow', 'sprint', 'bracePalm', 'braceWide', 'chamber', 'punch', 'palmDown', 'slamUp', 'slamDown', 'clawReady', 'clawReach', 'point', 'pointFar', 'cupEyes', 'cupFlinch', 'shieldEyes', 'palmSurface', 'palmPress', 'snapReady', 'snapped', 'quietSpread', 'guard', 'raiseHigh', 'crossChest', 'flat', 'landCatch']) {
     await api((g, n) => g.pose(n), p);
     await step(45);
@@ -195,7 +195,7 @@ if (run('poses')) {
 
 if (run('third-person')) {
   await startRun('recoil');
-  await api((g) => { g.teleport('market'); g.camera('third'); g.look(Math.PI / 2, -0.15); });
+  await api((g) => { g.teleport('courtyard'); g.camera('third'); g.look(0, -0.15); });
   await step(30);
   await shot('third-person', 'idle');
   await api((g) => { g.hold('forward', true); });
@@ -208,23 +208,40 @@ if (run('third-person')) {
   for (const f of [8, 16, 24]) { await step(8); await shot('third-person', `cast-f${f}`); }
 }
 
-if (run('district')) {
+// Each camera view in each part of the compound: the frames the style is
+// judged on. Every view must read as the same drawing.
+const PLACES = [['hall', 'hall', Math.PI, -0.05], ['courtyard', 'courtyard', 0, -0.1], ['ring', 'ring', 0.5, -0.1], ['roof', 'roof', Math.PI / 2, -0.2], ['store', 'store', -Math.PI / 2, -0.15], ['gate', 'gate', Math.PI, -0.1], ['pond', 'pond', 2.3, -0.2]];
+if (run('views')) {
   await startRun('recoil');
-  const vistas = [['market-east', 'market', Math.PI / 2, -0.02], ['market-west', 'market', -Math.PI / 2, -0.02], ['alley', 'alley', 0, -0.05], ['bridge', 'bridge', -Math.PI / 2, -0.05], ['academy', 'academy', -Math.PI / 2, -0.05], ['dojo', 'dojo', Math.PI, -0.05], ['kuroda', 'kuroda', Math.PI, -0.05], ['roof', 'roof', Math.PI / 2, -0.25]];
+  for (const view of ['top', 'third', 'first']) {
+    for (const [name, where, yaw, pitch] of PLACES) {
+      await api((g, v, w, y, p) => { g.teleport(w); g.camera(v); g.look(y, p); }, view, where, yaw, pitch);
+      await step(30);
+      await shot('views', `${view}-${name}`);
+    }
+  }
+}
+
+if (run('compound')) {
+  await startRun('recoil');
+  const vistas = [['hall-from-yard', 'courtyard', 0, -0.08], ['hall-inside', 'hall', Math.PI, -0.05], ['ring', 'ring', 2.6, -0.1], ['stairs', 'stairs', 0, -0.05], ['roof-west', 'roof', Math.PI / 2, -0.2], ['roof-east', 'roof', -Math.PI / 2, -0.15], ['bridge', 'store', Math.PI / 2, -0.2], ['wall-walk', 'gate', -Math.PI / 2, -0.1], ['gate', 'gate', Math.PI, -0.05], ['pond', 'pond', 2.3, -0.2]];
   for (const [name, where, yaw, pitch] of vistas) {
     await api((g, w, y, p) => { g.teleport(w); g.camera('first'); g.look(y, p); }, where, yaw, pitch);
     await step(24);
-    await shot('district', name);
+    await shot('compound', name);
   }
-  await api((g) => { g.teleport('market'); g.camera('third'); g.look(Math.PI / 2, -0.3); });
+  await api((g) => { g.teleport('courtyard'); g.camera('top'); });
   await step(30);
-  await shot('district', 'market-third');
+  await shot('compound', 'courtyard-top');
+  await api((g) => { g.teleport('hall'); g.camera('top'); });
+  await step(60);
+  await shot('compound', 'hall-top-cutaway');
 }
 
 if (run('vfx')) {
   for (const t of TECHS) {
     await startRun(t);
-    await api((g) => { g.teleport('alley'); g.camera('third'); g.look(0, -0.15); });
+    await api((g) => { g.teleport('ring'); g.camera('third'); g.look(0, -0.15); });
     await step(30);
     await api((g) => g.cast('primary'));
     for (const f of [12, 20, 32]) { await step(f === 12 ? 12 : 8); await shot('vfx', `${t}-primary-f${f}`); }
@@ -241,15 +258,16 @@ if (run('vfx')) {
 }
 
 if (run('encounters')) {
-  for (const id of ['alley-thugs', 'kuroda', 'ancient-bridge', 'dummy-room']) {
+  for (const id of ['sparring', 'kuroda', 'ancient', 'dummy-room']) {
     await startRun('recoil');
     await api((g) => g.god(true));
-    await api((g, i) => { g.encounter(i); g.camera('third'); }, id);
+    await api((g, i) => { g.encounter(i); g.camera('top'); }, id);
     await step(60);
-    await shot('encounters', `${id}-f60`);
+    await shot('encounters', `${id}-top-f60`);
+    await api((g) => g.camera('third'));
     await step(90);
     await shot('encounters', `${id}-f150`);
-    if (id === 'ancient-bridge') {
+    if (id === 'ancient') {
       await api((g) => { const boss = g.game.encounters.enemies.find((e) => e.isBoss); if (boss) g.game.encounters.bossUltimate(boss); });
       for (const f of [20, 50, 80]) { await step(f === 20 ? 20 : 30); await shot('encounters', `ancient-ultimate-f${f}`); }
       await api((g) => g.game.cutscenes.skip());
@@ -320,13 +338,13 @@ if (run('tutorial')) {
 
 if (run('drill')) {
   await startRun('recoil');
-  await api((g) => { g.teleport('academy'); g.camera('third'); g.look(Math.PI / 2, -0.1); g.drill('recoil-crane'); });
+  await api((g) => { g.teleport([-20, 0, 10]); g.camera('third'); g.look(0, 0.2); g.drill('recoil-crane'); });
   for (const f of [60, 150]) { await step(f === 60 ? 60 : 90); await shot('drill', `recoil-crane-f${f}`); }
 }
 
 if (run('perf')) {
   await startRun('recoil');
-  await api((g) => { g.teleport('market'); g.camera('first'); g.look(Math.PI / 2, 0); g.loop(true); });
+  await api((g) => { g.teleport('courtyard'); g.camera('top'); g.loop(true); });
   await settle(1500);
   const fps = await page.evaluate(async () => { const t0 = performance.now(); let n = 0; await new Promise((r) => { const f = () => { n++; if (performance.now() - t0 > 2000) r(); else requestAnimationFrame(f); }; requestAnimationFrame(f); }); return { ...window.game.stats(), fps: Math.round(n / 2) }; });
   report.perf = fps;

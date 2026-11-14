@@ -6,15 +6,16 @@ import { toast, banner } from '../app/game';
 import { techUi } from '../techniques/techniques';
 import { keyLabel, keysLabel } from '../app/keymap';
 import { EXTRA_SLOTS } from '../pacts/slots';
+import { SPAWN } from '../world/compound';
 
 export interface TutorialStep { id: TutorialStepId; title: string; jp: string; body: string | ((g: Game) => string); objective(g: Game, ev: Set<string>): boolean }
 
 const STEPS: TutorialStep[] = [
-  { id: 'move', title: 'Move', jp: '歩', body: () => `${keysLabel(['forward', 'left', 'back', 'right'])} to walk, ${keyLabel('sprint')} to sprint, ${keyLabel('jump')} to jump, ${keyLabel('dash')} to dash. Walk across the courtyard.`, objective: (g) => g.player.position.distanceTo(new THREE.Vector3(-58, 0, -52)) > 6 },
-  { id: 'look', title: 'Look', jp: '視', body: 'Look around. The crane to your west is the Academy drill rig.', objective: (_g, ev) => ev.has('looked') },
-  { id: 'camera', title: 'Camera', jp: '視点', body: () => `Press ${keyLabel('camera')} to step outside yourself. Third person shows the whole sign.`, objective: (_g, ev) => ev.has('camera') },
+  { id: 'move', title: 'Move', jp: '歩', body: () => `${keysLabel(['forward', 'left', 'back', 'right'])} to walk, ${keyLabel('sprint')} to sprint, ${keyLabel('jump')} to jump, ${keyLabel('dash')} to dash. Walk across the yard.`, objective: (g) => g.player.position.distanceTo(SPAWN.courtyard) > 6 },
+  { id: 'look', title: 'Aim', jp: '視', body: (g) => g.cam.isTop ? 'Move the mouse. You face the cursor, and your Technique fires at it. The hoist in the north-west corner is the drill rig.' : 'Look around. The hoist in the north-west corner is the drill rig.', objective: (_g, ev) => ev.has('looked') },
+  { id: 'camera', title: 'Camera', jp: '視点', body: () => `Press ${keyLabel('camera')} to change the view: top-down, over the shoulder, first person. Try one and come back to the one you like.`, objective: (_g, ev) => ev.has('camera') },
   { id: 'primary', title: 'Primary', jp: '技', body: () => { const s = techUi.slots.value.primary; return `${cap(keyLabel('primary'))} fires ${s.name}: ${s.what}. The sign is long because you are new.`; }, objective: (_g, ev) => ev.has('primary') },
-  { id: 'secondary', title: 'Secondary', jp: '構', body: () => { const s = techUi.slots.value.secondary; return `${cap(keyLabel('secondary'))} fires ${s.name}: ${s.what}. Try it on the crates by the crane.`; }, objective: (_g, ev) => ev.has('secondary') },
+  { id: 'secondary', title: 'Secondary', jp: '構', body: () => { const s = techUi.slots.value.secondary; return `${cap(keyLabel('secondary'))} fires ${s.name}: ${s.what}. Try it on the crates by the hoist.`; }, objective: (_g, ev) => ev.has('secondary') },
   { id: 'art', title: 'More Abilities', jp: '術', body: () => {
     const slots = techUi.slots.value;
     const first = EXTRA_SLOTS.find((s) => !slots[s].empty);
@@ -24,7 +25,7 @@ const STEPS: TutorialStep[] = [
   { id: 'pact', title: 'Your Pacts', jp: '契約', body: () => `Your Abilities are Pacts already written for you. Press ${keyLabel('workshop')} to open the Workshop and read them, then press ${keyLabel('pause')} to come back. Writing your own Pact is optional.`, objective: (_g, ev) => ev.has('workshop') },
   { id: 'wager', title: 'Wager', jp: '賭', body: () => `Press ${keyLabel('wager')} to declare that your next strike connects. Then make it connect.`, objective: (_g, ev) => ev.has('wager') },
   { id: 'max', title: 'Maximum Output', jp: '全力', body: () => `The ring fills as you fight. When it is full, press ${keyLabel('max')}. The world will wait for you.`, objective: (_g, ev) => ev.has('max') },
-  { id: 'done', title: 'Go', jp: '行', body: 'The district is yours. The dojo east of here holds the Workshop and a dummy room. Thugs wait in the alleys south of the market.', objective: () => false },
+  { id: 'done', title: 'Go', jp: '行', body: 'The compound is yours. The hall to the north holds the Workshop and the dummies. Sparring partners wait in the ring, and the stair beside the hall climbs to the roof.', objective: () => false },
 ];
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -48,7 +49,7 @@ export class Tutorial {
     this.events.clear();
     this.yawStart = this.game.cam.yaw;
     this.advance();
-    banner('入門', 'Academy courtyard. Begin.');
+    banner('入門', 'The compound. Begin.');
   }
 
   skip(): void {
@@ -86,7 +87,8 @@ export class Tutorial {
     const s = STEPS[this.index];
     if (!s) return;
     this.settleT -= dt;
-    if (Math.abs(this.game.cam.yaw - this.yawStart) > 1.2) this.events.add('looked');
+    const turned = Math.atan2(Math.sin(this.game.cam.yaw - this.yawStart), Math.cos(this.game.cam.yaw - this.yawStart));
+    if (Math.abs(turned) > 1.2) this.events.add('looked');
     if (this.settleT <= 0 && s.objective(this.game, this.events)) {
       toast(`${s.title}: done`, 'good');
       this.game.audio.play('confirmation_001', 0.5);

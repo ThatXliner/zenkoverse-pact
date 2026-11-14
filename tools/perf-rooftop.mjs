@@ -1,10 +1,9 @@
 #!/usr/bin/env node
-// Frame times on the rooftop with a whole wave on screen (issue #34: 60 fps at
+// Frame times on the roof with a whole wave on screen (issue #34: 60 fps at
 // High). Plays the trial up to wave 7 (twelve enemies) and measures 180 frames
-// in both camera modes at 1440x900, device pixel ratio 2. A second pass runs
-// with the frame limiter off, so the number shows the headroom and not only
-// the 60 fps cap. The street at the market is measured the same way for
-// comparison.
+// in all three camera views at 1440x900, device pixel ratio 2. A second pass
+// runs with the frame limiter off, so the number shows the headroom and not
+// only the 60 fps cap. The courtyard and the hall are measured the same way.
 // Usage: node tools/perf-rooftop.mjs [url] [--url http://localhost:4173/] [--port 4173]
 import { chromium } from 'playwright';
 import { resolveTarget } from './lib/target.mjs';
@@ -33,8 +32,12 @@ for (const uncapped of [false, true]) {
   await page.goto(`${url}?debug`);
   await page.waitForFunction(() => window.game?.game?.ready, null, { timeout: 120000 });
   console.log(uncapped ? '\nframe limiter off' : 'vsync (60 Hz cap)');
-  await page.evaluate(() => { const g = window.game; g.technique('recoil'); g.game.renderer.setQuality('high'); g.god(true); g.game.startRun({ skipTutorial: true }); g.teleport('market'); g.camera('first'); });
-  console.log(await measure(page, 'street, market, 1P '));
+  await page.evaluate(() => { const g = window.game; g.technique('recoil'); g.game.renderer.setQuality('high'); g.god(true); g.game.startRun({ skipTutorial: true }); g.teleport('courtyard'); g.camera('top'); });
+  console.log(await measure(page, 'courtyard, top    '));
+  await page.evaluate(() => { const g = window.game; g.teleport('hall'); g.camera('top'); });
+  console.log(await measure(page, 'hall, top         '));
+  await page.evaluate(() => { const g = window.game; g.teleport('courtyard'); g.camera('third'); g.look(0, -0.2); });
+  console.log(await measure(page, 'courtyard, 3P     '));
   await page.evaluate(() => {
     const g = window.game;
     g.loop(false);
@@ -47,9 +50,12 @@ for (const uncapped of [false, true]) {
     for (let i = 0; i < 800 && g.rooftop.status().alive < 12; i++) g.step(2);
     g.loop(true);
   });
-  console.log(await measure(page, 'rooftop wave 7, 1P'));
+  await page.evaluate(() => window.game.camera('top'));
+  console.log(await measure(page, 'roof wave 7, top  '));
   await page.evaluate(() => window.game.camera('third'));
-  console.log(await measure(page, 'rooftop wave 7, 3P'));
+  console.log(await measure(page, 'roof wave 7, 3P   '));
+  await page.evaluate(() => window.game.camera('first'));
+  console.log(await measure(page, 'roof wave 7, 1P   '));
   if (errs.length) console.log('errors', errs.slice(0, 5));
   await browser.close();
 }

@@ -3,6 +3,7 @@ import type { Game } from '../app/game';
 import { hud } from '../app/game';
 import { appState, setState, pause, resume, type PauseTab } from '../app/state';
 import { settings, setSetting, type Quality } from '../app/settings';
+import { CAMERA_MODES, CAMERA_LABEL, type CameraMode } from '../player/camera';
 import { keyLabel } from '../app/keymap';
 import { KEY_SLOTS, EXTRA_SLOTS, KIND_DEFS, slotDef, type AbilityKind, type KeySlot } from '../pacts/slots';
 import { Controls } from './Controls';
@@ -91,7 +92,7 @@ function Title({ game }: { game: Game }) {
       <div class="title-brand">
         <div class="kicker">The Zenkoverse power system</div>
         <div class="jp-big">契<em>約</em></div>
-        <div class="sub">A rainy district, one Technique, and the Pacts you write to shape it. Every ability is a sacrifice the universe reads back to you.</div>
+        <div class="sub">A dojo at dusk, one Technique, and the Pacts you write to shape it. Every ability is a sacrifice the universe reads back to you.</div>
         <div class="menu" style="margin-top:18px">
           <button onClick={() => { setRooftop(false); setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Begin</button>
           <button onClick={() => { setRooftop(true); setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Rooftop</button>
@@ -99,7 +100,7 @@ function Title({ game }: { game: Game }) {
           <button onClick={() => setState({ kind: 'paused', resume: { kind: 'title' }, tab: 'codex' })}>Codex</button>
         </div>
       </div>
-      <div class="title-foot"><span>Enter to begin · Mouse to look once inside</span><span>v0.2 · rebuild</span></div>
+      <div class="title-foot"><span>Enter to begin · The cursor aims once inside</span><span>v0.3 · proof of concept</span></div>
     </div>
   );
 }
@@ -129,14 +130,16 @@ function Hud({ game }: { game: Game }) {
   const hurt = hud.hurt.value;
   const [flash, setFlash] = useState(false);
   useEffect(() => { if (!hurt) return; setFlash(true); const t = setTimeout(() => setFlash(false), 220); return () => clearTimeout(t); }, [hurt]);
-  const third = !game.cam.isFirst;
+  const view = hud.camera.value;
+  const third = view !== 'first';
   const blind = blinkUi.blind.value;
   const pl = hud.plaque.value;
   return (
     <div class={`hud ${cut ? 'letterbox' : ''}`} style={{ '--c': c } as never}>
       <div class={`damage ${flash ? 'hit' : ''}`} />
       {blind > 0 && <div style={{ position: 'absolute', inset: 0, background: '#000', opacity: Math.min(1, blind / 1.5) }} />}
-      {!cut && <div class={`reticle ${techUi.cooldowns.value.primary > 0 ? 'hot' : ''} ${third ? 'third' : ''}`} />}
+      {!cut && view !== 'top' && <div class={`reticle ${techUi.cooldowns.value.primary > 0 ? 'hot' : ''} ${third ? 'third' : ''}`} />}
+      {!cut && view === 'top' && <Cursor hot={techUi.cooldowns.value.primary > 0} />}
       {!cut && (
         <div class="vitals">
           <Meter label="Health" value={combatUi.hp.value} />
@@ -178,6 +181,18 @@ function Hud({ game }: { game: Game }) {
 }
 
 const MAIN_SLOTS = KEY_SLOTS.filter((s) => slotDef(s).raw !== null);
+
+// The top-down aim: a ring that rides the mouse. It is drawn here, not as a
+// CSS cursor, so it can take the Technique's colour and swell on a cast.
+function Cursor({ hot }: { hot: boolean }) {
+  const [at, setAt] = useState({ x: -100, y: -100 });
+  useEffect(() => {
+    const on = (e: MouseEvent) => setAt({ x: e.clientX, y: e.clientY });
+    window.addEventListener('mousemove', on);
+    return () => window.removeEventListener('mousemove', on);
+  }, []);
+  return <div class={`cursor ${hot ? 'hot' : ''}`} style={{ left: `${at.x}px`, top: `${at.y}px` }} />;
+}
 
 // The full sign above the cards: a ring that fills while the sign plays,
 // then drains over the primed window while the label reads the time left.
@@ -244,6 +259,7 @@ const CODEX: { id: string; title: string; jp: string; body: string | (() => stri
   { id: 'eyes', title: 'Eyes', jp: '眼', body: 'Five finite physical artifacts. Installing one permanently replaces a natural eye. They are not Techniques, and most people do not know they exist.' },
   { id: 'aura', title: 'Aurabending', jp: '気', body: () => `A separate universal faculty, formalized only twenty years ago despite five thousand years of Technique history. Aura does not fuel Techniques. Hold ${keyLabel('aura')} to expand your field; two fields meeting become an Aura Clash.` },
   { id: 'kuroda', title: 'The Kuroda', jp: '黒田', body: 'A lineage whose "fire" is fuel. They manifest a volatile liquid and light it. The sheen on the ground comes before the flame.', after: 'kuroda' },
+  { id: 'views', title: 'Camera', jp: '視点', body: () => `${keyLabel('camera')} cycles the view. Top-down: you move with the screen and aim with the cursor. Over the shoulder: the camera follows the mouse and you aim at the crosshair. First person: the sign is in your own hands.` },
 ];
 
 function Pause({ game, tab }: { game: Game; tab: PauseTab }) {
@@ -251,7 +267,7 @@ function Pause({ game, tab }: { game: Game; tab: PauseTab }) {
   const [entry, setEntry] = useState(CODEX[0]!.id);
   const st = appState.value;
   const fromTitle = st.kind === 'paused' && st.resume.kind === 'title';
-  const back = () => { if (fromTitle) setState({ kind: 'title' }); else { resume(); game.input.requestLock(); } };
+  const back = () => { if (fromTitle) setState({ kind: 'title' }); else { resume(); game.requestLock(); } };
   const tabs = fromTitle ? (['settings', 'controls', 'codex'] as const) : (['menu', 'settings', 'controls', 'codex', 'map'] as const);
   return (
     <div class="sheet-wrap">
@@ -264,7 +280,7 @@ function Pause({ game, tab }: { game: Game; tab: PauseTab }) {
           {tab === 'menu' && (
             <div class="pause-menu">
               <button onClick={back}>Resume</button>
-              <button onClick={() => { resume(); game.tutorial.skip(); game.input.requestLock(); }}>Skip tutorial</button>
+              <button onClick={() => { resume(); game.tutorial.skip(); game.requestLock(); }}>Skip tutorial</button>
               <button onClick={() => { resume(); game.startRun(); }}>Replay tutorial</button>
               {st.kind === 'paused' && st.resume.kind === 'rooftop' && <button onClick={() => game.rooftop.abandon()}>Leave the rooftop</button>}
               <button onClick={() => { game.rooftop.abandon(); game.book.resetAll(); game.mastery.reset(); setState({ kind: 'title' }); }}>Reset Pacts and mastery</button>
@@ -278,7 +294,7 @@ function Pause({ game, tab }: { game: Game; tab: PauseTab }) {
               <Range label="Volume" value={s.volume} min={0} max={1} step={0.05} onChange={(v) => setSetting('volume', v)} />
               <Range label="Ambience" value={s.music} min={0} max={1} step={0.05} onChange={(v) => setSetting('music', v)} />
               <div class="row"><label>Quality</label><Seg value={s.quality} options={['low', 'medium', 'high']} onChange={(v) => { setSetting('quality', v as Quality); game.renderer.setQuality(v as Quality); }} /><span /></div>
-              <div class="row"><label>Camera</label><Seg value={s.camera} options={['first', 'third']} onChange={(v) => { setSetting('camera', v as 'first'); game.cam.mode = v as 'first'; }} /><span /></div>
+              <div class="row"><label>Camera</label><Seg value={s.camera} options={CAMERA_MODES} labels={CAMERA_LABEL} onChange={(v) => game.setCamera(v as CameraMode)} /><span /></div>
               <div class="row"><label>Invert Y</label><Seg value={s.invertY ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('invertY', v === 'on')} /><span /></div>
               <div class="row"><label>Mastery numbers</label><Seg value={s.showMastery ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('showMastery', v === 'on')} /><span /></div>
               <div class="row"><label>Skip cutscenes</label><Seg value={s.skipCutscenes ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('skipCutscenes', v === 'on')} /><span /></div>
@@ -303,8 +319,8 @@ function Range({ label, value, min, max, step, onChange }: { label: string; valu
   return <div class="row"><label>{label}</label><input type="range" min={min} max={max} step={step} value={value} onInput={(e) => onChange(Number((e.target as HTMLInputElement).value))} /><span class="v">{step < 1 ? value.toFixed(2) : value}</span></div>;
 }
 
-function Seg({ value, options, onChange }: { value: string; options: readonly string[]; onChange: (v: string) => void }) {
-  return <div class="seg">{options.map((o) => <button key={o} class={o === value ? 'on' : ''} onClick={() => onChange(o)}>{o}</button>)}</div>;
+function Seg({ value, options, labels, onChange }: { value: string; options: readonly string[]; labels?: Record<string, string>; onChange: (v: string) => void }) {
+  return <div class="seg">{options.map((o) => <button key={o} class={o === value ? 'on' : ''} onClick={() => onChange(o)}>{labels?.[o] ?? o}</button>)}</div>;
 }
 
 function Defeat({ game }: { game: Game }) {
@@ -312,9 +328,9 @@ function Defeat({ game }: { game: Game }) {
     <div class="defeat">
       <div>
         <div class="jp">敗北</div>
-        <p>You went down in the rain. The Pacts you inscribed remain.</p>
+        <p>You went down in the yard. The Pacts you inscribed remain.</p>
         <div style="display:flex;gap:10px;justify-content:center;margin-top:18px">
-          <button class="btn primary" onClick={() => game.startRun({ skipTutorial: true })}>Back to the street</button>
+          <button class="btn primary" onClick={() => game.startRun({ skipTutorial: true })}>Back to the yard</button>
           <button class="btn" onClick={() => setState({ kind: 'title' })}>Title</button>
         </div>
       </div>

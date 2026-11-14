@@ -12,7 +12,7 @@ import { slotWords } from '../pacts/readback';
 import { keyLabel } from '../app/keymap';
 import { WAVES, WAVE_COUNT, SPAWN_GAP, HEAL_BETWEEN, EYE_AFTER, AURA_AFTER, SCORE, CLEAR_BONUS, WAGER_BONUS, VICTORY_BONUS, roster, scaleFor } from './waves';
 
-// The rooftop trial: the classic arena loop (issue #34) on the new engine.
+// The rooftop trial: the classic arena loop (issue #34) on the hall's roof.
 // One run is a small state machine. `fight` spawns a wave and waits for it to
 // clear; `offer` holds the world still while the player takes an Eye, the
 // Aura, and a Pact; `over` is the end screen.
@@ -73,7 +73,7 @@ export class Rooftop {
   private counted = new WeakSet<Enemy>();
 
   constructor(private game: Game) {
-    this.arena = buildArena(game.assets, game.physics, game.renderer.scene, game.props, game.renderer.lights);
+    this.arena = buildArena(game.world, game.physics, game.renderer.scene, game.props, game.renderer.lights);
     // A run that was closed mid-way left its Pacts in the saved book. Put the real ones back.
     this.restorePlayer();
   }
@@ -87,30 +87,27 @@ export class Rooftop {
   get offers(): Offer[] { const o = rooftopUi.offer.value; return o?.kind === 'pact' ? o.offers : []; }
   get alive(): number { return this.tracked.filter((e) => e.alive).length; }
 
+  // The stair is walked; the board at its top starts the trial.
   interactable(p: THREE.Vector3): { text: string; act: () => void } | null {
     const a = this.arena;
     if (this.active || appState.value.kind === 'rooftop-end') return null;
-    if (p.distanceTo(a.liftBase) < 3) return { text: 'Ride the lift to the rooftop', act: () => this.rideUp() };
-    if (Math.abs(p.y - a.deckY) < 1.5) {
-      if (p.distanceTo(a.consoleAt) < 2.4) return { text: 'Begin the Rooftop trial, eight waves', act: () => this.begin() };
-      if (p.distanceTo(a.liftDownAt) < 2.2) return { text: 'Ride the lift down to the street', act: () => this.rideDown() };
-    }
+    if (Math.abs(p.y - a.deckY) < 1.5 && p.distanceTo(a.consoleAt) < 2.4) return { text: 'Begin the Rooftop trial, eight waves', act: () => this.begin() };
     return null;
   }
 
-  rideUp(): void {
+  // Puts the player at the top or the foot of the stair: how a run ends, and
+  // the debug hook's shortcut.
+  climbUp(): void {
     const g = this.game;
-    g.player.teleport(this.arena.liftTop.clone());
-    g.cam.yaw = -Math.PI / 2;
-    g.audio.play('open_001', 0.5);
-    banner('屋上', 'The rooftop. The board by the lift starts the trial.');
+    g.player.teleport(this.arena.stairTop.clone());
+    g.cam.yaw = Math.PI / 2;
+    banner('屋上', 'The hall roof. The board by the stair starts the trial.');
   }
 
-  rideDown(): void {
+  climbDown(): void {
     const g = this.game;
-    g.player.teleport(this.arena.liftBase.clone());
-    g.cam.yaw = Math.PI / 2;
-    g.audio.play('close_001', 0.5);
+    g.player.teleport(this.arena.stairFoot.clone());
+    g.cam.yaw = 0;
   }
 
   begin(): void {
@@ -136,7 +133,7 @@ export class Rooftop {
     g.cam.pitch = 0;
     setState({ kind: 'rooftop' });
     this.startWave(0);
-    g.input.requestLock();
+    g.requestLock();
     g.audio.resumeContext();
   }
 
@@ -266,7 +263,7 @@ export class Rooftop {
     rooftopUi.offer.value = null;
     setState({ kind: 'rooftop' });
     this.startWave(p.wave + 1);
-    this.game.input.requestLock();
+    this.game.requestLock();
   }
 
   chooseEye(id: EyeId): void {
@@ -342,9 +339,9 @@ export class Rooftop {
     this.clearWorld();
     this.restorePlayer();
     this.game.combat.resetPlayer();
-    this.rideDown();
+    this.climbDown();
     setState({ kind: 'explore' });
-    this.game.input.requestLock();
+    this.game.requestLock();
   }
 
   // From the end screen back to the street, or out to the title.
@@ -352,10 +349,10 @@ export class Rooftop {
     this.phase = { kind: 'idle' };
     rooftopUi.result.value = null;
     this.game.combat.resetPlayer();
-    this.rideDown();
+    this.climbDown();
     if (to === 'title') { setState({ kind: 'title' }); return; }
     setState({ kind: 'explore' });
-    this.game.input.requestLock();
+    this.game.requestLock();
   }
 
   private clearWorld(): void {

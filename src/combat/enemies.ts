@@ -4,17 +4,20 @@ import { Avatar, type CharacterModel } from '../character/avatar';
 import { RAPIER, GROUP_ENEMY, GROUP_WORLD, GROUP_PROP, groups } from '../physics/world';
 
 export type EnemyAi = 'thug' | 'kuroda' | 'ancient' | 'dummy';
-export interface EnemyDef { name: string; model: CharacterModel; hp: number; speed: number; dmg: number; ai: EnemyAi; boss?: boolean; tint?: number; emissive?: number; height?: number; title?: string }
+// `tint` is the suit: one flat, saturated colour per role, far from any skin
+// tone, so a role reads at a glance from the top-down camera. `build` widens
+// the chest; with `height` it gives each role its own silhouette.
+export interface EnemyDef { name: string; model: CharacterModel; hp: number; speed: number; dmg: number; ai: EnemyAi; boss?: boolean; tint?: number; emissive?: number; height?: number; build?: number; title?: string }
 
 export const ENEMY_DEFS: Record<string, EnemyDef> = {
-  thug: { name: 'Underworld Thug', model: 'bald', hp: 70, speed: 3.6, dmg: 11, ai: 'thug', tint: 0x9aa0a8 },
-  bruiser: { name: 'Bristle Brawler', model: 'beard', hp: 120, speed: 3.0, dmg: 16, ai: 'thug', tint: 0x7a2c34, height: 1.95 },
-  kuroda: { name: 'Kuroda Enforcer', model: 'parted', hp: 620, speed: 3.2, dmg: 15, ai: 'kuroda', boss: true, tint: 0xb04a2a, emissive: 0xff3a00, height: 1.9, title: 'Kuroda Enforcer, whose "fire" is fuel' },
-  ancient: { name: 'The Ancient Echo Master', model: 'long', hp: 1300, speed: 2.6, dmg: 20, ai: 'ancient', boss: true, tint: 0xdfe8dc, emissive: 0x7dffb2, height: 1.7, title: 'The Ancient Echo Master' },
-  dummy: { name: 'Training Dummy', model: 'buzzed', hp: 100000, speed: 0, dmg: 0, ai: 'dummy', tint: 0x3e5a78 },
+  thug: { name: 'Underworld Thug', model: 'bald', hp: 70, speed: 3.6, dmg: 11, ai: 'thug', tint: 0x5b5560 },
+  bruiser: { name: 'Bristle Brawler', model: 'beard', hp: 120, speed: 3.0, dmg: 16, ai: 'thug', tint: 0x9b2335, height: 1.95, build: 1.18 },
+  kuroda: { name: 'Kuroda Enforcer', model: 'parted', hp: 620, speed: 3.2, dmg: 15, ai: 'kuroda', boss: true, tint: 0xd4661a, emissive: 0xff3a00, height: 1.9, build: 1.1, title: 'Kuroda Enforcer, whose "fire" is fuel' },
+  ancient: { name: 'The Ancient Echo Master', model: 'long', hp: 1300, speed: 2.6, dmg: 20, ai: 'ancient', boss: true, tint: 0xeef3ea, emissive: 0x7dffb2, height: 1.7, build: 0.94, title: 'The Ancient Echo Master' },
+  dummy: { name: 'Training Dummy', model: 'buzzed', hp: 100000, speed: 0, dmg: 0, ai: 'dummy', tint: 0x8c9a7a },
   // Rooftop-trial roster: the same thug AI at other speeds, weights and hit points.
-  runner: { name: 'Spring Leaper', model: 'buzzed', hp: 52, speed: 5.2, dmg: 14, ai: 'thug', tint: 0x4f8a58, height: 1.72 },
-  husk: { name: 'Husk Shell', model: 'beard', hp: 190, speed: 2.3, dmg: 20, ai: 'thug', tint: 0x5c4a36, height: 2.05 },
+  runner: { name: 'Spring Leaper', model: 'buzzed', hp: 52, speed: 5.2, dmg: 14, ai: 'thug', tint: 0x2f9e5a, height: 1.72, build: 0.92 },
+  husk: { name: 'Husk Shell', model: 'beard', hp: 190, speed: 2.3, dmg: 20, ai: 'thug', tint: 0x6b2f6e, height: 2.05, build: 1.24 },
 };
 
 export interface EnemyScale { hp: number; dmg: number }
@@ -87,7 +90,7 @@ export class Enemy {
     this.hp = this.maxHp = def.hp * scale.hp;
     this.dmg = def.dmg * scale.dmg;
     this.position = pos.clone();
-    this.avatar = new Avatar(game.assets, def.model, { targetHeight: def.height ?? 1.8, tint: def.tint, emissive: def.emissive });
+    this.avatar = new Avatar(game.assets, def.model, { targetHeight: def.height ?? 1.8, tint: def.tint, emissive: def.emissive, build: def.build });
     this.avatar.root.position.copy(pos);
     game.renderer.scene.add(this.avatar.root);
     const h = def.height ?? 1.8, r = 0.36;

@@ -22,8 +22,8 @@ export const AURA_AFTER = 4;
 
 export const SPAWN_GAP = 0.45;
 
-// The district's thugs are built for one-on-one fights. A wave puts a dozen on
-// the roof, so every regular enemy carries TRIAL's share of its district health
+// The yard's thugs are built for one-on-one fights. A wave puts a dozen on
+// the roof, so every regular enemy carries TRIAL's share of its yard health
 // and damage, and then hardens by 6% health and 6.5% damage per wave, as in the
 // classic arena. Bosses keep their encounter moves with a trimmed health pool
 // and a softer hand.

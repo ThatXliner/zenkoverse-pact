@@ -1,17 +1,12 @@
 import { useState } from 'preact/hooks';
 import type { Game } from '../../app/game';
 import { POIS, poiById, type Poi, type PoiId } from '../../nav/poi';
+import { HALL, STORE, GATE, POND, SPAWN } from '../../world/compound';
 import './nav.css';
 
-// The map shows the district as a 180 m square, north up, in world metres.
-const HALF = 90;
-
-// Street bands, from the sidewalk lines laid out in world/district.ts.
-const ROADS: { x: number; z: number; w: number; d: number }[] = [
-  { x: -80, z: -9, w: 144, d: 18 },
-  { x: -8, z: -68, w: 16, d: 56 },
-  { x: -8, z: 12, w: 16, d: 48 },
-];
+// The map is the compound's plan, north up, in world metres: the walls, the
+// hall and its roof, the storehouse, the gatehouse, the ring and the pond.
+const HALF_X = 28, HALF_Z = 24;
 
 type Selection = { kind: 'poi'; id: PoiId } | { kind: 'point'; x: number; z: number } | null;
 
@@ -21,13 +16,12 @@ export function NavMap({ game }: { game: Game }) {
   const unlocked = nav.unlocked.value;
   const [sel, setSel] = useState<Selection>(target?.poi ? { kind: 'poi', id: target.poi } : null);
   const p = game.player.position;
-  const heading = (-game.cam.yaw * 180) / Math.PI;
-  const zones = game.district.zones;
+  const heading = (-game.cam.heading * 180) / Math.PI;
 
   const dropPoint = (e: MouseEvent) => {
     const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
-    const x = -HALF + ((e.clientX - r.left) / r.width) * 2 * HALF;
-    const z = -HALF + ((e.clientY - r.top) / r.height) * 2 * HALF;
+    const x = -HALF_X + ((e.clientX - r.left) / r.width) * 2 * HALF_X;
+    const z = -HALF_Z + ((e.clientY - r.top) / r.height) * 2 * HALF_Z;
     setSel({ kind: 'point', x: Math.round(x), z: Math.round(z) });
   };
   const pick = (id: PoiId) => (e: Event) => { e.stopPropagation(); setSel({ kind: 'poi', id }); };
@@ -35,32 +29,36 @@ export function NavMap({ game }: { game: Game }) {
 
   return (
     <div class="nav-map">
-      <svg viewBox={`${-HALF} ${-HALF} ${HALF * 2} ${HALF * 2}`} role="img" aria-label="District map" onClick={dropPoint}>
+      <svg viewBox={`${-HALF_X} ${-HALF_Z} ${HALF_X * 2} ${HALF_Z * 2}`} role="img" aria-label="Compound map" onClick={dropPoint}>
         <defs>
           <pattern id="water" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><line x1="0" y1="0" x2="0" y2="3" stroke="rgba(111,211,255,0.28)" stroke-width="0.4" /></pattern>
-          <pattern id="tiles" width="4" height="4" patternUnits="userSpaceOnUse"><path d="M4 0H0V4" fill="none" stroke="rgba(243,238,228,0.1)" stroke-width="0.25" /></pattern>
-          <clipPath id="frame"><rect x={-HALF} y={-HALF} width={HALF * 2} height={HALF * 2} /></clipPath>
+          <clipPath id="frame"><rect x={-HALF_X} y={-HALF_Z} width={HALF_X * 2} height={HALF_Z * 2} /></clipPath>
         </defs>
-        <rect class="m-bg" x={-HALF} y={-HALF} width={HALF * 2} height={HALF * 2} />
+        <rect class="m-bg" x={-HALF_X} y={-HALF_Z} width={HALF_X * 2} height={HALF_Z * 2} />
         <g clip-path="url(#frame)">
-          {[-60, -30, 0, 30, 60].map((g) => <g key={g} class="m-grid"><line x1={g} y1={-HALF} x2={g} y2={HALF} /><line x1={-HALF} y1={g} x2={HALF} y2={g} /></g>)}
-          {ROADS.map((r, i) => <rect key={i} class="m-road" x={r.x} y={r.z} width={r.w} height={r.d} />)}
-          <line class="m-lane" x1={-80} y1={0} x2={64} y2={0} />
-          {zones.filter((z) => z.id === 'academy').map((z) => <rect key={z.id} class="m-yard" x={z.min.x} y={z.min.z} width={z.max.x - z.min.x} height={z.max.z - z.min.z} />)}
-          {zones.filter((z) => z.id === 'kuroda' || z.id === 'alley').map((z) => <rect key={z.id} class="m-yard thin" x={z.min.x} y={z.min.z} width={z.max.x - z.min.x} height={z.max.z - z.min.z} />)}
-          {zones.filter((z) => z.id === 'canal').map((z) => <rect key={z.id} class="m-water" x={z.min.x} y={-HALF} width={z.max.x - z.min.x} height={HALF * 2} />)}
-          {zones.filter((z) => z.id === 'bridge').map((z) => <rect key={z.id} class="m-bridge" x={z.min.x + 1} y={-3.5} width={z.max.x - z.min.x - 2} height={7} />)}
-          {game.district.footprints.map((f, i) => <rect key={i} class="m-building" x={f.x - f.w / 2} y={f.z - f.d / 2} width={f.w} height={f.d} />)}
-          {zones.filter((z) => z.id === 'dojo').map((z) => <rect key={z.id} class="m-building dojo" x={z.min.x} y={z.min.z} width={z.max.x - z.min.x} height={z.max.z - z.min.z} />)}
-          <text class="m-street" x={-26} y={-11.5} text-anchor="middle">MARKET STREET</text>
-          <text class="m-street" x={72} y={-80} text-anchor="middle">CANAL</text>
+          {[-20, -10, 0, 10, 20].map((g) => <g key={g} class="m-grid"><line x1={g} y1={-HALF_Z} x2={g} y2={HALF_Z} /><line x1={-HALF_X} y1={g} x2={HALF_X} y2={g} /></g>)}
+          <rect class="m-yard" x={-24} y={-20} width={48} height={40} />
+          <rect class="m-wall" x={-24.6} y={-20.6} width={49.2} height={41.2} />
+          <circle class="m-ring" cx={SPAWN.ring.x} cy={SPAWN.ring.z} r={6} />
+          <circle class="m-water" cx={POND.center.x} cy={POND.center.z} r={3.3} />
+          <rect class="m-building" x={HALL.x0} y={HALL.z0} width={HALL.x1 - HALL.x0} height={HALL.z1 - HALL.z0} />
+          <rect class="m-building" x={STORE.x0} y={STORE.z0} width={STORE.x1 - STORE.x0} height={STORE.z1 - STORE.z0} />
+          <rect class="m-building" x={GATE.x0} y={GATE.z0} width={GATE.x1 - GATE.x0} height={GATE.z1 - GATE.z0} />
+          <rect class="m-walk" x={22.4} y={STORE.z1} width={1.6} height={20 - STORE.z1} />
+          <rect class="m-walk" x={GATE.x1 + 0.9} y={18.4} width={24 - GATE.x1 - 0.9} height={1.6} />
+          <rect class="m-walk" x={-18} y={-13.6} width={3.4} height={2.6} />
+          <rect class="m-walk" x={-17.9} y={-11} width={1.8} height={7.6} />
+          <rect class="m-walk" x={14.3} y={-6.8} width={3.1} height={1.6} />
+          <text class="m-street" x={0} y={-11.2} text-anchor="middle">HALL</text>
+          <text class="m-street" x={(STORE.x0 + STORE.x1) / 2} y={(STORE.z0 + STORE.z1) / 2 + 0.6} text-anchor="middle">STORE</text>
+          <text class="m-street" x={0} y={23} text-anchor="middle">GATE</text>
         </g>
-        <text class="m-north" x={HALF - 6} y={-HALF + 9} text-anchor="middle">N</text>
-        <path class="m-north-arrow" d={`M${HALF - 6} ${-HALF + 11} l-2.2 4.4 h4.4 z`} />
+        <text class="m-north" x={HALF_X - 3} y={-HALF_Z + 4} text-anchor="middle">N</text>
+        <path class="m-north-arrow" d={`M${HALF_X - 3} ${-HALF_Z + 5} l-1.1 2.2 h2.2 z`} />
         {target && !target.poi && <Gem x={target.position.x} z={target.position.z} />}
-        {sel?.kind === 'point' && <g class="m-point"><circle cx={sel.x} cy={sel.z} r={2.2} /><path d={`M${sel.x - 4} ${sel.z}h2.6M${sel.x + 1.4} ${sel.z}h2.6M${sel.x} ${sel.z - 4}v2.6M${sel.x} ${sel.z + 1.4}v2.6`} /></g>}
+        {sel?.kind === 'point' && <g class="m-point"><circle cx={sel.x} cy={sel.z} r={1.1} /><path d={`M${sel.x - 2} ${sel.z}h1.3M${sel.x + 0.7} ${sel.z}h1.3M${sel.x} ${sel.z - 2}v1.3M${sel.x} ${sel.z + 0.7}v1.3`} /></g>}
         {POIS.map((poi) => <PoiIcon key={poi.id} poi={poi} unlocked={unlocked.has(poi.id)} tracked={target?.poi === poi.id} selected={sel?.kind === 'poi' && sel.id === poi.id} onPick={pick(poi.id)} />)}
-        <g class="m-player" transform={`translate(${p.x} ${p.z}) rotate(${heading})`}><circle r={5.5} class="halo" /><path d="M0 -4.6 L3.2 3.4 L0 1.6 L-3.2 3.4 Z" /></g>
+        <g class="m-player" transform={`translate(${p.x} ${p.z}) rotate(${heading})`}><circle r={2.6} class="halo" /><path d="M0 -2.2 L1.5 1.6 L0 0.8 L-1.5 1.6 Z" /></g>
       </svg>
       <aside class="map-side">
         <Detail game={game} sel={sel} onClose={() => setSel(null)} />
@@ -75,19 +73,19 @@ export function NavMap({ game }: { game: Game }) {
             </li>
           ))}
         </ul>
-        <div class="map-legend"><span><b class="gem" /> tracked</span><span><b class="ring on" /> waypoint</span><span><b class="ring" /> locked</span></div>
+        <div class="map-legend"><span><b class="gem" /> tracked</span><span><b class="ring on" /> visited</span><span><b class="ring" /> not yet</span></div>
       </aside>
     </div>
   );
 }
 
 function Gem({ x, z }: { x: number; z: number }) {
-  return <g class="m-gem" transform={`translate(${x} ${z})`}><path d="M0 -4.2 L3.2 0 L0 4.2 L-3.2 0 Z" /></g>;
+  return <g class="m-gem" transform={`translate(${x} ${z})`}><path d="M0 -2 L1.5 0 L0 2 L-1.5 0 Z" /></g>;
 }
 
 function PoiIcon({ poi, unlocked, tracked, selected, onPick }: { poi: Poi; unlocked: boolean; tracked: boolean; selected: boolean; onPick: (e: Event) => void }) {
   return (
-    <g class={`m-poi ${unlocked ? 'unlocked' : ''} ${tracked ? 'tracked' : ''} ${selected ? 'selected' : ''}`} data-map-poi={poi.id} transform={`translate(${poi.at.x} ${poi.at.z})`} role="button" tabIndex={0} aria-label={poi.name} onClick={onPick} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onPick(e); }}>
+    <g class={`m-poi ${unlocked ? 'unlocked' : ''} ${tracked ? 'tracked' : ''} ${selected ? 'selected' : ''}`} data-map-poi={poi.id} transform={`translate(${poi.at.x} ${poi.at.z}) scale(0.5)`} role="button" tabIndex={0} aria-label={poi.name} onClick={onPick} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onPick(e); }}>
       <circle class="hit" r={8} />
       <circle class="ring" r={5.6} />
       <circle class="face" r={4.4} />
@@ -118,12 +116,11 @@ function Detail({ game, sel, onClose }: { game: Game; sel: Selection; onClose: (
     );
   }
   const poi = poiById(sel.id);
-  const open = nav.unlocked.value.has(poi.id);
+  const open = nav.visited(poi.id);
   const tracked = nav.isPinned(poi.id);
-  const can = nav.canTravel(poi.id);
   return (
     <div class="map-detail" data-detail={poi.id}>
-      <span class="kicker">{open ? 'Waypoint unlocked' : 'Waypoint not yet found'}</span>
+      <span class="kicker">{open ? 'Visited' : 'Not yet visited'}</span>
       <h3><span class="jp">{poi.jp}</span> {poi.name}</h3>
       <p>{poi.blurb}</p>
       <p class="meta"><span>{Math.round(Math.hypot(poi.at.x - p.x, poi.at.z - p.z))} m away</span></p>
@@ -131,9 +128,7 @@ function Detail({ game, sel, onClose }: { game: Game; sel: Selection; onClose: (
         {tracked
           ? <button class="btn" onClick={() => nav.untrack()}>Stop tracking</button>
           : <button class="btn primary" onClick={() => nav.track({ kind: 'poi', id: poi.id })}>Track</button>}
-        <button class="btn" disabled={!can.ok} onClick={() => nav.travel(poi.id)}>Fast travel</button>
       </div>
-      {!can.ok && <p class="why">{can.reason}</p>}
     </div>
   );
 }

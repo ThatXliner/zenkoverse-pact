@@ -21,6 +21,8 @@ import { RooftopLayer } from '../rooftop/RooftopUi';
 import { NavHud } from './nav/NavHud';
 import { NavMap } from './nav/NavMap';
 import { TopLeft } from './nav/TopLeft';
+import { OnlineHud, OnlineJoin, OnlineMenu } from './Online';
+import { roomFromUrl } from '../net/net';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -52,11 +54,13 @@ function Boot({ progress, label }: { progress: number; label: string }) {
 }
 
 function Title({ game }: { game: Game }) {
-  const [select, setSelect] = useState(false);
+  // A room link opens straight onto the Technique screen with the join form.
+  const [online, setOnline] = useState(() => !!roomFromUrl());
+  const [select, setSelect] = useState(online);
   const [rooftop, setRooftop] = useState(false);
   const [tech, setTech] = useState<TechniqueId>(game.techniqueId);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter' && !select) { setRooftop(false); setSelect(true); } };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter' && !select) { setRooftop(false); setOnline(false); setSelect(true); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [select]);
@@ -66,13 +70,15 @@ function Title({ game }: { game: Game }) {
         <div><div class="kicker">Choose your Technique</div><h2>生まれ持った技</h2></div>
         <div class="cards">
           {TECHNIQUE_IDS.map((id) => { const k = KITS[id]; return (
-            <button key={id} class={`card ${tech === id ? 'active' : ''}`} data-glyph={k.glyph} style={{ '--c': hex(k.color) } as never} onClick={() => { setTech(id); game.setTechnique(id); game.audio.play('select_001', 0.4); }} onDblClick={() => { game.setTechnique(id); if (rooftop) game.rooftop.begin(); else game.startRun(); }}>
+            <button key={id} class={`card ${tech === id ? 'active' : ''}`} data-glyph={k.glyph} style={{ '--c': hex(k.color) } as never} onClick={() => { setTech(id); game.setTechnique(id); game.audio.play('select_001', 0.4); }} onDblClick={() => { game.setTechnique(id); if (online) return; if (rooftop) game.rooftop.begin(); else game.startRun(); }}>
               <span class="type">{k.type}</span><h3>{k.name}</h3><p>{k.blurb}</p><span class="res">Resource · {k.resource.name}</span>
             </button>); })}
         </div>
         <div class="select-foot">
           <span>{KITS[tech].primitive.description}</span>
-          {rooftop ? (
+          {online ? (
+            <OnlineJoin game={game} tech={tech} onBack={() => { setSelect(false); setOnline(false); }} />
+          ) : rooftop ? (
             <div style="display:flex;gap:8px">
               <button class="btn" onClick={() => setSelect(false)}>Back</button>
               <button class="btn primary" onClick={() => { game.setTechnique(tech); game.rooftop.begin(); }}>Climb to the rooftop</button>
@@ -94,8 +100,9 @@ function Title({ game }: { game: Game }) {
         <div class="jp-big">契<em>約</em></div>
         <div class="sub">A dojo at dusk, one Technique, and the Pacts you write to shape it. Every ability is a sacrifice the universe reads back to you.</div>
         <div class="menu" style="margin-top:18px">
-          <button onClick={() => { setRooftop(false); setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Begin</button>
-          <button onClick={() => { setRooftop(true); setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Rooftop</button>
+          <button onClick={() => { setRooftop(false); setOnline(false); setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Begin</button>
+          <button onClick={() => { setRooftop(false); setOnline(true); setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Play Online</button>
+          <button onClick={() => { setRooftop(true); setOnline(false); setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Rooftop</button>
           <button onClick={() => { game.audio.resumeContext(); pause('settings'); setState({ kind: 'paused', resume: { kind: 'title' }, tab: 'settings' }); }}>Settings</button>
           <button onClick={() => setState({ kind: 'paused', resume: { kind: 'title' }, tab: 'codex' })}>Codex</button>
         </div>
@@ -161,6 +168,7 @@ function Hud({ game }: { game: Game }) {
       )}
       {!cut && <NavHud />}
       {!cut && <TopLeft game={game} />}
+      {game.net && <OnlineHud game={game} />}
       {combatUi.wagerArmed.value && !cut && <div class="wager-arm">WAGER DECLARED · THE NEXT STRIKE CONNECTS</div>}
       {auraUi.active.value && !cut && <div class="aura-ring" />}
       {auraUi.clash.value !== null && !cut && <div class="clash"><span class="kicker">Aura clash · hold {keyLabel('aura')}</span><div class="track"><i style={{ left: `${50 + auraUi.clash.value * 50}%`, width: '3px' }} /></div></div>}
@@ -273,11 +281,12 @@ function Pause({ game, tab }: { game: Game; tab: PauseTab }) {
     <div class="sheet-wrap">
       <div class="sheet" role="dialog" aria-label="Menu">
         <header>
-          <div><div class="kicker">{fromTitle ? 'Title' : 'Paused'}</div><h2>{tab === 'menu' ? '一時停止' : tab === 'settings' ? '設定' : tab === 'controls' ? '操作' : tab === 'codex' ? '事典' : '地図'}</h2></div>
+          <div><div class="kicker">{fromTitle ? 'Title' : game.net ? 'Menu · the room keeps going' : 'Paused'}</div><h2>{tab === 'menu' ? '一時停止' : tab === 'settings' ? '設定' : tab === 'controls' ? '操作' : tab === 'codex' ? '事典' : '地図'}</h2></div>
           <div class="tabs" role="tablist">{tabs.map((t) => <button key={t} role="tab" class={tab === t ? 'on' : ''} onClick={() => setState({ ...(st as Extract<typeof st, { kind: 'paused' }>), tab: t })}>{t}</button>)}</div>
         </header>
         <div class="body">
-          {tab === 'menu' && (
+          {tab === 'menu' && game.net && <OnlineMenu game={game} back={back} />}
+          {tab === 'menu' && !game.net && (
             <div class="pause-menu">
               <button onClick={back}>Resume</button>
               <button onClick={() => { resume(); game.tutorial.skip(); game.requestLock(); }}>Skip tutorial</button>

@@ -2,7 +2,9 @@
 // build to test and which options it was given. A URL may come as a bare
 // argument or as --url. Without one the script serves dist/ itself, so a
 // check never silently tests something other than the build it was pointed at.
-// Options are --name value, or --name alone for a flag.
+// Options are --name value, or --name alone for a flag. A check that needs the
+// realtime rooms asks for `{ realtime: true }`: it then serves dist/ through
+// server/index.mjs (passing --latency on), and gets `restart` to bounce it.
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -24,7 +26,7 @@ async function listening(port) {
   try { await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(400) }); return true; } catch { return false; }
 }
 
-export async function resolveTarget(argv = process.argv.slice(2)) {
+export async function resolveTarget(argv = process.argv.slice(2), { realtime = false } = {}) {
   const { args, positional } = parseArgs(argv);
   const bare = positional.find((p) => /^https?:\/\//.test(p));
   const stray = positional.filter((p) => p !== bare);
@@ -32,22 +34,29 @@ export async function resolveTarget(argv = process.argv.slice(2)) {
   let url = args.url ?? bare;
   let server = null;
   const stop = () => { if (server && !server.killed) server.kill(); server = null; };
+  let restart = null;
   if (!url) {
     if (!existsSync('dist/index.html')) throw new Error('dist/ missing: run npm run build first');
-    const port = args.port ?? '4173';
+    const port = args.port ?? (realtime ? '4181' : '4173');
     // Another server on the port would answer in place of ours and the check
     // would test a build it was never pointed at.
     if (await listening(port)) throw new Error(`port ${port} is already in use: stop that server or pass --port`);
-    const vite = resolve('node_modules/vite/bin/vite.js');
-    server = spawn(process.execPath, [vite, 'preview', '--port', port, '--strictPort'], { stdio: 'ignore' });
+    const cmd = realtime
+      ? [resolve('server/index.mjs'), '--port', port, '--latency', args.latency ?? '0']
+      : [resolve('node_modules/vite/bin/vite.js'), 'preview', '--port', port, '--strictPort'];
     url = `http://localhost:${port}/`;
-    for (let i = 0; i < 100; i++) {
-      if (server.exitCode !== null) throw new Error(`vite preview exited: is port ${port} taken?`);
-      try { if ((await fetch(url)).ok) break; } catch { /* not up yet */ }
-      await new Promise((r) => setTimeout(r, 100));
-    }
+    const start = async () => {
+      server = spawn(process.execPath, cmd, { stdio: 'ignore' });
+      for (let i = 0; i < 100; i++) {
+        if (server.exitCode !== null) throw new Error(`${realtime ? 'server/index.mjs' : 'vite preview'} exited: is port ${port} taken?`);
+        try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    };
+    await start();
+    if (realtime) restart = async () => { const old = server; old.kill(); await new Promise((r) => old.once('exit', r)); await start(); };
     process.on('exit', stop);
   }
   if (!url.endsWith('/')) url += '/';
-  return { url, args, stop };
+  return { url, args, stop, restart };
 }

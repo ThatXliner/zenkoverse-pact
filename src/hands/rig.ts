@@ -77,6 +77,8 @@ export class ArmRig {
       ((m.material as THREE.Material).name === 'Suit' ? this.sleeveMeshes : this.skinMeshes).push(m);
     });
     for (const o of drop) o.removeFromParent();
+    // The same drawn proportions as the body: a larger hand.
+    for (const side of ['l', 'r']) bones.get(`hand_${side}`)?.scale.setScalar(1.06);
     this.object.updateMatrixWorld(true);
 
     const b = (n: string): THREE.Bone => { const x = bones.get(n); if (!x) throw new Error(`human.glb lacks bone ${n}`); return x; };

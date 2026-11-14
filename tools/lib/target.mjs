@@ -20,6 +20,10 @@ export function parseArgs(argv) {
   return { args, positional };
 }
 
+async function listening(port) {
+  try { await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(400) }); return true; } catch { return false; }
+}
+
 export async function resolveTarget(argv = process.argv.slice(2)) {
   const { args, positional } = parseArgs(argv);
   const bare = positional.find((p) => /^https?:\/\//.test(p));
@@ -31,6 +35,9 @@ export async function resolveTarget(argv = process.argv.slice(2)) {
   if (!url) {
     if (!existsSync('dist/index.html')) throw new Error('dist/ missing: run npm run build first');
     const port = args.port ?? '4173';
+    // Another server on the port would answer in place of ours and the check
+    // would test a build it was never pointed at.
+    if (await listening(port)) throw new Error(`port ${port} is already in use: stop that server or pass --port`);
     const vite = resolve('node_modules/vite/bin/vite.js');
     server = spawn(process.execPath, [vite, 'preview', '--port', port, '--strictPort'], { stdio: 'ignore' });
     url = `http://localhost:${port}/`;

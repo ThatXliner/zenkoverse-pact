@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Game } from './game';
-import { SPAWN } from '../world/district';
+import { SPAWN } from '../world/compound';
+import type { CameraMode } from '../player/camera';
 import { appState } from './state';
 import { validatePact } from '../pacts/schema';
 import type { KeySlot } from '../pacts/slots';
@@ -16,13 +17,13 @@ export interface DebugApi {
   skipTutorial(): void;
   god(on?: boolean): void;
   technique(id: TechniqueId): void;
-  camera(mode: 'first' | 'third'): void;
+  camera(mode: CameraMode): void;
   look(yaw: number, pitch: number): void;
   cast(slot: KeySlot): void;
   pose(name: PoseName | null): void;
   handsView(yaw: number, pitch: number): void;
   hold(action: Action, held: boolean): void;
-  encounter(id: 'alley-thugs' | 'kuroda' | 'ancient-bridge' | 'dummy-room'): void;
+  encounter(id: 'sparring' | 'kuroda' | 'ancient' | 'dummy-room'): void;
   drill(id: 'recoil-crane'): void;
   workshop(open: boolean): void;
   tutorialStep(step: string): void;
@@ -39,7 +40,7 @@ export interface DebugApi {
   rooftop: {
     begin(): void;
     clearWave(): void;
-    ride(dir: 'up' | 'down'): void;
+    climb(dir: 'up' | 'down'): void;
     status(): { stage: string; wave: number; alive: number; hp: number; maxHp: number; auraAllowed: boolean; eye: string | null; app: string };
     audit(technique: TechniqueId, rounds: number): string[];
     offers(): { name: string; slot: string; tags: string[]; text: string; valid: boolean; errors: string[] }[];
@@ -62,7 +63,7 @@ export function installDebug(game: Game): void {
     skipTutorial() { game.tutorial.skip(); },
     god(on = true) { game.combat.god = on; },
     technique(id) { game.setTechnique(id); },
-    camera(mode) { game.cam.mode = mode; game.cam.blend = mode === 'first' ? 0 : 1; },
+    camera(mode) { game.cam.snap(mode); game.setCamera(mode); },
     look(yaw, pitch) { game.cam.yaw = yaw; game.cam.pitch = pitch; },
     cast(slot) { game.techniques.cast(slot, true); },
     pose(name) { game.hands.debugPose = name; },
@@ -85,7 +86,7 @@ export function installDebug(game: Game): void {
     rooftop: {
       begin() { game.rooftop.begin(); },
       clearWave() { game.rooftop.clearWave(); },
-      ride(dir) { if (dir === 'up') game.rooftop.rideUp(); else game.rooftop.rideDown(); },
+      climb(dir) { if (dir === 'up') game.rooftop.climbUp(); else game.rooftop.climbDown(); },
       status() { const r = game.rooftop; return { stage: r.stage, wave: r.wave, alive: r.alive, hp: game.combat.hp, maxHp: game.combat.maxHp, auraAllowed: r.auraAllowed, eye: game.combat.eye, app: appState.value.kind }; },
       audit(technique, rounds) { const was = game.techniqueId; game.setTechnique(technique); const bad = auditOffers(game, rounds); game.setTechnique(was); return bad; },
       offers() {

@@ -78,15 +78,15 @@ const cutscene = anchored({
 });
 
 const drill: DrillDef = {
-  id: 'recoil-crane', technique: 'recoil', title: 'Crane Catch', jp: '受け身', brief: 'Crates drop from the crane. Face them and hold Absorption before they land.',
-  position: [-62, 0, -52],
+  id: 'recoil-crane', technique: 'recoil', title: 'Crane Catch', jp: '受け身', brief: 'Crates drop from the hoist. Face them and hold Absorption before they land.',
+  position: [-20, 0, 10],
   tiers: [
     { name: 'First Catch', count: 4, interval: 3.2, dropHeight: 8, pass: 2, gains: { efficiency: 0.12, activation: 0.08 } },
     { name: 'Rhythm', count: 6, interval: 2.2, dropHeight: 9, pass: 4, gains: { efficiency: 0.14, tolerance: 0.08, activation: 0.08 } },
     { name: 'Hailstorm', count: 9, interval: 1.4, dropHeight: 10, pass: 7, gains: { efficiency: 0.16, output: 0.1, activation: 0.1 } },
   ],
   spawn(game, tier, index) {
-    const hook = game.district.craneHook.position;
+    const hook = game.world.craneHook.position;
     const at = new THREE.Vector3(hook.x + (Math.random() - 0.5) * 2.5, tier.dropHeight, hook.z + (Math.random() - 0.5) * 2.5 + (index % 2) * 1.5);
     const p = game.props.spawn(index % 3 === 2 ? 'barrel' : 'crate', at);
     p.body.setLinvel({ x: 0, y: -1.5, z: 0 }, true);

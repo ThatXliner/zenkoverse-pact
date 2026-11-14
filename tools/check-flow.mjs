@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Drives the built game the way a player does, with real clicks and keys:
-// title, Technique select, the Workshop, inscribing, the dummy room, and the
-// tutorial's Pact step. Times the 30-second test from issue #29 ("Absorption,
-// only from the front, while held") and fails on any page error.
+// title, Technique select, the Workshop, inscribing, the dummy room, the
+// tutorial's Pact step, and then the whole tutorial from its first step to
+// its last in the default top-down view. Times the 30-second test from
+// issue #29 ("Absorption, only from the front, while held") and fails on any
+// page error.
 // Usage: node tools/check-flow.mjs [url] [--url http://localhost:4173/] [--out captures/flow] [--port 4173]
 // Without a URL it serves dist/ itself (run `npm run build` first). The
 // `?debug` hooks are used only to read state and to skip walking.
@@ -101,18 +103,22 @@ await shot('04-confirm');
 await page.keyboard.press('Escape');
 check((await waitState('explore')) === 'explore', 'Esc closes the Workshop');
 
-console.log('use the Ability in the dummy room');
+console.log('use the Ability in the dummy room, in the top-down view');
 await page.evaluate(() => window.game.encounter('dummy-room'));
 await page.waitForTimeout(600);
-await page.keyboard.down('KeyW');
-await page.waitForTimeout(420);
-await page.keyboard.up('KeyW');
+check((await page.evaluate(() => window.game.game.cam.mode)) === 'top', 'the fight is in the top-down view');
+// The nearest dummy stands west: aim the cursor left of the player and walk A.
+await page.mouse.move(380, 330);
 await page.waitForTimeout(200);
-await clickCanvas('left');
+await page.keyboard.down('KeyA');
+await page.waitForTimeout(420);
+await page.keyboard.up('KeyA');
+await page.waitForTimeout(200);
+await page.mouse.down(); await page.mouse.up();
 await page.waitForTimeout(900);
 const hurt = await page.evaluate(() => window.game.game.encounters.enemies.some((e) => e.hp < e.def.hp));
-check(hurt, 'left click lands Kinetic Release on a dummy');
-await clickCanvas('right', 700);
+check(hurt, 'left click lands Kinetic Release on the dummy under the cursor');
+await page.mouse.down({ button: 'right' }); await page.waitForTimeout(700); await page.mouse.up({ button: 'right' });
 await page.waitForTimeout(400);
 await shot('05-dummy-room');
 
@@ -173,6 +179,60 @@ await page.waitForFunction(() => window.game.game.tutorial.stepId === 'wager', n
 check((await state()) === 'tutorial', 'closing the Workshop keeps the tutorial running');
 check((await page.evaluate(() => window.game.game.tutorial.stepId)) === 'wager', 'the Pact step completes and the tutorial moves to Wager');
 await shot('10-tutorial-after-pact');
+
+console.log('the whole tutorial, start to finish, in the top-down view');
+await page.evaluate(() => localStorage.clear());
+await ready();
+await page.getByRole('button', { name: 'Begin', exact: true }).click();
+await page.locator('.card', { hasText: 'Recoil' }).click();
+await page.getByRole('button', { name: 'Begin at the Academy' }).click();
+check((await waitState('tutorial')) === 'tutorial', 'the tutorial starts');
+const stepId = () => page.evaluate(() => window.game.game.tutorial.stepId);
+// A step turns over 0.6 s after its objective is met, while the cast that met it may still be in flight; the pause before the next input is a player reading the card.
+const untilStep = async (id, ms = 9000) => { const ok = await page.waitForFunction((s) => window.game.game.tutorial.stepId === s, id, { timeout: ms }).then(() => true, () => false); check(ok, `the tutorial reaches "${id}" (at "${await stepId()}")`); await page.waitForTimeout(700); return ok; };
+check((await page.evaluate(() => window.game.game.cam.mode)) === 'top', 'a fresh player starts in the top-down view');
+check((await stepId()) === 'move', 'step 1 is Move');
+await page.waitForTimeout(800);
+// Move: W is up the screen in the top-down view.
+await page.keyboard.down('KeyW');
+await page.waitForTimeout(1800);
+await page.keyboard.up('KeyW');
+await untilStep('look');
+// Aim: the cursor turns the body.
+await page.mouse.move(640, 360);
+await page.waitForTimeout(400);
+await page.mouse.move(1180, 420, { steps: 12 });
+await page.waitForTimeout(400);
+await page.mouse.move(120, 300, { steps: 12 });
+await page.waitForTimeout(400);
+await untilStep('camera');
+await shot('11-tutorial-aim-done');
+// Camera: V cycles the view; cycle all the way back to the top-down view.
+await page.keyboard.press('KeyV');
+await untilStep('primary');
+check((await page.evaluate(() => window.game.game.cam.mode)) === 'third', 'V moves to the over-the-shoulder view');
+await page.keyboard.press('KeyV'); await page.waitForTimeout(200); await page.keyboard.press('KeyV'); await page.waitForTimeout(200);
+check((await page.evaluate(() => window.game.game.cam.mode)) === 'top', 'two more presses come back to the top-down view');
+await page.mouse.move(640, 300);
+await clickCanvas('left');
+await untilStep('secondary');
+await clickCanvas('right', 500);
+await untilStep('art');
+await page.keyboard.press('Digit1');
+await untilStep('pact');
+await page.keyboard.press('Tab');
+await page.locator('.ws-sheet').waitFor();
+await page.keyboard.press('Escape');
+await untilStep('wager');
+await page.keyboard.press('KeyR');
+await untilStep('max');
+await shot('12-tutorial-max');
+await page.keyboard.press('KeyQ');
+await untilStep('done', 14000);
+check((await state()) === 'tutorial' || (await state()) === 'cinematic', `the last card shows (state ${await state()})`);
+await shot('13-tutorial-done');
+await page.waitForFunction(() => window.game.state() === 'explore', null, { timeout: 14000 }).catch(() => undefined);
+check((await state()) === 'explore', 'the tutorial hands over to free play');
 
 const pageErrors = await page.evaluate(() => window.game.errors);
 errors.push(...pageErrors.map((e) => `window: ${e}`));

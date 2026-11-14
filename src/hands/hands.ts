@@ -7,6 +7,8 @@ import type { CameraRig } from '../player/camera';
 import type { Input } from '../app/input';
 import type { TechniqueKit } from '../techniques/kit';
 import type { Assets } from '../app/assets';
+import { toon, addInkHulls } from '../render/materials';
+import { PLAYER_SUIT } from '../character/avatar';
 
 // Spring state per hand. Poses are authored in view space for the right
 // hand; the left hand runs the mirrored pose through its own calibrated arm.
@@ -43,8 +45,8 @@ export class Hands {
   private rigRoot = new THREE.Group();
   private rig: ArmRig;
   private hands: HandState[] = [];
-  private skin: THREE.MeshPhysicalMaterial;
-  private clawMat: THREE.MeshPhysicalMaterial;
+  private skin: THREE.MeshToonMaterial;
+  private clawMat: THREE.MeshStandardMaterial;
   private gesture: Gesture | null = null;
   private gestureT = 0;
   private gestureKey = -1;
@@ -59,7 +61,7 @@ export class Hands {
   private swayVel = new THREE.Vector2();
   private prevYaw = 0;
   private prevPitch = 0;
-  private rainTwitch: { finger: Finger; side: number; t: number }[] = [];
+  private idleTwitch: { finger: Finger; side: number; t: number }[] = [];
   private color = new THREE.Color(0xff7a2f);
   private light: THREE.PointLight;
   frost = 0;
@@ -72,20 +74,16 @@ export class Hands {
   // Orbits the view around the right hand, for judging a pose from the side or above.
   inspect: { yaw: number; pitch: number } | null = null;
 
-  constructor(scene: THREE.Scene, private camera: THREE.PerspectiveCamera, assets: Assets, environment: THREE.Texture | null) {
+  constructor(scene: THREE.Scene, private camera: THREE.PerspectiveCamera, assets: Assets) {
     this.rig = new ArmRig(assets.model('characters/human'));
-    const src = this.rig.skinMeshes[0]!.material as THREE.MeshStandardMaterial;
-    this.skin = new THREE.MeshPhysicalMaterial({
-      map: src.map, normalMap: src.normalMap, roughnessMap: src.roughnessMap, metalnessMap: src.metalnessMap, color: src.color,
-      roughness: 1, metalness: 0, normalScale: new THREE.Vector2(0.9, 0.9), envMapIntensity: 0.5,
-      sheen: 0.35, sheenRoughness: 0.6, sheenColor: new THREE.Color(0xd98a74), clearcoat: 0.12, clearcoatRoughness: 0.4,
-    });
+    // The same flat skin and suit the third-person body wears, with an ink
+    // hull: the player's own hands are drawn like everyone else's.
+    this.skin = toon(0xf7d9bf);
     for (const m of this.rig.skinMeshes) m.material = this.skin;
-    const fabric = assets.texture('textures/Fabric030/normal')?.clone() ?? null;
-    if (fabric) { fabric.repeat.set(7, 7); fabric.needsUpdate = true; }
-    const sleeve = new THREE.MeshPhysicalMaterial({ color: 0x1a1d25, roughness: 0.9, metalness: 0, normalMap: fabric, normalScale: new THREE.Vector2(0.5, 0.5), side: THREE.DoubleSide, envMapIntensity: 0.3, sheen: 0.6, sheenRoughness: 0.75, sheenColor: new THREE.Color(0x4a5268) });
+    const sleeve = toon(PLAYER_SUIT, { side: THREE.DoubleSide });
     for (const m of this.rig.sleeveMeshes) m.material = sleeve;
-    this.clawMat = new THREE.MeshPhysicalMaterial({ color: 0xd8f4ff, roughness: 0.2, transmission: 0.35, thickness: 0.01, emissive: 0x9fe8ff, emissiveIntensity: 0.4 });
+    addInkHulls(this.rig.object, 0.0045);
+    this.clawMat = new THREE.MeshStandardMaterial({ color: 0xd8f4ff, roughness: 0.3, emissive: 0x9fe8ff, emissiveIntensity: 0.4 });
 
     this.rigRoot.quaternion.copy(FLIP);
     this.rigRoot.scale.setScalar(VIEW.scaleRig);
@@ -106,12 +104,11 @@ export class Hands {
 
     this.light = new THREE.PointLight(0xffffff, 0, 1.6, 2);
     this.light.position.set(0, -0.1, -0.35);
-    const fill = new THREE.HemisphereLight(0x6f7fa6, 0x1a110c, 0.55);
-    const key = new THREE.DirectionalLight(0xdfe6ff, 0.7);
-    key.position.set(0.6, 0.8, 0.2);
+    // Lit like the world: a warm key from the upper left, sky fill from above.
+    const fill = new THREE.HemisphereLight(0x9fb8e6, 0xb08a66, 1.1);
+    const key = new THREE.DirectionalLight(0xffd9a6, 2.6);
+    key.position.set(-0.7, 0.9, 0.3);
     this.root.add(this.light, fill, key);
-    scene.environment = environment;
-    scene.environmentIntensity = 0.4;
     scene.add(this.root);
     camera.add(this.root);
     scene.add(camera);
@@ -158,7 +155,8 @@ export class Hands {
   jump(): void { this.jumpLift = 0.05; }
   dash(): void { this.dashT = 0.3; }
   pulse(amount: number): void { this.pulseT = Math.max(this.pulseT, amount); }
-  twitch(): void { this.rainTwitch.push({ finger: FINGERS[Math.floor(Math.random() * 5)]!, side: Math.random() < 0.5 ? 1 : -1, t: 0.3 }); }
+  // A small idle flex of one finger now and then, so the hands stay alive.
+  twitch(): void { this.idleTwitch.push({ finger: FINGERS[Math.floor(Math.random() * 5)]!, side: Math.random() < 0.5 ? 1 : -1, t: 0.3 }); }
 
   update(rawDt: number, player: PlayerController, cam: CameraRig, input: Input): void {
     const dtc = Math.min(rawDt, 1 / 30);
@@ -166,9 +164,9 @@ export class Hands {
     this.landDip *= Math.exp(-7 * dtc);
     this.jumpLift *= Math.exp(-6 * dtc);
     this.dashT = Math.max(0, this.dashT - dtc);
-    if (Math.random() < dtc * 0.35 && !this.gesture) this.twitch();
-    for (const t of this.rainTwitch) t.t -= dtc;
-    this.rainTwitch = this.rainTwitch.filter((t) => t.t > 0);
+    if (Math.random() < dtc * 0.2 && !this.gesture) this.twitch();
+    for (const t of this.idleTwitch) t.t -= dtc;
+    this.idleTwitch = this.idleTwitch.filter((t) => t.t > 0);
 
     const swayTarget = new THREE.Vector2(THREE.MathUtils.clamp((this.prevYaw - cam.yaw) * 2.2, -0.08, 0.08), THREE.MathUtils.clamp((cam.pitch - this.prevPitch) * 1.6, -0.06, 0.06));
     this.prevYaw = cam.yaw; this.prevPitch = cam.pitch;
@@ -231,7 +229,7 @@ export class Hands {
       for (const f of FINGERS) for (let j = 0; j < 3; j++) h.curl[f][j] = THREE.MathUtils.lerp(h.curl[f][j]!, tp.fingers[f][j]!, 1 - Math.exp(-curlRate * dtc));
       h.spread = THREE.MathUtils.lerp(h.spread, tp.spread, 1 - Math.exp(-14 * dtc));
 
-      const twitch = this.rainTwitch.find((t) => t.side === h.side);
+      const twitch = this.idleTwitch.find((t) => t.side === h.side);
       this.rig.solve(h.arm, {
         wrist: this.toModel(h.pos),
         hand: FLIP.clone().multiply(h.rot),
@@ -251,7 +249,7 @@ export class Hands {
     this.glow += (glowTarget - this.glow) * (1 - Math.exp(-8 * dtc));
     this.pulseT *= Math.exp(-5 * dtc);
     this.light.intensity = this.glow * 0.03 + this.pulseT * 2.5;
-    this.skin.emissive.copy(this.color).multiplyScalar(this.pulseT * 0.26);
+    this.skin.emissive.copy(this.color).multiplyScalar(this.pulseT * 0.3);
     this.clawMat.emissiveIntensity = 0.3 + this.glow * 0.8 + this.pulseT;
   }
 

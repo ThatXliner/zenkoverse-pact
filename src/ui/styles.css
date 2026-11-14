@@ -65,6 +65,12 @@ button:focus-visible, [tabindex]:focus-visible { outline: 1px solid var(--paper)
 .reticle { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: rgba(243,238,228,0.9); box-shadow: 0 0 0 1px rgba(0,0,0,0.5); transition: transform 0.15s var(--ease), opacity 0.3s; }
 .reticle.hot { transform: scale(1.8); background: var(--c, var(--accent)); }
 .reticle.third { opacity: 0.45; }
+/* The top-down aim rides the mouse; the system cursor is hidden over the canvas. */
+body.top-view #gl { cursor: none; }
+body.top-view .hud { cursor: none; }
+.cursor { position: absolute; width: 22px; height: 22px; margin: -11px; border-radius: 50%; border: 2px solid rgba(243,238,228,0.92); box-shadow: 0 0 0 1px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(0,0,0,0.4); transition: transform 0.12s var(--ease), border-color 0.2s; }
+.cursor::after { content: ''; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: rgba(243,238,228,0.95); }
+.cursor.hot { transform: scale(1.35); border-color: var(--c, var(--accent)); }
 .vitals { position: absolute; left: var(--hud-pad); bottom: var(--hud-pad); display: grid; gap: 10px; width: 300px; }
 .meter { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: end; }
 .meter .lbl { font-size: 13px; letter-spacing: 0.08em; color: var(--mist); text-shadow: 0 1px 6px rgba(0,0,0,0.7); }

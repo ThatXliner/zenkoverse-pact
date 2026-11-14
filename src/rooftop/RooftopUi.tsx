@@ -166,7 +166,7 @@ function EndScreen({ game }: { game: Game }) {
         <header>
           <div class="kicker">Rooftop trial · {r.victory ? 'complete' : 'ended'}</div>
           <h2><span class="jp big">{r.victory ? '勝利' : '敗北'}</span></h2>
-          <p class="rt-note">{r.victory ? 'Five thousand years, and she still bowed.' : 'You went down in the rain. The Pacts you took here stay on the rooftop.'}</p>
+          <p class="rt-note">{r.victory ? 'Five thousand years, and she still bowed.' : 'You went down on the roof. The Pacts you took here stay up here.'}</p>
         </header>
         <Stats r={r} time={`${mm}:${ss}`} />
         <footer>

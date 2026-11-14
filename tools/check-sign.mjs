@@ -48,9 +48,9 @@ const fillReserve = () => api((g) => { g.game.techniques.resource = g.game.techn
 const click = async () => { await page.mouse.move(640, 360); await page.mouse.down(); await page.mouse.up(); };
 const pressAlt = () => page.keyboard.press('Alt');
 const ready = async () => { await page.goto(`${url}?debug`); await page.waitForFunction(() => window.game?.game?.ready, null, { timeout: 180000 }); await page.waitForTimeout(500); };
-// The dummy room, standing 1.4 m from a dummy, facing it: inside Kinetic Release's reach.
+// The hall's dummies, standing 1.4 m from one, facing it: inside Kinetic Release's reach.
 const toDummies = async () => {
-  await api((g) => { g.encounter('dummy-room'); g.teleport([-27.6, 0, -63]); g.look(Math.PI / 2, 0); });
+  await api((g) => { g.encounter('dummy-room'); g.teleport([6.4, 0.3, -12]); g.look(Math.PI / 2, 0); });
   await page.waitForTimeout(500);
 };
 const idle = async () => { await page.waitForFunction(() => !window.game.game.techniques.casting, null, { timeout: 4000 }).catch(() => undefined); await page.waitForTimeout(600); };
@@ -198,7 +198,7 @@ check(base.primed.dmg < mid.primed.dmg && mid.primed.dmg < top.primed.dmg, `and 
 await setActivation(0);
 
 console.log('frames of the sign at its beats, first then third person');
-await api((g) => { g.loop(false); g.game.encounters.finish?.(false); g.teleport('market'); g.look(Math.PI / 2, -0.05); });
+await api((g) => { g.loop(false); g.game.encounters.finish?.(false); g.teleport('courtyard'); g.look(0, -0.05); });
 const step = (n) => api((g, n) => g.step(n, 1 / 60), n);
 const BEATS = [['anticipation', 18], ['seal', 36], ['hold', 60], ['release', 74], ['stance', 100]];
 const frames = async (prefix) => {
@@ -213,8 +213,10 @@ const frames = async (prefix) => {
 };
 await api((g) => g.camera('first'));
 await frames('fp');
-await api((g) => { g.camera('third'); g.look(Math.PI / 2, -0.15); });
+await api((g) => { g.camera('third'); g.look(0, -0.15); });
 await frames('tp');
+await api((g) => { g.camera('top'); });
+await frames('top');
 await api((g) => g.loop(true));
 
 const pageErrors = await api((g) => g.errors);

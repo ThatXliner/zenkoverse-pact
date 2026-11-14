@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Drives the built game the way a player finds the dojo (issue #33): opens the
-// map with M, picks the dojo, tracks it, follows the marker there, unlocks its
-// waypoint, then fast-travels back to the market from the map. Keys and
-// clicks are real. The `?debug` hooks only read state and move the player
-// between legs, so the run does not have to walk the whole district.
+// Drives the built game the way a player finds a place in the compound
+// (issue #33, scaled to the compound): opens the map with M, picks the ring,
+// tracks it, follows the marker there, has the visit counted, and confirms
+// the map offers no fast travel. Keys and clicks are real. The `?debug`
+// hooks only read state and move the player between legs.
 // Usage: node tools/check-navigation.mjs [url] [--url http://localhost:4173/] [--out captures/navigation] [--port 4173]
 // Without a url it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
@@ -15,7 +15,6 @@ const { url, args, stop } = await resolveTarget();
 
 const out = args.out ?? 'captures/navigation';
 mkdirSync(out, { recursive: true });
-
 
 const browser = await chromium.launch({ channel: 'chrome', args: ['--use-angle=metal', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
@@ -44,11 +43,12 @@ const markerDistance = async () => {
   const text = await page.locator('.tracked-pip .d').first().textContent();
   return Number.parseInt(text ?? '', 10);
 };
-const near = (a, b, r) => Math.hypot(a[0] - b[0], a[2] - b[2]) < r;
-const MARKET = [-20, 0, 2];
 
 console.log('boot, skip the tutorial with real clicks');
 await page.goto(`${url}?debug`);
+await page.waitForFunction(() => window.game?.game?.ready, null, { timeout: 180000 });
+await page.evaluate(() => localStorage.clear());
+await page.reload();
 await page.waitForFunction(() => window.game?.game?.ready, null, { timeout: 180000 });
 await page.getByRole('button', { name: 'Begin', exact: true }).click();
 await page.locator('.card', { hasText: 'Recoil' }).click();
@@ -57,92 +57,81 @@ check((await waitState('explore')) === 'explore', 'lands in explore');
 await page.waitForTimeout(1200);
 
 console.log('compass and the automatic goal');
-await page.evaluate(() => window.game.look(Math.PI / 2 + 0.3, -0.02));
-await page.waitForTimeout(500);
 check(await page.locator('.compass').isVisible(), 'compass strip is on screen');
 check((await page.locator('.compass .dir.main').count()) >= 1, 'compass shows cardinal letters');
 const goal = await page.locator('.tracker .tr-title').textContent();
 check(goal === 'Find the Pact Workshop', `the first goal tracks itself: "${goal}"`);
-check((await nav()).unlocked.includes('market'), 'spawning beside the market shrine unlocks its waypoint');
+check((await nav()).unlocked.length === 0, 'nothing counts as visited at the start');
 await shot('01-compass-goal');
 
-console.log('open the map with M, pick the dojo, track it');
+console.log('open the map with M, pick the pond, track it');
 await page.keyboard.press('KeyM');
 check((await waitState('paused')) === 'paused', 'M opens the map');
 await page.locator('.nav-map').waitFor();
 check(await page.locator('.nav-map svg').isVisible(), 'the map is drawn');
+check((await page.locator('.nav-map .m-building').count()) === 3, 'the map shows the hall, the storehouse and the gatehouse');
 await shot('02-map-open');
-await page.locator('[data-map-poi="dojo"]').click();
-await page.locator('.map-detail[data-detail="dojo"]').waitFor();
-const reason = await page.locator('.map-detail .why').textContent();
-check(await page.getByRole('button', { name: 'Fast travel' }).isDisabled(), `dojo fast travel is locked until visited: "${reason}"`);
+await page.locator('[data-map-poi="pond"]').click();
+await page.locator('.map-detail[data-detail="pond"]').waitFor();
+check((await page.getByRole('button', { name: 'Fast travel' }).count()) === 0, 'the map offers no fast travel');
+const kicker = await page.locator('.map-detail .kicker').textContent();
+check(/Not yet visited/.test(kicker), `the pond reads as not yet visited: "${kicker}"`);
 await page.getByRole('button', { name: 'Track', exact: true }).click();
 await page.waitForTimeout(150);
-check((await nav()).pin?.id === 'dojo', 'Track pins the dojo');
-await shot('03-map-tracking-dojo');
+check((await nav()).pin?.id === 'pond', 'Track pins the pond');
+await shot('03-map-tracking-pond');
 await page.keyboard.press('KeyM');
 check((await waitState('explore')) === 'explore', 'M closes the map');
 await page.waitForTimeout(500);
 
-console.log('follow the marker');
-await teleport(...MARKET);
+console.log('follow the marker in the top-down view');
 await page.waitForTimeout(500);
 check(await page.locator('.tracked-pip .gem').isVisible(), 'compass shows the tracked diamond');
 check(await page.locator('.nav-marker .gem').isVisible(), 'a marker shows in the world');
 const d0 = await markerDistance();
+// Top-down: D walks east on the screen, toward the pond from the spawn.
 await page.keyboard.down('ShiftLeft');
-await page.keyboard.down('KeyW');
-await page.waitForTimeout(1300);
-await page.keyboard.up('KeyW');
+await page.keyboard.down('KeyD');
+await page.waitForTimeout(800);
+await page.keyboard.up('KeyD');
 await page.keyboard.up('ShiftLeft');
 await page.waitForTimeout(300);
 const d1 = await markerDistance();
-check(d0 - d1 > 4, `walking with W closes the distance on the compass: ${d0} m to ${d1} m`);
-await teleport(-26, 0, -33);
-await page.waitForTimeout(1500);
-const far = await markerDistance();
-check(far > 20 && far < 40, `marker reads ${far} m from the open lot`);
-check((await page.locator('.nav-marker .name, .nav-label').count()) >= 1, 'the dojo is named once it is near, by the marker or its label');
+check(d0 - d1 > 4, `sprinting with D (east on the screen) closes the distance: ${d0} m to ${d1} m`);
 await shot('04-marker-and-trail');
-await teleport(-26, 0, -50);
-await page.waitForTimeout(1300);
-await shot('05-marker-close');
-check((await nav()).unlocked.includes('dojo') === false, 'the dojo waypoint is still locked before the visit');
 
-console.log('arrive at the dojo and unlock its waypoint');
-await teleport(-28, 0, -58.5, [-26, -66]);
+console.log('arrive at the pond and have the visit counted');
+await teleport(11, 0, 16.2, [11, 11]);
 await page.waitForTimeout(900);
 const arrived = await nav();
 check(arrived.pin === null, 'arriving clears the pin');
-check(arrived.unlocked.includes('dojo'), 'visiting the shrine unlocks the dojo waypoint');
-check(arrived.target?.poi === 'alley', `the next goal tracks itself: ${arrived.target?.title}`);
+check(arrived.unlocked.includes('pond'), 'standing by the pond shrine counts the visit');
+check(arrived.target?.poi === 'hall', `the goal list still points at the hall: ${arrived.target?.title}`);
 const toasts = await page.locator('.toast').allTextContents();
-check(toasts.some((t) => /Waypoint unlocked: Pact Workshop/.test(t)), 'a toast announces the waypoint');
-await shot('06-waypoint-unlocked');
+check(toasts.some((t) => /Visited: Koi pond/.test(t)), 'a toast announces the visit');
+await shot('05-visited');
 
-console.log('fast travel back to the market from the map');
+console.log('visit the hall: the next goal comes up');
+await teleport(-3.2, 0, 1.2, [0, -9]);
+await page.waitForTimeout(900);
+const hall = await nav();
+check(hall.unlocked.includes('hall') && hall.target?.poi === 'ring', `the hall visit moves the goal on to the ring: ${hall.target?.title}`);
 await page.keyboard.press('KeyM');
 await waitState('paused');
-await page.locator('[data-map-poi="market"]').click();
-await page.locator('.map-detail[data-detail="market"]').waitFor();
-await shot('07-map-select-market');
-const travel = page.getByRole('button', { name: 'Fast travel' });
-check(await travel.isEnabled(), 'market fast travel is enabled');
-await travel.click();
-check((await waitState('explore')) === 'explore', 'fast travel closes the map');
-await page.waitForTimeout(500);
-check(await page.locator('.travel-fade').count() === 1, 'the screen fades through the jump');
-const landed = (await nav()).at;
-check(near(landed, MARKET, 3), `the player lands at the market: ${landed.map((v) => v.toFixed(1)).join(', ')}`);
-await page.waitForTimeout(1500);
-await shot('08-after-fast-travel');
+await page.locator('[data-map-poi="hall"]').click();
+await page.locator('.map-detail[data-detail="hall"]').waitFor();
+check(/Visited/.test(await page.locator('.map-detail .kicker').textContent()), 'the map lists the hall as visited');
+await shot('06-map-after-visits');
+await page.keyboard.press('KeyM');
+await waitState('explore');
 
-console.log('landmark name labels');
-await teleport(-26, 0, -36, [-26, -66]);
+console.log('landmark name labels in the over-the-shoulder view');
+await page.evaluate(() => window.game.camera('third'));
+await teleport(0, 0, 12, [0, -9]);
 await page.waitForTimeout(1500);
 const label = await page.locator('.nav-label .en').allTextContents();
-check(label.includes('Pact Workshop'), `the dojo gets a name label as you approach: ${label.join(', ')}`);
-await shot('09-landmark-label');
+check(label.includes('Training hall'), `the hall gets a name label as you approach: ${label.join(', ')}`);
+await shot('07-landmark-label');
 
 check(errors.length === 0, `zero page errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);
 await browser.close();

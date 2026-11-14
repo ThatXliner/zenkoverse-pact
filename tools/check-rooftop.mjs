@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Plays the rooftop trial (issues #34 and #5) the way a player does and fails
 // on any page error. It checks:
-//   entry: the title's Rooftop button, and the lift plus the board on the roof;
-//   eight waves to victory in both camera modes and to defeat in both, with
+//   entry: the title's Rooftop button, and the hall stair plus the board on the roof;
+//   eight waves to victory in the top-down and first-person views and to
+//   defeat in the over-the-shoulder and top-down views, with
 //   the 35% heal, the Eye offer after wave 3, the Aura unlock after wave 4,
 //   scaling wave sizes, and the end screen's score, waves, Pacts and Wagers;
 //   every Pact offer: valid in the schema, shown as a readback sentence, and
@@ -85,12 +86,16 @@ async function fits(label) {
   check(!!r && r.top >= 0 && r.left >= 0 && r.right >= 0 && r.bottom >= 0 && !r.clipped, `${label}: the sheet fits ${vp.width}x${vp.height} with nothing clipped`);
 }
 
-// The pilot: face the nearest enemy, walk up and punch. Returns true if the wave was cleared by hand.
+// The pilot: aim at the nearest enemy, close in and punch. In the top-down
+// view it aims the way a player does, by putting the cursor on the enemy and
+// walking with the screen's axes; in the others it turns to face it. Returns
+// true if the wave was cleared by hand.
 function pilot(maxFrames) {
   return page.evaluate((maxFrames) => {
     const g = window.game, G = g.game;
     const V = G.player.position.constructor;
     let wagered = false;
+    const top = G.cam.mode === 'top';
     for (let f = 0; f < maxFrames; f += 4) {
       if (g.rooftop.status().app !== 'rooftop') break;
       const live = G.encounters.enemies.filter((e) => e.alive);
@@ -99,13 +104,24 @@ function pilot(maxFrames) {
       if (near) {
         const d = new V().subVectors(near.position, p);
         const flat = Math.hypot(d.x, d.z);
-        g.look(Math.atan2(-d.x, -d.z), Math.atan2(near.position.y + 1.1 - (p.y + 1.64), flat));
-        g.hold('forward', flat > 1.3);
+        if (top) {
+          const ndc = near.position.clone().add(new V(0, 1, 0)).project(G.renderer.camera);
+          G.input.mouse.x = ndc.x; G.input.mouse.y = ndc.y;
+          // Screen-relative keys: north is up the screen.
+          g.hold('forward', flat > 1.3 && d.z < -0.3);
+          g.hold('back', flat > 1.3 && d.z > 0.3);
+          g.hold('right', flat > 1.3 && d.x > 0.3);
+          g.hold('left', flat > 1.3 && d.x < -0.3);
+        } else {
+          g.look(Math.atan2(-d.x, -d.z), Math.atan2(near.position.y + 1.1 - (p.y + 1.64), flat));
+          g.hold('forward', flat > 1.3);
+        }
         if (flat < 3.2) { if (!wagered && f > 40) { g.hold('wager', true); g.step(1); g.hold('wager', false); wagered = true; } g.hold('primary', true); g.step(1); g.hold('primary', false); }
-      } else g.hold('forward', false);
+      } else for (const k of ['forward', 'back', 'left', 'right']) g.hold(k, false);
       g.step(4);
     }
-    g.hold('forward', false);
+    for (const k of ['forward', 'back', 'left', 'right']) g.hold(k, false);
+    G.input.mouse.x = 0; G.input.mouse.y = 0;
     return g.rooftop.status().stage === 'offer';
   }, maxFrames);
 }
@@ -173,9 +189,9 @@ async function victoryRun(camera, viewport) {
     } else {
       await page.evaluate(() => window.game.god(true));
       check(await stepUntil(`g.rooftop.status().alive === ${size}`, 60 * 14), `${tag}: wave ${w} puts ${size} on the roof at once`);
-      if (w === 5 && camera === 'first') { await frameWave(); await shot('wave-in-progress'); }
-      if (w === 4 || w === 8) { await page.evaluate((n) => window.game.step(n), w === 8 ? 200 : 20); await frameBoss(); if (camera === 'first') await shot(w === 4 ? 'boss-kuroda' : 'boss-ancient'); }
-      if (w === 4 && camera === 'first') {
+      if (w === 5 && camera === 'top') { await frameWave(); await shot('wave-in-progress'); }
+      if (w === 4 || w === 8) { await page.evaluate((n) => window.game.step(n), w === 8 ? 200 : 20); await frameBoss(); if (camera === 'top') await shot(w === 4 ? 'boss-kuroda' : 'boss-ancient'); }
+      if (w === 4 && camera === 'top') {
         await page.evaluate(() => { const g = window.game; g.camera('third'); g.step(30); });
         await shot('boss-kuroda-third');
         await page.evaluate((c) => { window.game.camera(c); window.game.step(10); }, camera);
@@ -193,20 +209,20 @@ async function victoryRun(camera, viewport) {
         const locked = await page.locator('.rt-offer.eye.locked').count();
         check(eyes === 4 && locked === 1, `${tag}: the Eye offer comes after wave 3 (${eyes} Eyes, ${locked} locked)`);
         await fits(`${tag} Eye offer`);
-        if (camera === 'first') await shot('eye-offer');
+        if (camera === 'top') await shot('eye-offer');
         await page.locator('.rt-offer.eye[data-eye="horizon"]').click();
         check((await status()).eye === 'horizon', `${tag}: the Horizon Eye is installed`);
       }
       if (w === 4) {
         check((await status()).auraAllowed === false, `${tag}: Aura Expansion is still locked while wave 4's offer is open`);
         await fits(`${tag} Aura unlock`);
-        if (camera === 'first') await shot('aura-unlock');
+        if (camera === 'top') await shot('aura-unlock');
         await page.getByRole('button', { name: 'Continue' }).click();
         check((await status()).auraAllowed === true, `${tag}: Aura Expansion unlocks after wave 4`);
       }
       const cards = await readOffers(`${tag} wave ${w} offer`);
-      if (w === 1) { await fits(`${tag} Pact offer`); if (camera === 'first') await shot('pact-offer'); }
-      const pickIdx = (w + (camera === 'third' ? 1 : 0)) % 3;
+      if (w === 1) { await fits(`${tag} Pact offer`); if (camera === 'top') await shot('pact-offer'); }
+      const pickIdx = (w + (camera === 'first' ? 1 : 0)) % 3;
       if (w % 2 === 0) await page.keyboard.press(String(pickIdx + 1));
       else await page.locator('.rt-offer').nth(pickIdx).click();
       const taken = cards[pickIdx];
@@ -234,7 +250,7 @@ async function victoryRun(camera, viewport) {
   check(end.pacts === 7, `${tag}: the end screen counts ${end.pacts} Pacts taken`);
   check(/^\d+$/.test(end.won) && /^\d+$/.test(end.lost), `${tag}: Wagers won ${end.won}, lost ${end.lost}`);
   await fits(`${tag} end screen`);
-  if (camera === 'first') await shot('end-victory');
+  if (camera === 'top') await shot('end-victory');
   check((await bookState()) === before, `${tag}: Pacts taken on the roof are gone from the real book afterwards`);
 }
 
@@ -272,21 +288,19 @@ await page.evaluate(() => window.game.step(30));
 {
   const s = await status();
   const onDeck = await page.evaluate(() => window.game.game.player.position.y);
-  check(s.app === 'rooftop' && s.stage === 'fight' && onDeck > 14, `Rooftop from the title lands on the deck (y ${onDeck.toFixed(1)}) in wave 1`);
+  check(s.app === 'rooftop' && s.stage === 'fight' && onDeck > 4.5, `Rooftop from the title lands on the hall roof (y ${onDeck.toFixed(1)}) in wave 1`);
 }
 await page.evaluate(() => window.game.rooftop.begin());
 
-console.log('\nentry by the lift and the board');
+console.log('\nentry by the stair and the board');
 await boot();
 await page.evaluate(() => { const g = window.game; g.game.startRun({ skipTutorial: true }); g.step(5); });
 {
-  const base = await page.evaluate(() => window.game.game.rooftop.arena.liftBase.toArray());
-  await page.evaluate((b) => { const g = window.game; g.teleport(b); g.step(10); }, base);
-  const prompt = await page.locator('.prompt').textContent().catch(() => '');
-  check(/lift to the rooftop/.test(prompt), `the street shows the prompt "${prompt}"`);
-  await page.keyboard.down('KeyE'); await page.evaluate(() => window.game.step(2)); await page.keyboard.up('KeyE');
+  // Walk up the hall stair: from its foot, north, in the top-down view W is north.
+  const foot = await page.evaluate(() => window.game.game.rooftop.arena.stairFoot.toArray());
+  await page.evaluate((b) => { const g = window.game; g.camera('top'); g.teleport(b); g.step(10); g.hold('forward', true); g.step(60 * 4); g.hold('forward', false); g.step(10); }, foot);
   const y = await page.evaluate(() => window.game.game.player.position.y);
-  check(y > 14, `E rides the lift to the rooftop (y ${y.toFixed(1)})`);
+  check(y > 4.5, `W up the stair reaches the hall roof (y ${y.toFixed(1)})`);
   await page.evaluate(() => window.game.step(10));
   const board = await page.evaluate(() => window.game.game.rooftop.arena.consoleAt.toArray());
   await page.evaluate((b) => { const g = window.game; g.teleport(b); g.step(10); }, board);
@@ -300,16 +314,16 @@ await page.evaluate(() => { const g = window.game; g.game.startRun({ skipTutoria
   check((await status()).app === 'paused', 'Esc pauses the run');
   await page.getByRole('button', { name: 'Leave the rooftop' }).click();
   const after = await page.evaluate(() => ({ app: window.game.state(), y: window.game.game.player.position.y, stage: window.game.rooftop.status().stage }));
-  check(after.app === 'explore' && after.y < 2 && after.stage === 'idle', 'Leave the rooftop returns to the street');
+  check(after.app === 'explore' && after.y < 2 && after.stage === 'idle', 'Leave the rooftop returns to the yard');
 }
 
 await boot();
-await victoryRun('first', { width: 1280, height: 720 });
+await victoryRun('top', { width: 1280, height: 720 });
 await boot();
-await victoryRun('third', { width: 1920, height: 1080 });
+await victoryRun('first', { width: 1920, height: 1080 });
 await boot();
-await defeatRun('first', { width: 1280, height: 720 });
 await defeatRun('third', { width: 1280, height: 720 });
+await defeatRun('top', { width: 1280, height: 720 });
 
 console.log('\noffer rules over many rolls');
 await boot();

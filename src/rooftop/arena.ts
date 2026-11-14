@@ -1,22 +1,18 @@
 import * as THREE from 'three';
-import type { Assets } from '../app/assets';
-import { Physics, RAPIER } from '../physics/world';
-import { makeSurface, emissive } from '../render/materials';
-import { NeonSign } from '../world/neon';
+import type { Physics } from '../physics/world';
+import { toon, emissive, paintedSign } from '../render/materials';
 import type { PropSystem } from '../world/props';
 import type { LightPool } from '../render/lightPool';
-import { SPAWN } from '../world/district';
+import { HALL, SPAWN, PALETTE, type World } from '../world/compound';
 
-// The rooftop that hosts the trial: a tower on the east bank of the canal,
-// across the bridge from the Ancient Echo Master's fight. The deck is a
-// closed fighting floor, so nobody falls off and every wave stays on screen.
+// The rooftop trial fights on the training hall's roof deck. The compound
+// builds the deck, its rail and the stair; this adds the trial's dressing:
+// the fighting ring painted on the boards, the marks where each wave climbs
+// over the eaves, the lanterns at the corners and the board that starts it.
 
-const SIZE = { x: 30, z: 24, h: 15 };
-// The street end of the lift is SPAWN.rooftop, which the map and the waypoints read; the tower stands behind it.
-const TOWER = new THREE.Vector3(SPAWN.rooftop.x + SIZE.x / 2 + 2.4, 0, SPAWN.rooftop.z);
-const DECK_Y = SIZE.h + 0.2;
-const PARAPET = { h: 1.15, t: 0.5 };
-const WALL_TOP = 7;
+const DECK_Y = HALL.deckY;
+const CENTER = new THREE.Vector3(0, DECK_Y, (HALL.z0 + HALL.z1) / 2);
+const HALF = { x: HALL.x1 + HALL.overhang - 0.5, z: (HALL.z1 - HALL.z0) / 2 + 0.3 };
 
 export interface Arena {
   group: THREE.Group;
@@ -25,237 +21,92 @@ export interface Arena {
   half: { x: number; z: number };
   start: THREE.Vector3;
   slots: THREE.Vector3[];
-  liftBase: THREE.Vector3;
-  liftTop: THREE.Vector3;
+  // Foot of the stair in the yard, and the landing at its top.
+  stairFoot: THREE.Vector3;
+  stairTop: THREE.Vector3;
   consoleAt: THREE.Vector3;
-  liftDownAt: THREE.Vector3;
   update(time: number): void;
 }
 
-// One flank of the tower: a 3 m grid of framed windows, each lit or dark on
-// its own, with floor bands and piers between them. The glow map drives bloom.
-function flank(cols: number, rows: number): { map: THREE.CanvasTexture; glow: THREE.CanvasTexture } {
-  const cell = 64;
-  const w = cols * cell, h = rows * cell;
-  const wall = document.createElement('canvas');
-  const glow = document.createElement('canvas');
-  wall.width = glow.width = w;
-  wall.height = glow.height = h;
-  const c = wall.getContext('2d')!;
-  const e = glow.getContext('2d')!;
-  c.fillStyle = '#25272d';
-  c.fillRect(0, 0, w, h);
-  e.fillStyle = '#000';
-  e.fillRect(0, 0, w, h);
-  for (let i = 0; i < w * h / 90; i++) { const v = 30 + Math.random() * 22; c.fillStyle = `rgba(${v},${v + 1},${v + 6},0.35)`; c.fillRect(Math.random() * w, Math.random() * h, 2, 2); }
-  const tints = ['#ffb877', '#ffd3a1', '#ffc48a', '#9ec9ff', '#7fb4ff', '#ffe9c9'];
-  for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++) {
-    const x = k * cell, y = (rows - 1 - r) * cell;
-    c.fillStyle = '#17181d';
-    c.fillRect(x, y + cell - 7, cell, 7);
-    if (k % 2 === 0) { c.fillStyle = '#1d1f25'; c.fillRect(x, y, 4, cell); }
-    const lobby = r === 0;
-    const wx = x + 11, wy = y + (lobby ? 12 : 9), ww = cell - 22, wh = lobby ? cell - 24 : cell - 28;
-    c.fillStyle = '#3a3d45';
-    c.fillRect(wx - 2, wy - 2, ww + 4, wh + 4);
-    c.fillStyle = '#06080d';
-    c.fillRect(wx, wy, ww, wh);
-    const lit = lobby ? Math.random() < 0.8 : Math.random() < 0.34;
-    if (lit) {
-      const a = lobby ? 0.55 : 0.35 + Math.random() * 0.65;
-      const tint = tints[(Math.random() * tints.length) | 0]!;
-      const g = e.createLinearGradient(wx, wy, wx, wy + wh);
-      g.addColorStop(0, tint); g.addColorStop(1, '#000');
-      e.globalAlpha = a;
-      e.fillStyle = g;
-      e.fillRect(wx, wy, ww, wh);
-      if (Math.random() < 0.5) { e.globalAlpha = a * 0.9; e.fillStyle = '#000'; e.fillRect(wx, wy, ww, 4 + Math.random() * (wh * 0.5)); }
-      e.globalAlpha = 1;
-    }
-    c.fillStyle = '#2c2f37';
-    c.fillRect(wx + ww / 2 - 1, wy, 2, wh);
-    c.fillRect(wx, wy + wh * 0.42, ww, 2);
-    e.fillStyle = '#000';
-    e.fillRect(wx + ww / 2 - 1, wy, 2, wh);
-    e.fillRect(wx, wy + wh * 0.42, ww, 2);
-  }
-  const tex = (cv: HTMLCanvasElement) => { const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
-  return { map: tex(wall), glow: tex(glow) };
-}
-
-export function buildArena(assets: Assets, physics: Physics, scene: THREE.Scene, props: PropSystem, lights: LightPool): Arena {
+export function buildArena(world: World, physics: Physics, scene: THREE.Scene, props: PropSystem, lights: LightPool): Arena {
   const g = new THREE.Group();
   scene.add(g);
-  const neons: NeonSign[] = [];
+  const add = <T extends THREE.Object3D>(o: T): T => { g.add(o); o.traverse((c) => { if ((c as THREE.Mesh).isMesh) world.onRoof(c as THREE.Mesh, 'hall'); }); return o; };
+  const rel = (x: number, z: number, y = 0): THREE.Vector3 => new THREE.Vector3(CENTER.x + x, DECK_Y + y, CENTER.z + z);
 
-  const concrete = makeSurface(assets, 'Concrete034', { repeat: 6, wet: 0.85, puddles: true, color: 0x9b9da4 });
-  const steel = makeSurface(assets, 'MetalPlates006', { repeat: 4, wet: 0.8, metalness: 0.85, roughness: 0.5 });
-  const corrugated = makeSurface(assets, 'CorrugatedSteel005', { repeat: 2, wet: 0.8, metalness: 0.7, roughness: 0.5 });
-  const rust = makeSurface(assets, 'Rust004', { repeat: 2, wet: 0.5, metalness: 0.6, roughness: 0.7 });
-  const pt = (color: number, intensity: number, distance: number, p: THREE.Vector3): void => {
-    lights.add({ kind: 'point', position: p, color: new THREE.Color(color), intensity, distance, decay: 2 });
-  };
-
-  const box = (mat: THREE.Material, c: THREE.Vector3, w: number, h: number, d: number, collide = true, surface = 'concrete'): THREE.Mesh => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    m.position.copy(c);
-    m.castShadow = m.receiveShadow = true;
-    g.add(m);
-    if (collide) (physics.staticBox(c, new THREE.Vector3(w / 2, h / 2, d / 2)) as RAPIER.Collider & { surfaceTag?: string }).surfaceTag = surface;
-    return m;
-  };
-
-  // Tower body.
-  const side = (width: number): THREE.MeshStandardMaterial => {
-    const t = flank(Math.round(width / 3), Math.round(SIZE.h / 3));
-    return new THREE.MeshStandardMaterial({ map: t.map, emissiveMap: t.glow, emissive: 0xffffff, emissiveIntensity: 1.25, roughness: 0.7, metalness: 0.15 });
-  };
-  const body = new THREE.Mesh(new THREE.BoxGeometry(SIZE.x, SIZE.h, SIZE.z), [side(SIZE.z), side(SIZE.z), concrete, concrete, side(SIZE.x), side(SIZE.x)]);
-  body.position.set(TOWER.x, SIZE.h / 2, TOWER.z);
-  body.castShadow = body.receiveShadow = true;
-  g.add(body);
-  physics.staticBox(body.position, new THREE.Vector3(SIZE.x / 2, SIZE.h / 2, SIZE.z / 2));
-
-  // Deck.
-  const hx = SIZE.x / 2 + 0.3, hz = SIZE.z / 2 + 0.3;
-  const deckC = new THREE.Vector3(TOWER.x, DECK_Y - 0.1, TOWER.z);
-  box(concrete, deckC, hx * 2, 0.2, hz * 2, true);
-  const center = new THREE.Vector3(TOWER.x, DECK_Y, TOWER.z);
-
-  // Floor markings: a fighting ring and the hatches enemies climb out of.
-  const ringMat = emissive(0xffb36b, 1.1);
-  for (const [r0, r1] of [[10.9, 11.05], [5.4, 5.5]] as const) {
+  // The ring on the boards, and the inner circle where the waves meet you.
+  const ringMat = emissive(PALETTE.mark, 1.1);
+  for (const [r0, r1] of [[6.4, 6.52], [3.0, 3.08]] as const) {
     const ring = new THREE.Mesh(new THREE.RingGeometry(r0, r1, 96), ringMat);
     ring.rotation.x = -Math.PI / 2;
-    ring.position.set(center.x, DECK_Y + 0.015, center.z);
-    g.add(ring);
+    ring.position.copy(rel(0, 0, 0.012));
+    add(ring);
   }
-  const rel = (x: number, z: number, y = 0): THREE.Vector3 => new THREE.Vector3(center.x + x, DECK_Y + y, center.z + z);
-  const slots = [[-8.5, -9.2], [-8.5, 9.2], [8.5, -9.2], [8.5, 9.2], [13.2, -3.2], [13.2, 3.2], [2, -9.8], [2, 9.8]].map(([x, z]) => rel(x!, z!));
-  const hatchMat = new THREE.MeshStandardMaterial({ color: 0x0b0c10, roughness: 0.5, metalness: 0.7 });
+  // Where each wave climbs onto the deck: a painted square at the edge.
+  const slots = [[-10.5, -6.2], [-10.5, 6.2], [10.5, -6.2], [10.5, 6.2], [-4, -6.8], [4, -6.8], [-4, 6.8], [4, 6.8]].map(([x, z]) => rel(x!, z!));
   for (const s of slots) {
-    const hatch = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.05, 2.2), hatchMat);
-    hatch.position.set(s.x, DECK_Y + 0.02, s.z);
-    hatch.receiveShadow = true;
-    g.add(hatch);
-    const edge = new THREE.Mesh(new THREE.RingGeometry(1.05, 1.14, 4, 1, Math.PI / 4), ringMat);
+    const edge = new THREE.Mesh(new THREE.RingGeometry(0.95, 1.04, 4, 1, Math.PI / 4), ringMat);
     edge.rotation.x = -Math.PI / 2;
-    edge.position.set(s.x, DECK_Y + 0.05, s.z);
-    g.add(edge);
+    edge.position.set(s.x, DECK_Y + 0.012, s.z);
+    add(edge);
   }
 
-  // Parapet with a tall invisible rail above it, so a knocked-back body stays in.
-  const px = hx - PARAPET.t / 2, pz = hz - PARAPET.t / 2;
-  const wallSpecs: [number, number, number, number][] = [[0, -pz, hx * 2, PARAPET.t], [0, pz, hx * 2, PARAPET.t], [-px, 0, PARAPET.t, hz * 2 - PARAPET.t * 2], [px, 0, PARAPET.t, hz * 2 - PARAPET.t * 2]];
-  const ledMat = emissive(0xff3a6e, 1.6);
-  for (const [x, z, w, d] of wallSpecs) {
-    box(concrete, rel(x, z, PARAPET.h / 2), w, PARAPET.h, d, false);
-    physics.staticBox(rel(x, z, WALL_TOP / 2), new THREE.Vector3(w / 2, WALL_TOP / 2, d / 2));
-    box(steel, rel(x, z, PARAPET.h + 0.04), w + 0.06, 0.08, d + 0.06, false, 'metal');
-    const led = new THREE.Mesh(new THREE.BoxGeometry(w > d ? w - 0.4 : 0.05, 0.05, w > d ? 0.05 : d - 0.4), ledMat);
-    led.position.copy(rel(x + (w > d ? 0 : Math.sign(-x) * (PARAPET.t / 2 + 0.03)), z + (w > d ? Math.sign(-z) * (PARAPET.t / 2 + 0.03) : 0), 0.12));
-    g.add(led);
-  }
-  pt(0xff3a6e, 30, 16, rel(0, 0, 3));
-
-  // Cover: two air-handling units and a water tank, all low and chunky so
-  // the chase AI does not snag.
-  for (const [x, z, rot] of [[-4.5, 6.2, 0], [5.5, -6.4, 0]] as const) {
-    const unit = box(corrugated, rel(x, z, 0.8), 3.4, 1.6, 1.7, true, 'metal');
-    unit.rotation.y = rot;
-    const fan = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.08, 20), new THREE.MeshStandardMaterial({ color: 0x0c0d11, roughness: 0.4, metalness: 0.8 }));
-    fan.position.copy(rel(x - 0.7, z, 1.64));
-    g.add(fan);
-    const vent = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.04), emissive(0x7fd0ff, 1.2));
-    vent.position.copy(rel(x + 0.8, z + 0.88, 0.9));
-    g.add(vent);
-  }
-  const tank = new THREE.Group();
-  const tankBody = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 2.3, 28), rust);
-  tankBody.position.y = 1.95;
-  const lid = new THREE.Mesh(new THREE.ConeGeometry(1.4, 0.5, 28), rust);
-  lid.position.y = 3.35;
-  tank.add(tankBody, lid);
-  for (const [lx, lz] of [[-0.9, -0.9], [0.9, -0.9], [-0.9, 0.9], [0.9, 0.9]]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.0, 0.14), steel);
-    leg.position.set(lx!, 0.5, lz!);
-    tank.add(leg);
-  }
-  tank.traverse((o) => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true; });
-  tank.position.copy(rel(6.5, 5.5));
-  g.add(tank);
-  physics.staticBox(rel(6.5, 5.5, 1.5), new THREE.Vector3(1.2, 1.5, 1.2));
-  for (const [x, z] of [[-10, -5.8], [-10, -4.5], [-9.8, -5.15]] as const) props.spawn('crate', rel(x, z, 0.05));
-  for (const [x, z] of [[10.6, 0.6], [10.8, -0.7]] as const) props.spawn('barrel', rel(x, z, 0.05));
-
-  // Floodlights on the four corners.
-  const poleMat = new THREE.MeshStandardMaterial({ color: 0x2a2d33, metalness: 0.8, roughness: 0.4 });
+  // Lanterns on tall posts at the four corners, lit for the evening.
+  const post = toon(PALETTE.woodDark);
+  const paper = emissive(PALETTE.lantern, 2.6);
   for (const [sx, sz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]] as const) {
-    const foot = rel(sx * 13.6, sz * 10.6);
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 4.4, 8), poleMat);
-    pole.position.copy(foot).add(new THREE.Vector3(0, 2.2, 0));
+    const foot = rel(sx * (HALF.x - 1.2), sz * (HALF.z - 1.0));
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 3.2, 8), post);
+    pole.position.copy(foot).add(new THREE.Vector3(0, 1.6, 0));
     pole.castShadow = true;
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.34), emissive(0xffe2b0, 6));
-    head.position.copy(foot).add(new THREE.Vector3(-sx * 0.2, 4.5, -sz * 0.2));
-    g.add(pole, head);
-    physics.staticBox(foot.clone().add(new THREE.Vector3(0, 2.2, 0)), new THREE.Vector3(0.12, 2.2, 0.12));
-    lights.add({ kind: 'spot', position: head.position.clone(), target: rel(sx * 2, sz * 2), color: new THREE.Color(0xffd7a0), intensity: 150, distance: 30, decay: 1.5, angle: 0.95, penumbra: 0.6 });
+    const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.6, 10), paper);
+    lamp.position.copy(foot).add(new THREE.Vector3(0, 3.0, 0));
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.22, 10), post);
+    cap.position.copy(foot).add(new THREE.Vector3(0, 3.4, 0));
+    add(pole); add(lamp); add(cap);
+    physics.staticBox(pole.position, new THREE.Vector3(0.12, 1.6, 0.12));
+    lights.add({ kind: 'point', position: lamp.position.clone(), color: new THREE.Color(PALETTE.lantern), intensity: 14, distance: 12, decay: 2 });
   }
 
-  // The lift head: a penthouse on the west edge, with the trial's board beside it.
-  const house = rel(-13.2, 0, 1.75);
-  box(concrete, house, 3.2, 3.5, 4.4, true);
-  box(steel, house.clone().add(new THREE.Vector3(0, 1.8, 0)), 3.5, 0.14, 4.7, false, 'metal');
-  const door = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 2.5), emissive(0x7fd0ff, 1.4));
-  door.position.copy(rel(-11.58, 0, 1.3));
-  door.rotation.y = Math.PI / 2;
-  g.add(door);
-  pt(0x7fd0ff, 22, 9, rel(-10.2, 0, 2));
-  const sign = new NeonSign({ text: '屋上', color: 0xff3a6e, position: [center.x - 11.55, DECK_Y + 2.1, center.z + 1.45], rotationY: Math.PI / 2, vertical: true, width: 0.7, flicker: 0.1, light: false });
-  neons.push(sign);
-  g.add(sign.group);
+  // Cover: a water cask and a low shrine, so a wave can be split.
+  const cask = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 1.6, 20), toon(PALETTE.wood));
+  body.position.y = 0.8;
+  const lid = new THREE.Mesh(new THREE.CylinderGeometry(1.08, 1.08, 0.14, 20), toon(PALETTE.woodDark));
+  lid.position.y = 1.65;
+  cask.add(body, lid);
+  cask.traverse((o) => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true; });
+  cask.position.copy(rel(6.5, 3.8));
+  add(cask);
+  physics.staticBox(rel(6.5, 3.8, 0.85), new THREE.Vector3(1.0, 0.85, 1.0));
+  const shrine = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.1, 1.0), toon(PALETTE.woodDark));
+  shrine.position.copy(rel(-6, -4.2, 0.55));
+  shrine.castShadow = true;
+  const shrineRoof = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.16, 1.4), toon(PALETTE.tile));
+  shrineRoof.position.copy(rel(-6, -4.2, 1.18));
+  add(shrine); add(shrineRoof);
+  physics.staticBox(rel(-6, -4.2, 0.6), new THREE.Vector3(0.8, 0.6, 0.5));
+  for (const [x, z] of [[-9, 2.6], [-9, 4.0], [-8.4, 3.3]] as const) props.spawn('crate', rel(x, z, 0.05));
+  for (const [x, z] of [[9.4, -3.6], [9.6, -5.0]] as const) props.spawn('barrel', rel(x, z, 0.05));
 
-  const stand = new THREE.Group();
-  const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.2, 0.1), poleMat);
-  post.position.y = 0.6;
-  const pane = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.7, 0.05), new THREE.MeshStandardMaterial({ color: 0x06090f, roughness: 0.15, metalness: 0.6 }));
-  pane.position.set(0, 1.4, 0);
-  pane.rotation.x = -0.4;
-  const glowPane = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.6), emissive(0xffb36b, 2.2));
-  glowPane.position.set(0, 1.4, 0.03);
-  glowPane.rotation.x = -0.4;
-  stand.add(post, pane, glowPane);
-  stand.position.copy(rel(-9.4, 4.6));
-  stand.rotation.y = Math.PI / 2;
-  g.add(stand);
-  pt(0xffb36b, 14, 7, rel(-9.4, 4.6, 2));
-
-  // Street level: the lift door on the tower's west face and its sign.
-  const doorway = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.0, 2.6), steel);
-  doorway.position.set(TOWER.x - SIZE.x / 2 - 0.1, 1.5, TOWER.z);
-  doorway.castShadow = true;
-  g.add(doorway);
-  const lit = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 2.6), emissive(0x7fd0ff, 1.6));
-  lit.position.set(TOWER.x - SIZE.x / 2 - 0.27, 1.4, TOWER.z);
-  lit.rotation.y = -Math.PI / 2;
-  g.add(lit);
-  const street = new NeonSign({ text: '屋上', color: 0xff3a6e, position: [TOWER.x - SIZE.x / 2 - 0.3, 6.4, TOWER.z], rotationY: -Math.PI / 2, vertical: true, width: 1.1, flicker: 0.12 });
-  neons.push(street);
-  g.add(street.group);
-  if (street.light) lights.add(street.light);
-  const wide = new NeonSign({ text: 'ROOFTOP', color: 0xffb36b, position: [TOWER.x - SIZE.x / 2 - 0.3, 10.8, TOWER.z - 7], rotationY: -Math.PI / 2, width: 5 });
-  neons.push(wide);
-  g.add(wide.group);
-  pt(0x7fd0ff, 26, 11, new THREE.Vector3(TOWER.x - SIZE.x / 2 - 1.5, 2.2, TOWER.z));
-  const forecourt = box(steel, new THREE.Vector3(TOWER.x - SIZE.x / 2 - 2.2, 0.06, TOWER.z), 4.4, 0.12, 6, true, 'metal');
-  forecourt.receiveShadow = true;
+  // The trial's board by the stair landing.
+  const board = paintedSign('屋上試験', { width: 0.55, vertical: true, paint: '#a8231e' });
+  board.position.copy(rel(-11.6, 4.0, 1.75));
+  board.rotation.y = Math.PI / 2;
+  add(board);
+  const boardPost = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.9, 0.14), post);
+  boardPost.position.copy(rel(-11.7, 4.0, 1.45));
+  boardPost.castShadow = true;
+  add(boardPost);
+  physics.staticBox(boardPost.position, new THREE.Vector3(0.1, 1.45, 0.1));
+  lights.add({ kind: 'point', position: rel(-10.8, 4.0, 2.2), color: new THREE.Color(PALETTE.lantern), intensity: 6, distance: 6, decay: 2 });
 
   return {
-    group: g, deckY: DECK_Y, center, half: { x: hx - PARAPET.t, z: hz - PARAPET.t },
-    start: rel(-8.5, 0), slots,
-    liftBase: SPAWN.rooftop.clone(),
-    liftTop: rel(-10, -1.2),
-    consoleAt: rel(-9.4, 4.6), liftDownAt: rel(-10.4, 0),
-    update(time) { for (const n of neons) n.update(time); },
+    group: g, deckY: DECK_Y, center: CENTER, half: HALF,
+    start: rel(-7, 0), slots,
+    stairFoot: SPAWN.stairs.clone(),
+    stairTop: SPAWN.roof.clone().set(-16.2, DECK_Y, -12.3),
+    consoleAt: rel(-11.0, 4.0),
+    update() { /* nothing moves on the roof between waves */ },
   };
 }

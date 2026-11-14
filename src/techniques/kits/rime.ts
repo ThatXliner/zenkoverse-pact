@@ -4,6 +4,7 @@ import { signGesture, gestureSet, rangeFor, hitCone, propsInCone } from './share
 import { anchored } from './shift';
 import type { Pact } from '../../pacts/schema';
 import { RAPIER } from '../../physics/world';
+import { toon } from '../../render/materials';
 
 const COLOR = 0x9fe8ff;
 
@@ -48,13 +49,15 @@ function freezeArea(g: import('../../app/game').Game, center: THREE.Vector3, rad
     hits++;
   }
   for (const p of g.props.instances) if (p.mesh.position.distanceTo(center) < radius) freezeProp({ game: g }, p, seconds);
-  const canal = g.district.zones.find((z) => z.id === 'canal')!;
-  if (center.x > canal.min.x && center.x < canal.max.x && center.y < 0.5) {
-    const body = g.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(center.x, -2.75, center.z));
-    const col = g.physics.world.createCollider(RAPIER.ColliderDesc.cuboid(radius, 0.15, radius), body);
+  // Over the koi pond the frost is a floor: the whole surface freezes into
+  // a platform you can stand on until it thaws.
+  const pond = g.world.pond;
+  if (Math.hypot(center.x - pond.center.x, center.z - pond.center.z) < pond.radius + radius * 0.5 && center.y < pond.surfaceY + 1) {
+    const body = g.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(pond.center.x, pond.surfaceY - 0.1, pond.center.z));
+    const col = g.physics.world.createCollider(RAPIER.ColliderDesc.cylinder(0.1, pond.radius + 0.4), body);
     icePlatforms.push({ col, body, t: seconds + 4 });
-    const slab = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 0.9, 0.3, 24), new THREE.MeshPhysicalMaterial({ color: 0xcfefff, roughness: 0.08, transparent: true, opacity: 0.8 }));
-    slab.position.set(center.x, -2.75, center.z);
+    const slab = new THREE.Mesh(new THREE.CylinderGeometry(pond.radius + 0.4, pond.radius + 0.2, 0.2, 32), toon(0xdff6ff, { transparent: true, opacity: 0.9 }));
+    slab.position.set(pond.center.x, pond.surfaceY - 0.1, pond.center.z);
     g.renderer.scene.add(slab);
     setTimeout(() => g.renderer.scene.remove(slab), (seconds + 4) * 1000);
   }
@@ -65,7 +68,7 @@ function freezeArea(g: import('../../app/game').Game, center: THREE.Vector3, rad
 
 export const rime: TechniqueKit = {
   id: 'rime', name: 'Rime', glyph: '霜', color: COLOR, type: 'Generation, Manipulation',
-  blurb: 'Nucleate water through your fingernails. Tonight it is raining, so there is a great deal of water.',
+  blurb: 'Nucleate water through your fingernails. The koi pond in the yard is a great deal of water.',
   resource: { name: 'Warmth', max: 100, regen: 9, startsFull: true },
   primitive: { name: 'Rime', short: 'frost what you touch', description: 'Frost whatever water your nails touch. Imprecise, and it takes the heat out of your hands.' },
   parameters: ['direction', 'range', 'target', 'trigger', 'duration', 'resource', 'body'],
@@ -74,7 +77,7 @@ export const rime: TechniqueKit = {
     coldStitch: { label: 'freezes the area at the aim and pins what stands in it', short: 'freeze the area you aim at', kinds: ['secondary'], description: 'Freeze a patch at distance.' },
     tenfold: { label: 'opens all ten nail beds at once into a glacier', short: 'a wide glacier around you', kinds: ['max'], description: 'A wide frost field. You cannot move while it spreads.' },
   },
-  behaviors: { pin: 'what it freezes stays frozen in place', bridge: 'freezes canal water into a walkable platform', sharp: 'spikes cut deeper' },
+  behaviors: { pin: 'what it freezes stays frozen in place', bridge: 'freezes the pond into a floor you can stand on', sharp: 'spikes cut deeper' },
   catalogue,
   gestures: {
     primary: gestureSet(0.7, 0.34, [{ t: 0, right: 'clawReady', left: 'clawReady', slow: true }, { t: 0.18, right: 'slamUp', slow: true }, { t: 0.3, right: 'slamDown', snap: true, camera: { fov: 5, pitch: 0.03 } }, { t: 0.5, right: 'clawReady' }, { t: 0.62, right: 'rest', left: 'rest' }]),

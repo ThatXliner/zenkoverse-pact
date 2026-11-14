@@ -9,7 +9,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 2500,
     rollupOptions: {
       output: {
-        manualChunks: { three: ['three'], rapier: ['@dimforge/rapier3d-compat'], post: ['postprocessing', 'n8ao'] },
+        manualChunks: { three: ['three'], rapier: ['@dimforge/rapier3d-compat'], post: ['postprocessing'] },
       },
     },
   },

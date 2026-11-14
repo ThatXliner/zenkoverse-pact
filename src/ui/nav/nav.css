@@ -42,8 +42,6 @@
 .nav-label .jp { font-family: var(--serif); font-size: 30px; font-weight: 600; letter-spacing: 0.22em; padding-left: 0.22em; line-height: 1.1; }
 .nav-label .en { font-size: 11px; letter-spacing: 0.34em; padding-left: 0.34em; text-transform: uppercase; color: var(--mist); }
 
-.travel-fade { position: absolute; inset: 0; background: #05060a; pointer-events: none; animation: travel 1.1s var(--ease) forwards; z-index: 20; }
-@keyframes travel { 0% { opacity: 1; } 35% { opacity: 1; } 100% { opacity: 0; } }
 
 .top-left { position: absolute; left: var(--hud-pad); top: var(--hud-pad); width: min(320px, calc(50vw - var(--compass-w) / 2 - 2 * var(--hud-pad))); min-width: 240px; display: grid; gap: 14px; justify-items: start; }
 .tracker { width: 100%; display: grid; gap: 4px; padding: 12px 14px 12px 16px; border-left: 2px solid var(--gold); background: linear-gradient(90deg, rgba(10,11,16,0.7), rgba(10,11,16,0.34)); backdrop-filter: blur(8px); animation: rise 0.5s var(--ease); }
@@ -60,16 +58,13 @@
 .nav-map { display: grid; grid-template-columns: auto minmax(300px, 1fr); gap: 24px; align-items: start; }
 .nav-map svg { width: min(calc(100vh - 250px), 640px); aspect-ratio: 1; height: auto; display: block; border: 1px solid var(--line); background: #0b0f15; cursor: crosshair; }
 .nav-map .m-grid line { stroke: rgba(243,238,228,0.05); stroke-width: 0.3; }
-.nav-map .m-road { fill: rgba(243,238,228,0.045); }
-.nav-map .m-lane { stroke: rgba(243,238,228,0.14); stroke-width: 0.35; stroke-dasharray: 2.4 2.4; }
-.nav-map .m-yard { fill: url(#tiles); stroke: rgba(243,238,228,0.3); stroke-width: 0.4; stroke-dasharray: 1.4 1; }
-.nav-map .m-yard.thin { fill: rgba(243,238,228,0.03); stroke: rgba(243,238,228,0.18); }
-.nav-map .m-water { fill: rgba(111,211,255,0.09); stroke: rgba(111,211,255,0.4); stroke-width: 0.5; }
-.nav-map .m-water { fill: url(#water); }
-.nav-map .m-bridge { fill: rgba(243,238,228,0.18); stroke: rgba(243,238,228,0.55); stroke-width: 0.4; }
-.nav-map .m-building { fill: rgba(243,238,228,0.1); stroke: rgba(243,238,228,0.3); stroke-width: 0.35; }
-.nav-map .m-building.dojo { fill: rgba(255,217,160,0.12); stroke: rgba(255,217,160,0.5); }
-.nav-map .m-street { font-family: var(--sans); font-size: 3px; letter-spacing: 0.5em; fill: rgba(243,238,228,0.4); }
+.nav-map .m-yard { fill: rgba(243,238,228,0.045); }
+.nav-map .m-wall { fill: none; stroke: rgba(243,238,228,0.55); stroke-width: 0.7; }
+.nav-map .m-ring { fill: rgba(255,211,160,0.1); stroke: rgba(255,211,160,0.5); stroke-width: 0.3; stroke-dasharray: 0.8 0.6; }
+.nav-map .m-water { fill: url(#water); stroke: rgba(111,211,255,0.4); stroke-width: 0.3; }
+.nav-map .m-walk { fill: rgba(243,238,228,0.14); stroke: rgba(243,238,228,0.4); stroke-width: 0.2; }
+.nav-map .m-building { fill: rgba(243,238,228,0.12); stroke: rgba(243,238,228,0.4); stroke-width: 0.3; }
+.nav-map .m-street { font-family: var(--sans); font-size: 1.6px; letter-spacing: 0.5em; fill: rgba(243,238,228,0.45); }
 .nav-map .m-north { font-family: var(--sans); font-size: 5px; font-weight: 700; fill: var(--paper); }
 .nav-map .m-north-arrow { fill: var(--paper); }
 .nav-map .m-poi { cursor: pointer; outline: none; }

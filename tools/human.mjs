@@ -4,7 +4,7 @@
 // the animation clips with their measured ground speeds. Everything that reads
 // as clothing is generated here as an offset shell of the skin, so the mesh
 // stays one topology and the skin is complete under it.
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, EXTTextureWebP } from '@gltf-transform/extensions';
@@ -284,9 +284,6 @@ export async function buildHuman(raw, out) {
     else if (/Eye/.test(n)) { size = 256; q = 85; }
     t.setImage(await webp(img, size, q)).setMimeType('image/webp');
   }
-  const dark = await webp(readFileSync(join(ubc, 'Base Characters', 'Godot - UE', 'T_Superhero_Male_Dark.png')), 1024, 82);
-  writeFileSync(join(out, 'textures', 'HumanSkinDark', 'color.webp'), dark);
-
   await io.write(join(out, 'characters', 'human.raw.glb'), doc);
   return speeds;
 }

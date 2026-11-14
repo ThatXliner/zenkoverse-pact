@@ -1,91 +1,165 @@
 import * as THREE from 'three';
-import type { Assets } from '../app/assets';
 
-export type MaterialId = 'Asphalt012' | 'PavingStones138' | 'Concrete034' | 'Bricks059' | 'Metal032' | 'MetalPlates006' | 'WoodFloor051' | 'Planks012' | 'Wood051' | 'Fabric030' | 'Ground037' | 'Tiles074' | 'Rust004' | 'Marble012' | 'RoofingTiles003' | 'CorrugatedSteel005' | 'PaintedPlaster017';
+// The cel-shaded material set. Everything in the world and on the characters
+// is a MeshToonMaterial over one shared light ramp, so the whole frame reads
+// as one drawing: flat fills, a hard terminator, stepped shadows, and ink
+// lines from the post effect (src/render/ink.ts) plus an inverted hull on the
+// characters (inkHull below).
 
-export interface SurfaceOptions {
-  repeat?: number;
-  wet?: number;
-  color?: number;
-  roughness?: number;
-  metalness?: number;
-  puddles?: boolean;
+export const INK = 0x14101c;
+
+// Four light bands: core shadow, half tone, lit, and a hot highlight.
+const RAMP_STEPS = [0.36, 0.62, 0.9, 1.0];
+let ramp: THREE.DataTexture | null = null;
+export function toonRamp(): THREE.DataTexture {
+  if (ramp) return ramp;
+  const data = new Uint8Array(RAMP_STEPS.length * 4);
+  RAMP_STEPS.forEach((v, i) => { data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = Math.round(v * 255); data[i * 4 + 3] = 255; });
+  ramp = new THREE.DataTexture(data, RAMP_STEPS.length, 1, THREE.RGBAFormat);
+  ramp.minFilter = ramp.magFilter = THREE.NearestFilter;
+  ramp.needsUpdate = true;
+  return ramp;
 }
 
-export const rainUniforms = { time: { value: 0 }, rainStrength: { value: 1 } };
+// Shadow maps come out soft; the ramp wants them as a hard band. Each
+// shadowed light's term is snapped to lit or shaded before the ramp sees it.
+function hardShadows(mat: THREE.Material): void {
+  mat.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <shadowmap_pars_fragment>', '#include <shadowmap_pars_fragment>\n#define getShadowStep(a,b,c,d,e,f) smoothstep(0.42, 0.58, getShadow(a,b,c,d,e,f))')
+      .replace(/\? getShadow\( directionalShadowMap/g, '? getShadowStep( directionalShadowMap')
+      .replace(/\? getShadow\( spotShadowMap/g, '? getShadowStep( spotShadowMap');
+  };
+  mat.customProgramCacheKey = () => 'toon-hard-shadow';
+}
 
-// Wet-surface shader: darkens albedo, lowers roughness, adds a puddle mask
-// from low-frequency noise and animated ripple normals inside the puddles.
-const wetChunk = /* glsl */ `
-uniform float uWet;
-uniform float uPuddles;
-uniform float time;
-uniform float rainStrength;
-varying vec3 vWorldPos;
-float hash21(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
-float vnoise(vec2 p){ vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f);
-  float a=hash21(i), b=hash21(i+vec2(1,0)), c=hash21(i+vec2(0,1)), d=hash21(i+vec2(1,1));
-  return mix(mix(a,b,f.x), mix(c,d,f.x), f.y); }
-float puddleMask(vec2 p){ float n = vnoise(p*0.55)*0.55 + vnoise(p*1.7+3.1)*0.45; return smoothstep(0.56, 0.68, n) * uPuddles; }
-vec3 ripple(vec2 p, float t){
-  vec3 n = vec3(0.0);
-  for (int i = 0; i < 3; i++) {
-    vec2 cell = floor(p*1.6 + float(i)*7.3);
-    vec2 c = fract(p*1.6 + float(i)*7.3) - 0.5;
-    float seed = hash21(cell + float(i));
-    float phase = fract(t*0.9 + seed);
-    float r = length(c) - phase*0.5;
-    float ring = smoothstep(0.03, 0.0, abs(r)) * (1.0-phase) * step(seed, rainStrength*0.9);
-    n.xy += normalize(c + 1e-4) * ring * 0.8;
-  }
-  return n;
-}`;
+export interface ToonOptions {
+  map?: THREE.Texture | null;
+  emissive?: number;
+  emissiveIntensity?: number;
+  side?: THREE.Side;
+  transparent?: boolean;
+  opacity?: number;
+  alphaTest?: number;
+}
 
-export function makeSurface(assets: Assets, id: MaterialId, opts: SurfaceOptions = {}): THREE.MeshStandardMaterial {
-  const repeat = opts.repeat ?? 1;
-  const color = assets.texture(`textures/${id}/color`);
-  const normal = assets.texture(`textures/${id}/normal`);
-  const rough = assets.texture(`textures/${id}/rough`);
-  for (const t of [color, normal, rough]) if (t) t.repeat.set(repeat, repeat);
-  const mat = new THREE.MeshStandardMaterial({
-    map: color ?? null, normalMap: normal ?? null, roughnessMap: rough ?? null,
-    color: opts.color ?? 0xffffff, roughness: opts.roughness ?? 1, metalness: opts.metalness ?? 0,
-    envMapIntensity: 1,
+export function toon(color: number | THREE.Color, opts: ToonOptions = {}): THREE.MeshToonMaterial {
+  const m = new THREE.MeshToonMaterial({
+    color, gradientMap: toonRamp(), map: opts.map ?? null,
+    emissive: opts.emissive ?? 0x000000, emissiveIntensity: opts.emissiveIntensity ?? 1,
+    side: opts.side ?? THREE.FrontSide, transparent: opts.transparent ?? false, opacity: opts.opacity ?? 1, alphaTest: opts.alphaTest ?? 0,
   });
-  const wet = opts.wet ?? 0;
-  if (wet > 0) {
-    mat.onBeforeCompile = (shader) => {
-      shader.uniforms.uWet = { value: wet };
-      shader.uniforms.uPuddles = { value: opts.puddles ? 1 : 0 };
-      shader.uniforms.time = rainUniforms.time;
-      shader.uniforms.rainStrength = rainUniforms.rainStrength;
-      shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWorldPos;')
-        .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-      shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\n' + wetChunk)
-        .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-          float pm = puddleMask(vWorldPos.xz);
-          roughnessFactor = mix(roughnessFactor, roughnessFactor * (1.0 - 0.55*uWet), 1.0);
-          roughnessFactor = mix(roughnessFactor, 0.06, pm);`)
-        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-          float pm2 = puddleMask(vWorldPos.xz);
-          vec3 rip = ripple(vWorldPos.xz, time);
-          normal = normalize(mix(normal, vec3(0.0, 0.0, 1.0) * 0.0 + normalize(vec3(rip.xy*0.6, 1.0)), pm2 * 0.9));`)
-        .replace('#include <map_fragment>', `#include <map_fragment>
-          float pm3 = puddleMask(vWorldPos.xz);
-          diffuseColor.rgb *= mix(1.0, 0.62, uWet);
-          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb*0.35 + vec3(0.01,0.012,0.02), pm3);`);
-    };
-    mat.customProgramCacheKey = () => `wet${wet}${opts.puddles ? 'p' : ''}`;
-  }
-  return mat;
+  hardShadows(m);
+  return m;
 }
 
+// Faceted: every face its own normal, so a cone or a sphere reads as cut
+// planes under the ramp instead of a smooth gradient.
+export function faceted(geo: THREE.BufferGeometry): THREE.BufferGeometry {
+  const flat = geo.index ? geo.toNonIndexed() : geo;
+  flat.computeVertexNormals();
+  return flat;
+}
+
+// Lit surfaces (lanterns, glyphs, markings): no shading, they are the colour.
 export function emissive(color: number, intensity = 4): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color: 0x000000, emissive: color, emissiveIntensity: intensity, roughness: 0.4, metalness: 0 });
 }
 
-export function glass(tint = 0x8fb4cf): THREE.MeshPhysicalMaterial {
-  return new THREE.MeshPhysicalMaterial({ color: tint, roughness: 0.08, metalness: 0, transmission: 0, transparent: true, opacity: 0.35, envMapIntensity: 1.6, reflectivity: 0.9 });
+// Re-skins a loaded glTF (Kenney palette props, the trees) in toon: the
+// palette map stays, so each face keeps its authored flat colour.
+export function toonify(root: THREE.Object3D, tint?: number): void {
+  const cache = new Map<THREE.Material, THREE.MeshToonMaterial>();
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    const src = m.material as THREE.MeshStandardMaterial;
+    let t = cache.get(src);
+    if (!t) {
+      t = toon(tint ?? src.color?.getHex() ?? 0xffffff, { map: src.map ?? null, side: src.side, transparent: src.transparent, opacity: src.opacity, alphaTest: src.alphaTest });
+      cache.set(src, t);
+    }
+    m.material = t;
+  });
+}
+
+// Inverted hull: the same skinned mesh drawn again, back faces only, pushed
+// out along the normal, in ink. `width` is in metres at one metre; it grows
+// with distance so the line keeps its weight on screen.
+const hullVert = /* glsl */ `
+#include <common>
+#include <skinning_pars_vertex>
+uniform float width;
+void main() {
+  #include <beginnormal_vertex>
+  #include <skinbase_vertex>
+  #include <skinnormal_vertex>
+  #include <begin_vertex>
+  #include <skinning_vertex>
+  vec4 mv = modelViewMatrix * vec4(transformed, 1.0);
+  float w = width * clamp(-mv.z * 0.09, 0.45, 2.6);
+  transformed += normalize(objectNormal) * w;
+  #include <project_vertex>
+}`;
+const hullFrag = /* glsl */ `uniform vec3 ink; void main() { gl_FragColor = vec4(ink, 1.0); }`;
+
+export function inkHullMaterial(width: number, ink = INK): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({ vertexShader: hullVert, fragmentShader: hullFrag, uniforms: { width: { value: width }, ink: { value: new THREE.Color(ink) } }, side: THREE.BackSide });
+}
+
+// Adds a hull sibling for every skinned mesh under `root` and returns them,
+// so a caller can hide or recolour the outline with the body.
+export function addInkHulls(root: THREE.Object3D, width: number, ink = INK): THREE.SkinnedMesh[] {
+  const mat = inkHullMaterial(width, ink);
+  const out: THREE.SkinnedMesh[] = [];
+  const targets: THREE.SkinnedMesh[] = [];
+  root.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) targets.push(o as THREE.SkinnedMesh); });
+  for (const m of targets) {
+    const hull = new THREE.SkinnedMesh(m.geometry, mat);
+    hull.bind(m.skeleton, m.bindMatrix);
+    hull.bindMode = m.bindMode;
+    hull.frustumCulled = m.frustumCulled;
+    hull.boundingSphere = m.boundingSphere;
+    hull.castShadow = false;
+    hull.receiveShadow = false;
+    hull.name = `${m.name}_ink`;
+    hull.renderOrder = m.renderOrder;
+    m.parent!.add(hull);
+    hull.position.copy(m.position); hull.quaternion.copy(m.quaternion); hull.scale.copy(m.scale);
+    out.push(hull);
+  }
+  return out;
+}
+
+// A wooden board with brushed kanji. `color` is the paint; the board is the
+// wood of the compound.
+export function paintedSign(text: string, opts: { width?: number; vertical?: boolean; paint?: string; wood?: number; emissive?: boolean } = {}): THREE.Group {
+  const vertical = opts.vertical ?? false;
+  const canvas = document.createElement('canvas');
+  canvas.width = vertical ? 256 : 1024;
+  canvas.height = vertical ? 1024 : 256;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#' + new THREE.Color(opts.wood ?? 0xd8c39a).getHexString();
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.font = `800 ${vertical ? 170 : 180}px "Shippori Mincho B1", "Zen Kaku Gothic New", serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = opts.paint ?? '#2b1d1a';
+  if (vertical) {
+    const chars = [...text];
+    const step = canvas.height / (chars.length + 0.4);
+    chars.forEach((c, i) => ctx.fillText(c, 128, step * (i + 0.7)));
+  } else ctx.fillText(text, 512, 134);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  const w = opts.width ?? (vertical ? 0.9 : 3.6);
+  const h = vertical ? w * 4 : w / 4;
+  const g = new THREE.Group();
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(w, h), opts.emissive ? new THREE.MeshBasicMaterial({ map: tex }) : toon(0xffffff, { map: tex }));
+  face.position.z = 0.03;
+  const board = new THREE.Mesh(new THREE.BoxGeometry(w + 0.12, h + 0.12, 0.06), toon(0x6b4a33));
+  board.castShadow = true;
+  g.add(board, face);
+  return g;
 }

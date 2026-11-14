@@ -7,6 +7,8 @@ export class Input {
   private pressed = new Set<Action>();
   private released = new Set<Action>();
   readonly look = { x: 0, y: 0 };
+  // The cursor in normalized device coordinates, for the top-down aim.
+  readonly mouse = { x: 0, y: 0 };
   wheel = 0;
   locked = false;
   onLockLost: (() => void) | null = null;
@@ -42,6 +44,8 @@ export class Input {
     window.addEventListener('mouseup', (e) => release(`Mouse${e.button}`, e));
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('mousemove', (e) => {
+      this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
       if (!this.locked) return;
       this.look.x += e.movementX;
       this.look.y += e.movementY;

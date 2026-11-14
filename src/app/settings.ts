@@ -1,7 +1,8 @@
 import { signal, effect } from '@preact/signals';
+import type { CameraMode } from '../player/camera';
 
 export type Quality = 'low' | 'medium' | 'high';
-export type CameraMode = 'first' | 'third';
+export type { CameraMode };
 
 export interface Settings {
   sensitivity: number;
@@ -15,8 +16,9 @@ export interface Settings {
   skipCutscenes: boolean;
 }
 
-const KEY = 'zenko.settings.v2';
-const defaults: Settings = { sensitivity: 1, fov: 80, quality: 'high', volume: 0.8, music: 0.6, camera: 'first', invertY: false, showMastery: true, skipCutscenes: false };
+// v3: the camera gained the top-down view and it became the default.
+const KEY = 'zenko.settings.v3';
+const defaults: Settings = { sensitivity: 1, fov: 80, quality: 'high', volume: 0.8, music: 0.6, camera: 'top', invertY: false, showMastery: true, skipCutscenes: false };
 
 function load(): Settings {
   try {

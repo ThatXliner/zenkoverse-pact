@@ -21,7 +21,11 @@ export class PlayerController {
   private ctrl: RAPIER.KinematicCharacterController;
   grounded = true;
   wasGrounded = true;
+  // Where the body faces. `moveYaw` is the heading the movement keys are
+  // read against: the facing in first and third person, the camera's north
+  // in the top-down view, where W is up the screen whichever way you aim.
   yaw = 0;
+  moveYaw = 0;
   speedScale = 1;
   canDash = true;
   dashCooldown = 0;
@@ -61,17 +65,18 @@ export class PlayerController {
     this.body.setTranslation({ x: p.x, y: p.y + PLAYER_HEIGHT / 2, z: p.z }, true);
   }
 
-  update(dt: number, input: Input, sprintAllowed: boolean): void {
+  update(dt: number, input: Input, sprintAllowed: boolean, sprintAnyDirection = false): void {
     if (dt <= 0) return;
     const axis = input.axis();
-    const wantsSprint = input.isDown('sprint') && sprintAllowed && axis.y > 0.1;
+    const wantsSprint = input.isDown('sprint') && sprintAllowed && (axis.y > 0.1 || (sprintAnyDirection && Math.hypot(axis.x, axis.y) > 0.1));
     const locked = this.rooted > 0 || this.moveLock > 0;
     this.rooted = Math.max(0, this.rooted - dt);
     this.moveLock = Math.max(0, this.moveLock - dt);
     this.dashCooldown = Math.max(0, this.dashCooldown - dt);
 
-    const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+    const forward = new THREE.Vector3(-Math.sin(this.moveYaw), 0, -Math.cos(this.moveYaw));
     const right = new THREE.Vector3(-forward.z, 0, forward.x);
+    const facing = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const wish = locked ? new THREE.Vector3() : new THREE.Vector3().addScaledVector(forward, axis.y).addScaledVector(right, axis.x);
     const targetSpeed = (wantsSprint ? 6.6 : 4.1) * this.speedScale;
     const accel = this.grounded ? 22 : 7;
@@ -84,7 +89,7 @@ export class PlayerController {
       this.dashTimer -= dt;
       planar.copy(this.dashDir).multiplyScalar(13.5);
     } else if (input.hit('dash') && this.canDash && this.dashCooldown <= 0 && !locked) {
-      this.dashDir.copy(wish.lengthSq() > 0.01 ? wish.normalize() : forward);
+      this.dashDir.copy(wish.lengthSq() > 0.01 ? wish.clone().normalize() : facing);
       this.dashTimer = 0.17;
       this.dashCooldown = 1.0;
       this.velocity.y = Math.max(this.velocity.y, 0.5);
@@ -125,7 +130,7 @@ export class PlayerController {
     } else if (out.y < move.y - 1e-4 && this.velocity.y > 0) {
       this.velocity.y = 0;
     }
-    if (blockedH && axis.y > 0.3 && !locked) this.tryMantle(forward);
+    if (blockedH && wish.lengthSq() > 0.1 && !locked) this.tryMantle(wish.clone().normalize());
 
     this.body.setNextKinematicTranslation({ x: this.position.x, y: this.position.y + PLAYER_HEIGHT / 2, z: this.position.z });
 

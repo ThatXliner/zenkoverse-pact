@@ -31,7 +31,7 @@ export const ACTIONS: readonly ActionDef[] = [
   { id: 'aura', label: 'Aura Expansion', group: 'combat', defaults: ['KeyF'] },
   { id: 'fullsign', label: 'Full hand sign', group: 'combat', defaults: ['AltLeft'] },
   { id: 'interact', label: 'Interact', group: 'interface', defaults: ['KeyE'] },
-  { id: 'camera', label: 'First or third person', group: 'interface', defaults: ['KeyV'] },
+  { id: 'camera', label: 'Camera view', group: 'interface', defaults: ['KeyV'] },
   { id: 'map', label: 'Map', group: 'interface', defaults: ['KeyM'] },
   { id: 'workshop', label: 'Pact Workshop', group: 'interface', defaults: ['Tab'] },
   { id: 'pause', label: 'Pause and close', group: 'interface', defaults: ['Escape'], fixed: true },

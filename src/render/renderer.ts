@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { EffectComposer, RenderPass, EffectPass, BloomEffect, SMAAEffect, VignetteEffect, ToneMappingEffect, ToneMappingMode, BlendFunction, Effect, ChromaticAberrationEffect, KernelSize } from 'postprocessing';
-import { N8AOPostPass } from 'n8ao';
 import type { Quality } from '../app/settings';
 import { patchLightLoop } from './lightLoop';
 import { LightPool, type PoolSize } from './lightPool';
+import { InkEffect } from './ink';
 
 const POOL: Record<Quality, PoolSize> = {
-  high: { points: 8, spots: 6, spotShadows: 1 },
-  medium: { points: 6, spots: 4, spotShadows: 0 },
-  low: { points: 4, spots: 3, spotShadows: 0 },
+  high: { points: 8, spots: 4, spotShadows: 1 },
+  medium: { points: 6, spots: 3, spotShadows: 0 },
+  low: { points: 4, spots: 2, spotShadows: 0 },
 };
 
 const impactShader = /* glsl */ `
@@ -34,18 +34,22 @@ class ImpactFrameEffect extends Effect {
   set tint(c: THREE.Color) { (this.uniforms.get('tint')!.value as THREE.Color).copy(c); }
 }
 
+// The frame: toon-lit scene, ink lines, a little bloom for the lanterns and
+// the Technique glow, a hue-preserving tone curve so the flat colours stay
+// the colours they were painted, then the impact frame, vignette and SMAA.
+// The first-person arms render in a second pass over the top.
 export class Renderer {
   readonly gl: THREE.WebGLRenderer;
   readonly composer: EffectComposer;
   readonly scene = new THREE.Scene();
   readonly overlayScene = new THREE.Scene();
-  readonly camera = new THREE.PerspectiveCamera(80, 1, 0.08, 400);
+  readonly camera = new THREE.PerspectiveCamera(80, 1, 0.08, 600);
   readonly overlayCamera = new THREE.PerspectiveCamera(75, 1, 0.01, 10);
   readonly lights = new LightPool(this.scene);
   private impact: ImpactFrameEffect;
   private bloom: BloomEffect;
   private chroma: ChromaticAberrationEffect;
-  private ao: N8AOPostPass;
+  private ink: InkEffect;
   private impactFrames = 0;
   private impactTint = new THREE.Color(1, 1, 1);
   overlayVisible = true;
@@ -62,21 +66,14 @@ export class Renderer {
 
     this.composer = new EffectComposer(this.gl, { frameBufferType: THREE.HalfFloatType, multisampling: 0 });
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.ao = new N8AOPostPass(this.scene, this.camera, 1, 1);
-    this.ao.configuration.aoRadius = 1.6;
-    this.ao.configuration.distanceFalloff = 1.2;
-    this.ao.configuration.intensity = 2.2;
-    this.ao.configuration.halfRes = true;
-    this.ao.configuration.color = new THREE.Color(0x060810);
-    this.composer.addPass(this.ao);
-
-    this.bloom = new BloomEffect({ intensity: 0.75, luminanceThreshold: 0.78, luminanceSmoothing: 0.25, mipmapBlur: true, kernelSize: KernelSize.LARGE, radius: 0.72 });
+    this.ink = new InkEffect(this.camera.far);
+    this.bloom = new BloomEffect({ intensity: 0.55, luminanceThreshold: 0.9, luminanceSmoothing: 0.2, mipmapBlur: true, kernelSize: KernelSize.MEDIUM, radius: 0.6 });
     this.impact = new ImpactFrameEffect();
     this.chroma = new ChromaticAberrationEffect({ offset: new THREE.Vector2(0, 0), radialModulation: true, modulationOffset: 0.4 });
-    const tone = new ToneMappingEffect({ mode: ToneMappingMode.AGX });
-    const vignette = new VignetteEffect({ darkness: 0.55, offset: 0.28 });
+    const tone = new ToneMappingEffect({ mode: ToneMappingMode.NEUTRAL });
+    const vignette = new VignetteEffect({ darkness: 0.38, offset: 0.32 });
     const smaa = new SMAAEffect();
-    this.composer.addPass(new EffectPass(this.camera, this.bloom, tone, this.impact, vignette, smaa));
+    this.composer.addPass(new EffectPass(this.camera, this.ink, this.bloom, tone, this.impact, vignette, smaa));
     this.composer.addPass(new EffectPass(this.camera, this.chroma));
     this.setQuality('high');
   }
@@ -86,9 +83,7 @@ export class Renderer {
     this.gl.setPixelRatio(dpr);
     this.lights.setSize(POOL[q]);
     this.gl.shadowMap.enabled = q !== 'low';
-    this.ao.enabled = q !== 'low';
-    this.ao.configuration.aoSamples = q === 'high' ? 16 : 8;
-    this.ao.configuration.denoiseSamples = q === 'high' ? 8 : 4;
+    this.ink.weight = dpr >= 1.75 ? 1.6 : 1.0;
     this.resize();
   }
 
@@ -126,4 +121,3 @@ export class Renderer {
     }
   }
 }
-

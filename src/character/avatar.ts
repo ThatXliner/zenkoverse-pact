@@ -1,22 +1,25 @@
 import * as THREE from 'three';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { Assets } from '../app/assets';
+import { toon, addInkHulls } from '../render/materials';
 
-// Every character is the one human in human.glb. A look picks hair, skin
-// tone and suit colour. The KayKit names stay as aliases until
-// src/world/pedestrians.ts is migrated; they are looks now, not models.
-export interface Look { hair: string | null; hairColor: number; beard?: boolean; skin: 'light' | 'dark' }
-const parted: Look = { hair: 'Hair_SimpleParted', hairColor: 0x1a1412, skin: 'light' };
-const buzzed: Look = { hair: 'Hair_Buzzed', hairColor: 0x120d0b, skin: 'dark' };
-const long: Look = { hair: 'Hair_Long', hairColor: 0x3a2a1e, skin: 'light' };
-const buns: Look = { hair: 'Hair_Buns', hairColor: 0x15100e, skin: 'dark' };
-const beard: Look = { hair: 'Hair_Buzzed', hairColor: 0x4a3426, beard: true, skin: 'light' };
+// Every character is the one rigged human in human.glb, drawn cel-shaded: flat
+// skin and hair fills over the toon ramp, a flat suit in the role's colour, an
+// ink hull around the whole body, and a larger head and hands than life, so
+// the figures read as drawn rather than scanned. A look picks hair and skin.
+export interface Look { hair: string | null; hairColor: number; beard?: boolean; skin: 'light' | 'dark' | 'warm' }
+const parted: Look = { hair: 'Hair_SimpleParted', hairColor: 0x2a1e2e, skin: 'light' };
+const buzzed: Look = { hair: 'Hair_Buzzed', hairColor: 0x1a1216, skin: 'dark' };
+const long: Look = { hair: 'Hair_Long', hairColor: 0xe9e4dc, skin: 'light' };
+const buns: Look = { hair: 'Hair_Buns', hairColor: 0x3a2322, skin: 'warm' };
+const beard: Look = { hair: 'Hair_Buzzed', hairColor: 0x5a3426, beard: true, skin: 'warm' };
 const bald: Look = { hair: null, hairColor: 0x000000, skin: 'dark' };
-export const LOOKS = {
-  player: parted, parted, buzzed, long, buns, beard, bald,
-  Knight: parted, Rogue: buzzed, Rogue_Hooded: bald, Mage: long, Barbarian: beard,
-} satisfies Record<string, Look>;
+export const LOOKS = { player: parted, parted, buzzed, long, buns, beard, bald } satisfies Record<string, Look>;
 export type CharacterModel = keyof typeof LOOKS;
+
+// Anime skin: pale, warm and flat. The shade comes from the ramp, never from a texture.
+const SKIN: Record<Look['skin'], number> = { light: 0xf7d9bf, warm: 0xe2b58f, dark: 0x9a6744 };
+const EYE_WHITE = 0xf8f6f2;
 
 export type Locomotion = 'idle' | 'walk' | 'run' | 'sprint' | 'air' | 'land' | 'dead';
 
@@ -32,9 +35,15 @@ const UP = new THREE.Vector3(0, 1, 0);
 // Beyond this angle from the facing, travel plays the cycle backward.
 const BACKING = THREE.MathUtils.degToRad(100);
 const MAX_HIP_YAW = 1.2;
-const SUIT = 0x1a1d25;
-const BODY_BOUNDS = new THREE.Sphere(new THREE.Vector3(0, 0.9, 0), 1.5);
+// The player's suit. Enemy suits are chosen in src/combat/enemies.ts to stay apart from it.
+export const PLAYER_SUIT = 0x2a4a9e;
+const SUIT = PLAYER_SUIT;
+// Stylized proportions: the head and the hands are drawn large.
+const HEAD_SCALE = 1.17;
+const HAND_SCALE = 1.1;
+const BODY_BOUNDS = new THREE.Sphere(new THREE.Vector3(0, 0.9, 0), 1.6);
 const WHITE = new THREE.Color(1, 1, 1);
+const INK_WIDTH = 0.0075;
 
 // Pulls the torso and arm tracks out of a clip so a gesture plays on the
 // upper body while the legs keep their locomotion cycle.
@@ -42,7 +51,7 @@ function upperBodyClip(clip: THREE.AnimationClip): THREE.AnimationClip {
   return new THREE.AnimationClip(clip.name + '_upper', clip.duration, clip.tracks.filter((t) => UPPER_BONE.test(t.name.split('.')[0] ?? '')));
 }
 
-export interface AvatarOptions { hideParts?: string[]; targetHeight?: number; tint?: number; emissive?: number }
+export interface AvatarOptions { targetHeight?: number; tint?: number; emissive?: number; build?: number }
 
 export class Avatar {
   readonly root = new THREE.Group();
@@ -59,9 +68,10 @@ export class Avatar {
   private layered: { bone: THREE.Bone; clip: THREE.Quaternion }[] = [];
   private oneShot: THREE.AnimationAction | null = null;
   readonly height: number;
-  private suit: THREE.MeshPhysicalMaterial;
+  private suit: THREE.MeshToonMaterial;
   private suitGlow = new THREE.Color(0);
-  private materials: THREE.MeshStandardMaterial[] = [];
+  private materials: THREE.MeshToonMaterial[] = [];
+  private hulls: THREE.SkinnedMesh[] = [];
   private flashT = 0;
 
   constructor(assets: Assets, which: CharacterModel, opts: AvatarOptions = {}) {
@@ -70,12 +80,8 @@ export class Avatar {
     this.clipSpeed = (gltf.userData as { clipSpeeds?: Record<string, number> }).clipSpeeds ?? {};
     this.model = cloneSkeleton(gltf.scene);
     const drop: THREE.Object3D[] = [];
-    // Tints come from callers that coloured whole KayKit models; at half
-    // brightness they read as cloth instead of skin.
-    this.suit = new THREE.MeshPhysicalMaterial({ color: opts.tint !== undefined ? new THREE.Color(opts.tint).multiplyScalar(0.5) : SUIT, roughness: 0.88, metalness: 0, envMapIntensity: 0.4, side: THREE.DoubleSide, sheen: 0.6, sheenRoughness: 0.75, sheenColor: new THREE.Color(0x4a5268) });
-    if (opts.emissive !== undefined) { this.suitGlow.set(opts.emissive).multiplyScalar(0.35); this.suit.emissive.copy(this.suitGlow); }
-    const fabric = assets.texture('textures/Fabric030/normal');
-    if (fabric) { this.suit.normalMap = fabric; this.suit.normalScale.set(0.5, 0.5); }
+    this.suit = toon(opts.tint ?? SUIT, { side: THREE.DoubleSide });
+    if (opts.emissive !== undefined) { this.suitGlow.set(opts.emissive).multiplyScalar(0.45); this.suit.emissive.copy(this.suitGlow); }
     this.model.traverse((o) => {
       if ((o as THREE.Bone).isBone) this.bones.set(o.name, o as THREE.Bone);
       if (o.name === 'Arms') drop.push(o);
@@ -90,17 +96,16 @@ export class Avatar {
       if ((m as THREE.SkinnedMesh).isSkinnedMesh) (m as THREE.SkinnedMesh).boundingSphere = BODY_BOUNDS;
       const src = m.material as THREE.MeshStandardMaterial;
       if (src.name === 'Suit') { m.material = this.suit; return; }
-      const mat = src.clone();
-      mat.envMapIntensity = 0.6;
-      if (o.name.startsWith('Hair_')) { mat.color.set(look.hairColor); mat.roughness = 0.7; }
-      if (src.name === 'Skin' && look.skin === 'dark') {
-        const dark = assets.texture('textures/HumanSkinDark/color');
-        if (dark) { const t = dark.clone(); t.repeat.set(1, -1); t.offset.set(0, 1); t.needsUpdate = true; mat.map = t; }
-      }
+      let mat: THREE.MeshToonMaterial;
+      if (o.name.startsWith('Hair_')) mat = toon(look.hairColor);
+      else if (o.name === 'Eyes') mat = toon(EYE_WHITE, { map: src.map ?? null });
+      else if (o.name === 'Eyebrows') mat = toon(look.hairColor, { map: src.map ?? null, alphaTest: 0.5, transparent: true });
+      else mat = toon(SKIN[look.skin]);
       m.material = mat;
       this.materials.push(mat);
     });
     for (const o of drop) o.removeFromParent();
+    this.hulls = addInkHulls(this.model, INK_WIDTH);
     // The model is authored facing +Z. Turned inside the root, the root follows
     // the game's convention (yaw 0 looks down -Z, like the camera), so callers
     // set root.rotation.y to their yaw as they would for any other object.
@@ -113,6 +118,11 @@ export class Avatar {
     this.model.position.y = -box.min.y * s;
     this.height = target;
     this.root.add(this.model);
+    // Proportions: the clips never write bone scale, so these hold.
+    this.bones.get('Head')?.scale.setScalar(HEAD_SCALE);
+    for (const side of ['l', 'r']) this.bones.get(`hand_${side}`)?.scale.setScalar(HAND_SCALE);
+    const build = opts.build ?? 1;
+    if (build !== 1) for (const n of ['spine_02', 'spine_03']) this.bones.get(n)?.scale.set(build, 1, build);
 
     this.mixer = new THREE.AnimationMixer(this.model);
     for (const clip of gltf.animations) {
@@ -128,8 +138,7 @@ export class Avatar {
       const a = this.actions.get(LOCO_CLIP[l]);
       if (a) { a.play(); a.setEffectiveWeight(l === 'idle' ? 1 : 0); }
     }
-    // Bake the idle pose now: the bind pose is a T-pose, and far-away
-    // pedestrians are never updated.
+    // Bake the idle pose now: the bind pose is a T-pose.
     this.mixer.update(0);
     this.layered = LAYERED.flatMap((n) => { const bone = this.bones.get(n); return bone ? [{ bone, clip: bone.quaternion.clone() }] : []; });
   }
@@ -254,7 +263,7 @@ export class Avatar {
       this.applySeal(dt);
     }
     this.flashT *= Math.exp(-12 * dt);
-    for (const m of this.materials) m.emissive.setScalar(this.flashT);
+    for (const m of this.materials) m.emissive.setScalar(this.flashT * 0.8);
     this.suit.emissive.copy(this.suitGlow).lerp(WHITE, this.flashT);
   }
 

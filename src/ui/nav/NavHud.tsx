@@ -15,14 +15,12 @@ const pct = (rel: number) => `${50 + (rel / SPAN) * 100}%`;
 
 export function NavHud() {
   const view = navUi.view.value;
-  const fade = navUi.travelFade.value;
   const live = appState.value.kind !== 'paused';
   return (
     <>
       <TopCenter view={view} />
       {live && view.marker && view.target && <Marker view={view} />}
       {live && view.labels.map((l) => <div key={l.id} class="nav-label" style={{ left: `${l.x}px`, top: `${l.y}px`, opacity: l.opacity }}><span class="jp">{l.jp}</span><span class="en">{l.name}</span></div>)}
-      {fade > 0 && <div class="travel-fade" key={fade} />}
     </>
   );
 }
@@ -64,7 +62,7 @@ function Compass({ view }: { view: NavView }) {
 
 function Pip({ pip }: { pip: CompassPip }) {
   if (Math.abs(pip.rel) > SPAN / 2 - 4) return null;
-  const near = Math.max(0.5, 1 - pip.dist / 160);
+  const near = Math.max(0.5, 1 - pip.dist / 90);
   return <span class={`pip ${pip.unlocked ? 'unlocked' : ''}`} style={{ left: pct(pip.rel), opacity: near }}><b>{pip.glyph}</b></span>;
 }
 

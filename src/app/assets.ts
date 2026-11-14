@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 
 interface ManifestFile { url: string; bytes: number }
 interface Manifest { files: ManifestFile[]; total: number }
@@ -14,7 +13,6 @@ export class Assets {
   readonly gltf = new Map<string, GLTF>();
   readonly textures = new Map<string, THREE.Texture>();
   readonly audio = new Map<string, ArrayBuffer>();
-  hdr: THREE.DataTexture | null = null;
   private loaded = 0;
   private manifest: Manifest = { files: [], total: 1 };
   private gltfLoader = new GLTFLoader();
@@ -58,12 +56,6 @@ export class Assets {
       tex.anisotropy = 8;
       if (name.endsWith('color.webp')) tex.colorSpace = THREE.SRGBColorSpace;
       this.textures.set(name.replace(/\.webp$/, ''), tex);
-    } else if (name.endsWith('.hdr')) {
-      const tex = new RGBELoader().parse(buf);
-      const dt = new THREE.DataTexture(tex.data, tex.width, tex.height, THREE.RGBAFormat, tex.type);
-      dt.mapping = THREE.EquirectangularReflectionMapping;
-      dt.needsUpdate = true;
-      this.hdr = dt;
     } else if (name.endsWith('.ogg')) {
       this.audio.set(name.replace(/^audio\//, '').replace(/\.ogg$/, ''), buf);
     }
@@ -82,9 +74,7 @@ export class Assets {
 
 function label(name: string): string {
   if (name.startsWith('characters/')) return 'Waking the fighters';
-  if (name.startsWith('props/')) return 'Placing the district';
-  if (name.startsWith('textures/')) return 'Wetting the streets';
-  if (name.startsWith('hdri/')) return 'Lighting the night';
-  if (name.startsWith('audio/')) return 'Tuning the rain';
+  if (name.startsWith('props/')) return 'Sweeping the yard';
+  if (name.startsWith('audio/')) return 'Tuning the wind';
   return 'Loading';
 }

@@ -7,12 +7,14 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "serve": "node server/index.mjs",
     "assets": "node tools/build-assets.mjs",
     "capture": "node tools/capture.mjs",
     "check:controls": "node tools/check-controls.mjs",
     "check:effects": "node tools/check-effects.mjs",
     "check:keybinds": "node tools/check-keybinds.mjs",
     "check:locomotion": "node tools/check-locomotion.mjs",
+    "check:multiplayer": "node tools/check-multiplayer.mjs",
     "check:navigation": "node tools/check-navigation.mjs",
     "check:rooftop": "node tools/check-rooftop.mjs",
     "check:sign": "node tools/check-sign.mjs",
@@ -24,7 +26,8 @@
     "@preact/signals": "1.3.1",
     "postprocessing": "6.36.4",
     "preact": "10.25.4",
-    "three": "0.170.0"
+    "three": "0.170.0",
+    "ws": "8.18.0"
   },
   "devDependencies": {
     "@gltf-transform/cli": "4.1.1",

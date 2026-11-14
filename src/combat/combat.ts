@@ -93,27 +93,37 @@ export class Combat {
     return final;
   }
 
-  hurtPlayer(amount: number, opts: { from?: THREE.Vector3; kinetic?: boolean; self?: boolean } = {}): void {
+  // Runs this player's defences on a blow and returns what got through.
+  // Online the server owns health: a blow from another player (`pvp`) is
+  // reported back by the caller, and health this player spends on itself goes
+  // to the server here; the new value arrives through `setHp`.
+  hurtPlayer(amount: number, opts: { from?: THREE.Vector3; kinetic?: boolean; self?: boolean; pvp?: boolean } = {}): number {
     const g = this.game;
-    if (this.god || (this.invuln > 0 && !opts.self)) return;
+    if (this.god || (this.invuln > 0 && !opts.self)) return 0;
     let a = amount;
     if (!opts.self) a = g.techniques.def.effects.onStruck?.(g, a, opts.from ?? g.player.position) ?? a;
     if (this.eye === 'horizon' && !opts.self) a *= 0.7;
-    if (a <= 0) return;
-    this.hp = Math.max(0, this.hp - a);
-    combatUi.hp.value = this.hp / this.maxHp;
+    if (a <= 0) return 0;
+    if (g.net) { if (!opts.pvp) g.net.selfDamage(a); }
+    else { this.hp = Math.max(0, this.hp - a); combatUi.hp.value = this.hp / this.maxHp; }
     hud.hurt.value = Date.now();
     g.cam.shake(Math.min(0.8, a / 30));
     g.cam.kick({ fov: -4, pitch: opts.from ? 0.02 : 0 });
     g.audio.play(opts.self ? 'impactSoft_heavy_000' : 'impactPunch_heavy_000', 0.6, 1);
     if (!opts.self) { this.invuln = 0.35; g.techniques.struck(); g.techniques.charge = Math.min(1, g.techniques.charge + a / 220); }
     g.book.observe('lowHealthFraction', this.hp / this.maxHp < 0.35 ? 1 : 0);
-    if (this.hp <= 0) this.defeat();
+    if (this.hp <= 0 && !g.net) this.defeat();
+    return a;
+  }
+
+  setHp(hp: number): void {
+    this.hp = Math.max(0, Math.min(this.maxHp, hp));
+    combatUi.hp.value = this.hp / this.maxHp;
   }
 
   // Thread Eye: damage to one body travels down the thread to its nearest neighbour.
   private threadSplash(from: Enemy, amount: number): void {
-    const other = this.game.encounters.enemies.filter((o) => o !== from && o.alive && o.def.ai !== 'dummy' && o.position.distanceTo(from.position) < 7)
+    const other = this.game.targets().filter((o) => o !== from && o.alive && o.def.ai !== 'dummy' && o.position.distanceTo(from.position) < 7)
       .sort((a, b) => a.position.distanceTo(from.position) - b.position.distanceTo(from.position))[0];
     if (!other) return;
     other.hurt(Math.round(amount), { from: from.position, stagger: false });

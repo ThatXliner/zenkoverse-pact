@@ -101,12 +101,6 @@ export class Encounters {
     return true;
   }
 
-  nearestEnemy(p: THREE.Vector3, max: number): Enemy | null {
-    let best: Enemy | null = null, bd = max;
-    for (const e of this.enemies) { if (!e.alive) continue; const d = e.position.distanceTo(p); if (d < bd) { bd = d; best = e; } }
-    return best;
-  }
-
   bossUltimate(boss: Enemy): void {
     const g = this.game;
     g.cutscenes.play({

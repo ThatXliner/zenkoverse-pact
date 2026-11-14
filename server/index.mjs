@@ -1,12 +1,15 @@
-// Serves the built game from dist/. Realtime multiplayer (#44) will attach here.
+// Serves the built game from dist/ and hosts the realtime rooms at /ws
+// (server/realtime.mjs). --latency <ms> delays every realtime message in each
+// direction, to feel the game the way a distant player does.
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+import { attachRealtime } from './realtime.mjs';
 
 const { values } = parseArgs({
-  options: { port: { type: 'string', default: '8095' }, host: { type: 'string', default: '127.0.0.1' } },
+  options: { port: { type: 'string', default: '8095' }, host: { type: 'string', default: '127.0.0.1' }, latency: { type: 'string', default: '0' } },
 });
 const root = resolve(import.meta.dirname, '../dist');
 
@@ -23,7 +26,7 @@ async function file(path) {
   return s?.isFile() ? s : null;
 }
 
-createServer(async (req, res) => {
+const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://x');
   if (url.pathname === '/healthz') return res.end('ok');
   if (req.method !== 'GET' && req.method !== 'HEAD') return res.writeHead(405).end();
@@ -42,6 +45,9 @@ createServer(async (req, res) => {
   });
   if (req.method === 'HEAD') return res.end();
   createReadStream(path).pipe(res);
-}).listen(Number(values.port), values.host, () => {
-  console.log(`zenkoverse serving ${root} on http://${values.host}:${values.port}`);
+});
+attachRealtime(server, { latency: Number(values.latency) });
+server.listen(Number(values.port), values.host, () => {
+  const lag = Number(values.latency) ? ` with ${values.latency} ms added latency` : '';
+  console.log(`zenkoverse serving ${root} on http://${values.host}:${values.port}, rooms at /ws${lag}`);
 });

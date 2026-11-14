@@ -4,12 +4,14 @@ import { Avatar, type CharacterModel } from '../character/avatar';
 import type { CostumeId } from '../character/costume';
 import { RAPIER, GROUP_ENEMY, GROUP_WORLD, GROUP_PROP, groups } from '../physics/world';
 
-export type EnemyAi = 'thug' | 'kuroda' | 'ancient' | 'dummy';
+// 'rival' is another player in an online room (src/net/remote.ts): no AI, its
+// body follows the network and its hits go to the server.
+export type EnemyAi = 'thug' | 'kuroda' | 'ancient' | 'dummy' | 'rival';
 // `tint` is the suit: one flat, saturated colour per role, far from any skin
 // tone. `costume` is what the role wears over it (src/character/costume.ts):
 // with `height` and `build` (the chest's width) it gives each role its own
-// silhouette from the top-down camera.
-export interface EnemyDef { name: string; model: CharacterModel; costume: CostumeId; hp: number; speed: number; dmg: number; ai: EnemyAi; boss?: boolean; tint?: number; emissive?: number; height?: number; build?: number; title?: string }
+// silhouette from the top-down camera. A rival (another player) wears none.
+export interface EnemyDef { name: string; model: CharacterModel; costume?: CostumeId; hp: number; speed: number; dmg: number; ai: EnemyAi; boss?: boolean; tint?: number; emissive?: number; height?: number; build?: number; title?: string }
 
 export const ENEMY_DEFS: Record<string, EnemyDef> = {
   thug: { name: 'Underworld Thug', model: 'bald', costume: 'thug', hp: 70, speed: 3.6, dmg: 11, ai: 'thug', tint: 0x5b5560 },
@@ -20,6 +22,7 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
   // Rooftop-trial roster: the same thug AI at other speeds, weights and hit points.
   runner: { name: 'Spring Leaper', model: 'buzzed', costume: 'runner', hp: 52, speed: 5.2, dmg: 14, ai: 'thug', tint: 0x2f9e5a, height: 1.72, build: 0.92 },
   husk: { name: 'Husk Shell', model: 'beard', costume: 'husk', hp: 190, speed: 2.3, dmg: 20, ai: 'thug', tint: 0x6b2f6e, height: 2.05, build: 1.24 },
+  rival: { name: 'Rival', model: 'parted', hp: 100, speed: 0, dmg: 0, ai: 'rival', height: 1.78 },
 };
 
 export interface EnemyScale { hp: number; dmg: number }
@@ -89,8 +92,7 @@ export class Enemy {
   private deadT = 0;
   disposed = false;
 
-  constructor(private game: Game, key: string, pos: THREE.Vector3, scale: EnemyScale = NO_SCALE, showBar = false) {
-    const def = ENEMY_DEFS[key]!;
+  constructor(protected game: Game, key: string, pos: THREE.Vector3, scale: EnemyScale = NO_SCALE, showBar = false, def: EnemyDef = ENEMY_DEFS[key]!) {
     this.key = key;
     this.def = def;
     this.hp = this.maxHp = def.hp * scale.hp;

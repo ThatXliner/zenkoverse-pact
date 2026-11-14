@@ -223,6 +223,7 @@ export class Techniques {
     this.cast_ = { slot, ctx, t: 0, impactAt: gesture.impactAt / speed, duration: gesture.duration / speed, fired: false, held };
     const a = this.def.audio[kind];
     g.audio.play(a.cast, a.volume ?? 0.6, (a.pitch ?? 1) * (variant === 'none' ? 1.15 : 1));
+    if (kind !== 'max') g.net?.cast(kind, pact?.name ?? `Raw ${this.def.primitive.name}`);
     this.cooldown[slot] = KIND_DEFS[kind].cooldown;
     if (kind === 'max') this.charge = 0;
     if (g.combat.wagerArmed) g.combat.wagerCommitted(slot);
@@ -370,9 +371,12 @@ export class Techniques {
   // resolveHit beat.
   beginMax(): void {
     const g = this.game;
-    const target = g.encounters.nearestEnemy(g.player.position, 30);
+    const target = g.targets().filter((e) => e.alive && e.position.distanceTo(g.player.position) < 30).sort((a, b) => a.position.distanceTo(g.player.position) - b.position.distanceTo(g.player.position))[0];
     const targetPos = target ? target.position.clone().add(new THREE.Vector3(0, 1.2, 0)) : null;
     g.avatar.root.visible = true;
+    // Online the world does not wait for the cutscene: the caster is untouchable
+    // for its length instead, and glows on the other screens.
+    if (g.net) { g.combat.invuln = Math.max(g.combat.invuln, this.def.cutscene.shots.reduce((t, s) => t + s.duration, 0) + 0.2); g.net.cast('max', this.def.cutscene.title.en); }
     g.cutscenes.play({
       def: this.def.cutscene,
       caster: g.avatar.root,
@@ -387,7 +391,7 @@ export class Techniques {
 
   // Shared spatial queries for kits.
   enemiesInCone(origin: THREE.Vector3, dir: THREE.Vector3, range: number, halfAngle: number): Enemy[] {
-    return this.game.encounters.enemies.filter((e) => {
+    return this.game.targets().filter((e) => {
       if (!e.alive) return false;
       const to = e.position.clone().add(new THREE.Vector3(0, 1, 0)).sub(origin);
       const d = to.length();
@@ -397,6 +401,6 @@ export class Techniques {
   }
 
   enemiesInSphere(center: THREE.Vector3, radius: number): Enemy[] {
-    return this.game.encounters.enemies.filter((e) => e.alive && e.position.distanceTo(center) < radius);
+    return this.game.targets().filter((e) => e.alive && e.position.distanceTo(center) < radius);
   }
 }

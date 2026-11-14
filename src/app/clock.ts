@@ -1,5 +1,8 @@
 // Game time with hit-stop and slow motion. `dt` is the scaled frame delta,
 // `raw` the unscaled one for UI and camera shake that must keep moving.
+// In an online room the world is shared, so `shared` keeps time at its real
+// rate: hit-stop and the Maximum Output slow-down stay presentation (the
+// shake, the impact frame, the cutscene's own camera), never a freeze.
 export class GameClock {
   dt = 0;
   raw = 0;
@@ -8,6 +11,7 @@ export class GameClock {
   private freezeLeft = 0;
   slowMo = 1;
   forced: number | null = null;
+  shared = false;
 
   tick(): void {
     const now = performance.now();
@@ -15,7 +19,9 @@ export class GameClock {
     this.last = now;
     if (this.freezeLeft > 0) {
       this.freezeLeft -= this.raw;
-      this.dt = this.raw * 0.04;
+      this.dt = this.shared ? this.raw : this.raw * 0.04;
+    } else if (this.shared) {
+      this.dt = this.raw;
     } else {
       this.dt = this.raw * this.slowMo;
     }

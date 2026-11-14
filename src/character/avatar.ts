@@ -217,6 +217,23 @@ export class Avatar {
     this.current = 'dead';
   }
 
+  // Back on its feet after a down in an online room: the death pose fades
+  // and the locomotion loops take the body again from idle.
+  revive(): void {
+    this.actions.get(LOCO_CLIP.dead)?.fadeOut(0.2);
+    for (const l of LOOPS) {
+      const a = this.actions.get(LOCO_CLIP[l]);
+      if (!a) continue;
+      a.reset().play();
+      this.weights[l] = l === 'idle' ? 1 : 0;
+      a.setEffectiveWeight(this.weights[l]!);
+    }
+    this.current = 'idle';
+  }
+
+  // Online, each player wears their seat's suit colour on every screen.
+  setSuit(color: number): void { this.suit.color.set(color); }
+
   // Pitch of the aim in radians, positive looking up.
   setAimPitch(p: number): void { this.aimPitch = p; }
 

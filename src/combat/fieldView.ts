@@ -16,7 +16,7 @@ import type { Pick } from '../net/clash';
 
 const domeVert = /* glsl */ `
 uniform float bulge; uniform vec3 toward; uniform float squeeze;
-varying vec3 vN; varying vec3 vV; varying vec3 vLocal; varying float vSide;
+varying vec3 vN; varying vec3 vV; varying vec3 vLocal; varying float vSide; varying float vDist;
 void main(){
   vec3 p = position;
   vec3 flat_ = normalize(vec3(p.x, 0.0, p.z) + vec3(1e-5, 0.0, 0.0));
@@ -24,14 +24,14 @@ void main(){
   p.xz *= (1.0 + bulge * pow(max(0.0, side), 3.0) * 0.3) * (1.0 - squeeze * 0.1);
   vLocal = p; vSide = side;
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
-  vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz);
+  vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); vDist = length(mv.xyz);
   gl_Position = projectionMatrix * mv;
 }`;
 
 const domeFrag = /* glsl */ `
 uniform vec3 color; uniform float time; uniform float strength; uniform float density;
 uniform float crack; uniform float squeeze; uniform float flicker;
-varying vec3 vN; varying vec3 vV; varying vec3 vLocal; varying float vSide;
+varying vec3 vN; varying vec3 vV; varying vec3 vLocal; varying float vSide; varying float vDist;
 void main(){
   float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
   float rim = step(0.8 - squeeze * 0.14, f);
@@ -50,6 +50,9 @@ void main(){
     a = low * (0.06 + stripes * (0.22 + 0.18 * density)) + step(vLocal.y, 0.05) * 0.55;
   }
   a *= 1.0 - flicker * step(vSide, -0.25) * (0.6 + 0.4 * sin(time * 42.0));
+  // A wall the camera is about to pass through would fill the frame: it
+  // fades out in the last few metres before the lens.
+  a *= smoothstep(1.0, 4.0, vDist);
   vec3 c = mix(color, vec3(1.0), rim * 0.3 + crack);
   gl_FragColor = vec4(c, clamp(a + crack * 0.3, 0.0, 1.0) * strength);
 }`;
@@ -59,7 +62,7 @@ const ringVert = /* glsl */ `varying vec2 vP; void main(){ vP = position.xy; gl_
 const ringFrag = /* glsl */ `
 uniform vec3 color; uniform vec3 ink; uniform float time; uniform float strength; uniform float density;
 uniform float radius; uniform float outer; uniform float crack; uniform float bulge; uniform vec2 toward;
-uniform float squeeze; uniform float flicker;
+uniform float squeeze; uniform float flicker; uniform float fill;
 varying vec2 vP;
 void main(){
   float d = length(vP) * outer;
@@ -74,7 +77,7 @@ void main(){
   float dash = step(r + 0.08, d) * step(d, r + 0.24) * step(0.5, fract(ang / 6.2831853 * 56.0 - time * 0.04));
   float rings = step(0.9, fract((r - d) * 0.65 + time * (0.3 + 0.5 * density)));
   float inside = step(d, r - w - 0.12);
-  float a = inside * (0.05 + 0.06 * density + rings * (0.08 + 0.12 * density)) + edge * 0.92 + dash * 0.6;
+  float a = inside * (0.05 + 0.06 * density + rings * (0.08 + 0.12 * density)) * fill + edge * 0.92 + dash * 0.6;
   vec3 c = mix(color, vec3(1.0), edge * 0.18 + crack);
   c = mix(c, ink, inkLine);
   a = max(a, inkLine * 0.75);
@@ -98,7 +101,7 @@ export class FieldView {
     const shared = () => ({ color: { value: new THREE.Color(color) }, time: { value: 0 }, strength: { value: 1 }, density: { value: 0.5 }, crack: { value: 0 }, bulge: { value: 0 }, squeeze: { value: 0 }, flicker: { value: 0 } });
     this.domeMat = new THREE.ShaderMaterial({ uniforms: { ...shared(), toward: { value: new THREE.Vector3(0, 0, -1) } }, vertexShader: domeVert, fragmentShader: domeFrag, transparent: true, depthWrite: false, side: THREE.FrontSide });
     this.ringMat = new THREE.ShaderMaterial({
-      uniforms: { ...shared(), ink: { value: new THREE.Color(INK) }, radius: { value: 1 }, outer: { value: 1 }, toward: { value: new THREE.Vector2(0, -1) } },
+      uniforms: { ...shared(), ink: { value: new THREE.Color(INK) }, fill: { value: 1 }, radius: { value: 1 }, outer: { value: 1 }, toward: { value: new THREE.Vector2(0, -1) } },
       vertexShader: ringVert, fragmentShader: ringFrag, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     });
     this.dome = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 20, 0, Math.PI * 2, 0, Math.PI / 2), this.domeMat);
@@ -108,6 +111,7 @@ export class FieldView {
     this.ring.renderOrder = 5;
     this.dome.visible = this.ring.visible = false;
     this.dome.frustumCulled = this.ring.frustumCulled = false;
+    this.dome.userData.auraField = this.ring.userData.auraField = true;
     scene.add(this.dome, this.ring);
   }
 
@@ -130,8 +134,9 @@ export class FieldView {
   // `feet` is the owner's ground point. `ceiling` is how far the dome may
   // rise (indoors it stops at the room's ceiling). `inside` is whether the
   // viewer's player stands in it. `dome` scales the dome against the ground
-  // ring, which always draws at full strength: the ring is the boundary.
-  draw(dt: number, time: number, feet: THREE.Vector3, radius: number, density: number, opts: { ceiling?: number; inside: boolean; dome?: number; lean?: number }): void {
+  // ring, whose edge always draws at full strength: the ring is the
+  // boundary. `fill` scales the paint and pressure rings inside the edge.
+  draw(dt: number, time: number, feet: THREE.Vector3, radius: number, density: number, opts: { ceiling?: number; inside: boolean; dome?: number; fill?: number; lean?: number }): void {
     this.crackT = Math.max(0, this.crackT - dt * 3);
     for (const k of ['push', 'hold', 'feint'] as const) this.tellAmt[k] += ((this.tellKind === k ? 1 : 0) - this.tellAmt[k]) * (1 - Math.exp(-12 * dt));
     const show = radius > 0.05;
@@ -151,6 +156,7 @@ export class FieldView {
     }
     this.domeMat.uniforms.toward!.value.copy(this.toward);
     this.ringMat.uniforms.toward!.value.set(this.toward.x, -this.toward.z);
+    this.ringMat.uniforms.fill!.value = opts.fill ?? 1;
     this.ringMat.uniforms.radius!.value = radius;
     this.ringMat.uniforms.outer!.value = radius * 1.32 + OUTER;
     this.ring.position.set(feet.x, feet.y + 0.035, feet.z);

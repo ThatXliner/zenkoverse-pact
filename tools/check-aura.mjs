@@ -20,6 +20,7 @@
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import sharp from 'sharp';
 import { resolveTarget } from './lib/target.mjs';
 
 const { url, args, stop } = await resolveTarget();
@@ -48,6 +49,24 @@ async function press(code) {
   await step(1);
 }
 const shot = (name) => page.screenshot({ path: join(out, `${name}.png`), animations: 'disabled' });
+// How much the drawn aura fields change the walls and the two bodies in the
+// clash shot: the mean change per channel, of 255, between the frame as drawn
+// and the same frame with every field hidden.
+async function fieldWash() {
+  const frame = async (show) => {
+    await page.evaluate((show) => {
+      const G = window.game.game;
+      G.renderer.scene.traverse((o) => { if (o.userData.auraField) o.userData.shown = show ? o.userData.shown : o.visible; });
+      G.renderer.scene.traverse((o) => { if (o.userData.auraField) o.visible = show ? o.userData.shown : false; });
+      G.renderer.render(0);
+    }, show);
+    return sharp(await page.screenshot({ clip: { x: 0, y: 90, width: 1280, height: 300 } })).raw().toBuffer();
+  };
+  const off = await frame(false), on = await frame(true);
+  let sum = 0;
+  for (let i = 0; i < on.length; i++) sum += Math.abs(on[i] - off[i]);
+  return sum / on.length;
+}
 async function stepUntil(test, max) {
   for (let i = 0; i < max; i += 5) {
     if (await page.evaluate(test)) return true;
@@ -203,7 +222,12 @@ async function fight(answer) {
     speeds.push(s.ratio);
     if (s.stage === 'choose' && s.pick && !s.mine) {
       await step(3);
-      if (!shotTell) { await shot('clash-tell'); shotTell = true; }
+      if (!shotTell) {
+        const wash = await fieldWash();
+        check(wash < 4, `in the hall the clash shot is not washed by the fields (mean change ${wash.toFixed(2)} of 255 above the floor)`);
+        await shot('clash-tell');
+        shotTell = true;
+      }
       await press(KEY[answer(s.pick)]);
       continue;
     }

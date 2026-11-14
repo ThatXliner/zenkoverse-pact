@@ -104,11 +104,11 @@ npm run capture -- --only hands,workshop     # a subset
 npm run capture -- --url http://localhost:5173/  # against a dev server
 ```
 
-It writes `captures/report.json` with every screenshot path, modal-fit failures, and page errors, and exits non-zero on any failure. Pieces: `ui`, `hud`, `hands`, `variants`, `sign`, `poses`, `third-person`, `views`, `compound`, `vfx`, `encounters`, `workshop`, `tutorial`, `drill`, `perf`.
+It writes `captures/report.json` with every screenshot path, modal-fit failures, and page errors, and exits non-zero on any failure. Pieces: `ui`, `hud`, `hands`, `variants`, `sign`, `poses`, `third-person`, `views`, `compound`, `vfx`, `encounters`, `roles` (every enemy role in a line-up and in close portraits), `workshop`, `tutorial`, `drill`, `perf`.
 
 ### Checks
 
-Every `npm run check:*` script and `node tools/check-flow.mjs` drives the built game with real keys, clicks and the mouse: `check:controls` (the movement keys follow the camera's axes in all three views), `check:keybinds`, `check:locomotion`, `check:navigation`, `check:rooftop` (the whole trial), `check:sign`, `check:tints` (enemy suits read as cloth and apart from each other), `check:multiplayer` (two browsers in one room: movement, an Ability hitting exactly once, a down and respawn, a server restart, leaving; add `--latency 120` to run it with added delay), and `check-flow` (the Workshop, the dummies and the whole tutorial). `tools/perf-rooftop.mjs` measures frame times in every view at DPR 2, and `tools/perf-multiplayer.mjs` does the same in a full room of eight.
+Every `npm run check:*` script and `node tools/check-flow.mjs` drives the built game with real keys, clicks and the mouse: `check:controls` (the movement keys follow the camera's axes in all three views), `check:effects` (a restart leaves no effect behind, and the Master's field tints only a player inside it), `check:keybinds`, `check:locomotion`, `check:navigation`, `check:rooftop` (the whole trial), `check:sign`, `check:tints` (enemy suits and costumes read as cloth and apart from each other), `check:multiplayer` (two browsers in one room: movement, an Ability hitting exactly once, a down and respawn, a server restart, leaving; add `--latency 120` to run it with added delay), and `check-flow` (the Workshop, the dummies and the whole tutorial). `tools/perf-rooftop.mjs` measures frame times in every view at DPR 2, and `tools/perf-multiplayer.mjs` does the same in a full room of eight.
 
 ## Layout
 

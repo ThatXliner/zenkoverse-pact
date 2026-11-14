@@ -135,7 +135,7 @@ export const shift: TechniqueKit = {
         let hits = 0;
         for (const e of g.techniques.enemiesInCone(ctx.origin, flat, range, 0.12)) { g.combat.hitEnemy(e, 150 * ctx.potency, { from: ctx.origin, knock: 10, lift: 5, kind: 'cut', heavy: true }); hits++; }
         shoveProps(ctx, propsInCone(g, ctx.origin, flat, range, 0.14), 9, 0.7);
-        for (let i = 0; i < 6; i++) setTimeout(() => g.vfx.afterimage(g.avatar.model, COLOR, 0.6), i * 30);
+        for (let i = 0; i < 6; i++) g.vfx.after(i * 0.03, () => g.vfx.afterimage(g.avatar.model, COLOR, 0.6));
         g.vfx.trail([from.clone().add(new THREE.Vector3(0, 1.2, 0)), dest.clone().add(new THREE.Vector3(0, 1.2, 0))], 0xffffff, 0.9, 0.5);
         g.player.displace(dest.clone().sub(from));
         g.vfx.flash(dest.clone().add(new THREE.Vector3(0, 1.4, 0)), COLOR, 90, 0.5, 20);

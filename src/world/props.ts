@@ -110,6 +110,11 @@ export class PropSystem {
     if (i >= 0) this.instances.splice(i, 1);
   }
 
+  // Frees every frozen prop at once, when the effects that froze them end.
+  thaw(): void {
+    for (const p of this.instances) if (p.frozen > 0) { p.frozen = 0; p.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true); }
+  }
+
   update(dt: number): void {
     for (const p of this.instances) {
       if (p.resonance > 0) {

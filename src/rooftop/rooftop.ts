@@ -355,8 +355,9 @@ export class Rooftop {
     this.game.requestLock();
   }
 
+  // The trial is its own scene: it starts, and ends, with nothing left over.
   private clearWorld(): void {
-    this.game.encounters.reset();
+    this.game.endScene();
     this.tracked = [];
   }
 

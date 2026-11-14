@@ -6,9 +6,16 @@ interface Ring { mesh: THREE.Mesh; life: number; max: number; from: number; to: 
 interface Trail { mesh: THREE.Mesh; points: THREE.Vector3[]; life: number; mat: THREE.MeshBasicMaterial; width: number }
 interface Flash { light: PointSource; life: number; max: number; peak: number }
 interface Patch { mesh: THREE.Mesh; life: number; max: number; mat: THREE.MeshPhysicalMaterial }
+interface Timer { left: number; fire(): void }
+interface Held { left: number; end(): void }
 
-// Pooled effects shared by every Technique: shock rings, debris, sparks,
-// ice shards, smear trails, flashes, frost and burn patches, afterimages.
+// The one owner of every effect's lifetime. It holds the pooled effects every
+// Technique and enemy shares (shock rings, debris, sparks, ice shards, smear
+// trails, flashes, frost and burn patches, afterimages), the beats an effect
+// schedules for later (`after`), and anything else an effect puts into the
+// world for a while (`until`: a frozen pond's floor, a slowed stride). All of
+// it runs on game time, so it waits out a pause and a hit-stop, and `clear`
+// ends all of it at once when a run, a Technique or a scene ends.
 export class Vfx {
   private particles: Particle[] = [];
   private rings: Ring[] = [];
@@ -26,9 +33,44 @@ export class Vfx {
   // whenever a shard or spike is on screen, which doubles the frame.
   private iceMat = new THREE.MeshPhysicalMaterial({ color: 0xcfefff, roughness: 0.12, emissive: 0x6fd3ff, emissiveIntensity: 0.3, transparent: true, opacity: 0.75 });
   private iceSpikeGeo = new THREE.ConeGeometry(0.22, 1.4, 6);
-  readonly spikes: { mesh: THREE.Mesh; life: number }[] = [];
+  readonly spikes: { mesh: THREE.Mesh; life: number; floor: number }[] = [];
+  private timers: Timer[] = [];
+  private held: Held[] = [];
 
   constructor(private scene: THREE.Scene, private lights: LightPool) {}
+
+  // A later beat of an effect: a ridge that grows spike by spike, rings that
+  // follow each other out. Dropped, not fired, if the scene ends first.
+  after(seconds: number, fire: () => void): void { this.timers.push({ left: seconds, fire }); }
+
+  // Something an effect puts into the world for `seconds`. `end` takes it
+  // out again, when the time is up or when the scene ends, whichever is first.
+  until(seconds: number, end: () => void): void { this.held.push({ left: seconds, end }); }
+
+  // How many effects are alive, for the checks that prove a restart leaves none.
+  get live(): number {
+    return this.particles.length + this.rings.length + this.trails.length + this.flashes.length + this.patches.length + this.spikes.length + this.timers.length + this.held.length;
+  }
+
+  // Ends every effect now: a new run, a new Technique, or leaving a scene
+  // starts with nothing left over from the last one.
+  clear(): void {
+    this.timers.length = 0;
+    for (const h of this.held.splice(0)) h.end();
+    for (const p of this.particles.splice(0)) { this.scene.remove(p.mesh); if (p.kind === 'spark') ((p.mesh as THREE.Mesh).material as THREE.Material).dispose(); }
+    for (const r of this.rings.splice(0)) { this.scene.remove(r.mesh); r.mat.dispose(); }
+    for (const t of this.trails.splice(0)) this.dropTrail(t);
+    for (const f of this.flashes.splice(0)) this.lights.remove(f.light);
+    for (const p of this.patches.splice(0)) { this.scene.remove(p.mesh); p.mat.dispose(); }
+    for (const s of this.spikes.splice(0)) this.scene.remove(s.mesh);
+  }
+
+  private dropTrail(t: Trail): void {
+    this.scene.remove(t.mesh);
+    if (t.mesh instanceof THREE.Group) for (const c of t.mesh.children) { (c as THREE.Mesh).geometry.dispose(); ((c as THREE.Mesh).material as THREE.Material).dispose(); }
+    else t.mesh.geometry.dispose();
+    t.mat.dispose();
+  }
 
   ring(center: THREE.Vector3, color: number, from: number, to: number, life = 0.45, normal?: THREE.Vector3): void {
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -98,7 +140,7 @@ export class Vfx {
     m.castShadow = true;
     this.scene.add(m);
     (m as unknown as { targetH: number }).targetH = height;
-    this.spikes.push({ mesh: m, life });
+    this.spikes.push({ mesh: m, life, floor: pos.y });
   }
 
   afterimage(source: THREE.Object3D, color: number, life = 0.35): void {
@@ -124,6 +166,13 @@ export class Vfx {
   }
 
   update(dt: number): void {
+    // A beat may schedule another, so fire from a snapshot.
+    const due = this.timers.filter((t) => (t.left -= dt) <= 0);
+    if (due.length) { this.timers = this.timers.filter((t) => t.left > 0); for (const t of due) t.fire(); }
+    for (let i = this.held.length - 1; i >= 0; i--) {
+      const h = this.held[i]!;
+      if ((h.left -= dt) <= 0) { this.held.splice(i, 1); h.end(); }
+    }
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i]!;
       p.life -= dt;
@@ -149,7 +198,7 @@ export class Vfx {
       t.life -= dt;
       t.mat.opacity = Math.max(0, t.life * 4) * 0.75;
       if (t.mesh instanceof THREE.Group) for (const c of t.mesh.children) ((c as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = t.mat.opacity;
-      if (t.life <= 0) { this.scene.remove(t.mesh); if (t.mesh.geometry) t.mesh.geometry.dispose(); t.mat.dispose(); this.trails.splice(i, 1); }
+      if (t.life <= 0) { this.dropTrail(t); this.trails.splice(i, 1); }
     }
     for (let i = this.flashes.length - 1; i >= 0; i--) {
       const f = this.flashes[i]!;
@@ -170,7 +219,7 @@ export class Vfx {
       s.life -= dt;
       const th = (s.mesh as unknown as { targetH: number }).targetH;
       s.mesh.scale.y = THREE.MathUtils.lerp(s.mesh.scale.y, s.life < 1 ? 0.01 : th, 1 - Math.exp(-(s.life < 1 ? 5 : 14) * dt));
-      s.mesh.position.y = Math.max(0, s.mesh.scale.y * 0.7 - 0.2);
+      s.mesh.position.y = s.floor + Math.max(0, s.mesh.scale.y * 0.7 - 0.2);
       if (s.life <= 0) { this.scene.remove(s.mesh); this.spikes.splice(i, 1); }
     }
   }

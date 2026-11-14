@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { Assets } from '../app/assets';
 import { toon, addInkHulls } from '../render/materials';
+import { dress, type CostumeId } from './costume';
 
 // Every character is the one rigged human in human.glb, drawn cel-shaded: flat
 // skin and hair fills over the toon ramp, a flat suit in the role's colour, an
@@ -51,7 +52,7 @@ function upperBodyClip(clip: THREE.AnimationClip): THREE.AnimationClip {
   return new THREE.AnimationClip(clip.name + '_upper', clip.duration, clip.tracks.filter((t) => UPPER_BONE.test(t.name.split('.')[0] ?? '')));
 }
 
-export interface AvatarOptions { targetHeight?: number; tint?: number; emissive?: number; build?: number }
+export interface AvatarOptions { targetHeight?: number; tint?: number; emissive?: number; build?: number; costume?: CostumeId }
 
 export class Avatar {
   readonly root = new THREE.Group();
@@ -141,6 +142,8 @@ export class Avatar {
     // Bake the idle pose now: the bind pose is a T-pose.
     this.mixer.update(0);
     this.layered = LAYERED.flatMap((n) => { const bone = this.bones.get(n); return bone ? [{ bone, clip: bone.quaternion.clone() }] : []; });
+    // The costume is placed in this idle pose, before the root ever moves.
+    if (opts.costume) this.materials.push(dress(this.model, this.bones, opts.costume, target, build));
   }
 
   // Locomotion is a blend over speed bands. Each clip runs at the time scale

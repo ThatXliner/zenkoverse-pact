@@ -3,7 +3,7 @@
 // `?debug` hooks to fixed scenarios and saves screenshots and short frame
 // sequences per piece. Usage:
 //   node tools/capture.mjs [url] [--out captures] [--only hands,district] [--url http://...] [--port 4173] [--gpu]
-// Pieces: ui, hud, hands, variants, sign, poses, third-person, views, compound, vfx, encounters, workshop, tutorial, drill, perf.
+// Pieces: ui, hud, hands, variants, sign, poses, third-person, views, compound, vfx, encounters, roles, workshop, tutorial, drill, perf.
 // Without a URL it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -274,6 +274,40 @@ if (run('encounters')) {
     }
     await api((g) => g.god(false));
   }
+}
+
+// Every enemy role in one line-up, held still: from the top-down camera the
+// game is played in, over the shoulder, and a close portrait of each, so the
+// costumes and silhouettes can be judged side by side.
+const ROLES = ['thug', 'bruiser', 'runner', 'husk', 'dummy', 'kuroda', 'ancient'];
+if (run('roles')) {
+  await startRun('recoil');
+  await api((g, roles) => {
+    const game = g.game, V = game.player.position.constructor;
+    g.teleport([0, 0, 7]);
+    roles.forEach((k, i) => { const e = game.encounters.spawn(k, new V((i - (roles.length - 1) / 2) * 2.6, 0, 4.4)); e.frozen = 1e6; e.aura.active = false; });
+    g.camera('top');
+  }, ROLES);
+  await step(40);
+  await shot('roles', 'lineup-top');
+  await api((g) => { g.camera('third'); g.look(0, -0.08); });
+  await step(40);
+  await shot('roles', 'lineup-shoulder');
+  for (let i = 0; i < ROLES.length; i++) {
+    await api((g, n, x) => {
+      const game = g.game, V = game.player.position.constructor;
+      // Alone in the frame, from the front three-quarter: along the way it faces, turned 25 degrees.
+      game.encounters.enemies.forEach((o, j) => { o.avatar.root.visible = j === n; });
+      g.teleport([0, 0, 15]);
+      const e = game.encounters.enemies[n], h = e.height, a = Math.atan2(-(0 - x), -(15 - 4.4)) + 0.45;
+      const from = new V(x - Math.sin(a) * 3.2, h * 0.95, 4.4 - Math.cos(a) * 3.2), look = new V(x, h * 0.55, 4.4);
+      game.cam.play({ duration: 1e6, position: (_t, out) => out.copy(from), lookAt: (_t, out) => out.copy(look), fov: () => 40 });
+    }, i, (i - (ROLES.length - 1) / 2) * 2.6);
+    await step(20);
+    await shot('roles', `portrait-${ROLES[i]}`);
+  }
+  await api((g) => { g.game.cam.skipRequested = true; g.game.encounters.reset(); });
+  await step(2);
 }
 
 if (run('workshop')) {

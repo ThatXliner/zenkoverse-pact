@@ -38,6 +38,8 @@ export class Tutorial {
   private events = new Set<string>();
   private yawStart = 0;
   private settleT = 0;
+  // The last card stays up this long, then the compound is the player's.
+  private doneT = 0;
 
   constructor(private game: Game) {}
 
@@ -78,7 +80,7 @@ export class Tutorial {
     tutorialUi.step.value = { id: s.id, index: this.index + 1, total: STEPS.length - 1, title: s.title, jp: s.jp, body: () => (typeof s.body === 'string' ? s.body : s.body(this.game)) };
     setState({ kind: 'tutorial', step: s.id });
     if (s.id === 'max') this.game.techniques.charge = 1;
-    if (s.id === 'done') { setTimeout(() => { if (appState.value.kind === 'tutorial') { setState({ kind: 'explore' }); tutorialUi.step.value = null; } }, 9000); }
+    if (s.id === 'done') this.doneT = 9;
     this.game.audio.play('select_003', 0.4);
   }
 
@@ -87,6 +89,10 @@ export class Tutorial {
     const s = STEPS[this.index];
     if (!s) return;
     this.settleT -= dt;
+    if (s.id === 'done') {
+      if ((this.doneT -= dt) <= 0) { setState({ kind: 'explore' }); tutorialUi.step.value = null; }
+      return;
+    }
     const turned = Math.atan2(Math.sin(this.game.cam.yaw - this.yawStart), Math.cos(this.game.cam.yaw - this.yawStart));
     if (Math.abs(turned) > 1.2) this.events.add('looked');
     if (this.settleT <= 0 && s.objective(this.game, this.events)) {

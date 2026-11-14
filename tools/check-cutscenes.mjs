@@ -215,7 +215,8 @@ if (!only || only === 'online') {
   const idA = await id(A), idB = await id(B), idC = await id(C);
   await A.api((g) => { g.camera('third'); g.teleport([-8, 0, 12]); g.look(0, 0); });
   await B.api((g) => { g.camera('top'); g.teleport([-8, 0, 3]); });
-  await C.api((g) => { g.camera('top'); g.teleport([-2, 0, 8]); });
+  // C stands out of the Output's reach, so B is the nearest body to pull in.
+  await C.api((g) => { g.camera('top'); g.teleport([8, 0, 12]); });
   await wait(1500);
   const hpOf = (p, who) => p.api((g, w) => (w === g.net().id ? g.net().hp : g.net().remotes.find((r) => r.id === w)?.hp), who);
   const cut = (p) => p.api((g) => { const c = g.cutscenes(); const n = g.net(); return { active: c.active, role: c.role, inShot: c.cam.inShot, pos: n.pos, remotes: g.game.net ? [...g.game.net.remotes.values()].map((r) => ({ id: r.id, cine: r.cine })) : [] }; });
@@ -226,6 +227,7 @@ if (!only || only === 'online') {
   await A.api((g) => g.cutscene('max-recoil'));
   await wait(450);
   const a1 = await cut(A), b1 = await cut(B), c1 = await cut(C);
+  if (args.verbose) console.log(JSON.stringify({ a1, b1, c1, logB: await B.api((g) => g.cutscenes().log), feedB: await B.api(() => document.querySelector('.feed, .online-feed')?.textContent) }));
   check(a1.active && a1.role === 'caster' && a1.inShot, 'A plays the cutscene as the caster');
   check(b1.active && b1.role === 'target' && b1.inShot, 'B is pulled into it and plays it as the target');
   check(dist(b1.pos, a1.pos) < 4.2, `B stands in front of A: ${dist(b1.pos, a1.pos).toFixed(2)} m apart`);
@@ -235,6 +237,7 @@ if (!only || only === 'online') {
   // C swings at both of them while they are locked: the server drops it.
   await C.api((g, ids) => { const n = g.game.net; for (const i of ids) { const r = n.remotes.get(i); if (r) n.hit(r, 25, {}); } }, [idA, idB]);
   await wait(400);
+  await B.shot('online-target-b-late');
   const c2 = await cut(C);
   check(c2.remotes.find((r) => r.id === idA)?.cine && c2.remotes.find((r) => r.id === idB)?.cine, 'C sees A and B held in the cutscene');
   check(dist(c2.pos, cPos0) > 1, `C keeps walking: ${dist(c2.pos, cPos0).toFixed(2)} m so far`);

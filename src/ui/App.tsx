@@ -171,7 +171,7 @@ function Hud({ game }: { game: Game }) {
       )}
       {!cut && <NavHud />}
       {!cut && <TopLeft game={game} />}
-      {game.net && <OnlineHud game={game} />}
+      {game.net && !cine && <OnlineHud game={game} />}
       {combatUi.wagerArmed.value && !cut && <div class="wager-arm">WAGER DECLARED · THE NEXT STRIKE CONNECTS</div>}
       <ClashLayer game={game} />
       {boss && !cut && <div class="boss" style={{ '--c': hex(boss.color) } as never}><span class="n">{boss.name}</span><div class="track"><i style={{ width: `${boss.frac * 100}%` }} /></div></div>}

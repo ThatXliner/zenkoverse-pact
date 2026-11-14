@@ -87,8 +87,6 @@ export function blow(at: number, sfx: string, pitch = 0.6, shake = 0.9): CutEven
   ];
 }
 
-// Two to four seconds in all (the issue's pace rule), checked by check:cutscenes.
-export const CUTSCENE_SECONDS = { min: 2, max: 4 } as const;
 // A repeat under the "first time" setting ends this long after the blow.
 export const SHORT_TAIL = 0.6;
 
@@ -236,7 +234,6 @@ export class Cutscenes {
   get presenting(): boolean { return !!this.live?.presenting; }
   get role(): 'caster' | 'target' | null { return this.live?.run.role ?? null; }
   get partner(): number | null { return this.live?.run.partner ?? null; }
-  get def(): CutsceneDef | null { return this.live?.run.def ?? null; }
   // The caster's arms are in the seal: before the blow.
   get sealing(): boolean { const l = this.live; return !!l && l.run.role === 'caster' && (l.beat === null || l.t < l.beat - 0.22); }
   // The local player stands in the cutscene: rooted, deaf to input, and

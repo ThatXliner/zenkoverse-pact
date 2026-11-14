@@ -3,7 +3,9 @@ import type { Game } from '../app/game';
 import { Avatar, type CharacterModel } from '../character/avatar';
 import { RAPIER, GROUP_ENEMY, GROUP_WORLD, GROUP_PROP, groups } from '../physics/world';
 
-export type EnemyAi = 'thug' | 'kuroda' | 'ancient' | 'dummy';
+// 'rival' is another player in an online room (src/net/remote.ts): no AI, its
+// body follows the network and its hits go to the server.
+export type EnemyAi = 'thug' | 'kuroda' | 'ancient' | 'dummy' | 'rival';
 // `tint` is the suit: one flat, saturated colour per role, far from any skin
 // tone, so a role reads at a glance from the top-down camera. `build` widens
 // the chest; with `height` it gives each role its own silhouette.
@@ -18,6 +20,7 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
   // Rooftop-trial roster: the same thug AI at other speeds, weights and hit points.
   runner: { name: 'Spring Leaper', model: 'buzzed', hp: 52, speed: 5.2, dmg: 14, ai: 'thug', tint: 0x2f9e5a, height: 1.72, build: 0.92 },
   husk: { name: 'Husk Shell', model: 'beard', hp: 190, speed: 2.3, dmg: 20, ai: 'thug', tint: 0x6b2f6e, height: 2.05, build: 1.24 },
+  rival: { name: 'Rival', model: 'parted', hp: 100, speed: 0, dmg: 0, ai: 'rival', height: 1.78 },
 };
 
 export interface EnemyScale { hp: number; dmg: number }
@@ -83,8 +86,7 @@ export class Enemy {
   private deadT = 0;
   disposed = false;
 
-  constructor(private game: Game, key: string, pos: THREE.Vector3, scale: EnemyScale = NO_SCALE, showBar = false) {
-    const def = ENEMY_DEFS[key]!;
+  constructor(protected game: Game, key: string, pos: THREE.Vector3, scale: EnemyScale = NO_SCALE, showBar = false, def: EnemyDef = ENEMY_DEFS[key]!) {
     this.key = key;
     this.def = def;
     this.hp = this.maxHp = def.hp * scale.hp;

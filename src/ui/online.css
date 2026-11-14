@@ -1,0 +1,42 @@
+/* Online rooms: the join form, names over players, the scoreboard, the feed and the downed card. */
+.online-join { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+.online-join label { display: grid; gap: 6px; }
+.online-join input { font-family: var(--sans); font-size: 15px; letter-spacing: 0.06em; color: var(--paper); background: rgba(10,11,16,0.6); border: 1px solid var(--line); padding: 9px 12px; width: 180px; outline: none; transition: border-color 0.2s; }
+.online-join input:focus { border-color: var(--paper); }
+
+.plates { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.plate { position: absolute; transform: translate(-50%, -100%); display: grid; gap: 3px; justify-items: center; }
+.plate .n { font-family: var(--sans); font-size: 13px; font-weight: 700; letter-spacing: 0.08em; color: var(--paper); text-shadow: 0 1px 2px #000, 0 0 8px rgba(0,0,0,0.85); white-space: nowrap; border-bottom: 2px solid var(--c); padding-bottom: 1px; }
+.plate .hp { width: 56px; height: 4px; background: rgba(5,6,10,0.75); box-shadow: 0 0 0 1px rgba(0,0,0,0.6); }
+.plate .hp > i { display: block; height: 100%; background: #ff5a4a; transition: width 0.15s; }
+.plate.down { opacity: 0.55; }
+.plate.down .hp { visibility: hidden; }
+.plate.away .n { color: var(--mist); }
+
+.scoreboard { position: absolute; right: var(--hud-pad); top: var(--hud-pad); width: 250px; background: var(--glass); border: 1px solid var(--line); padding: 10px 12px; display: grid; gap: 6px; pointer-events: none; }
+.scoreboard header { display: flex; justify-content: space-between; align-items: center; }
+.scoreboard .conn { font-size: 11px; letter-spacing: 0.12em; color: var(--dim); }
+.scoreboard .conn.reconnecting, .scoreboard .conn.connecting, .scoreboard .conn.full { color: #ffb347; }
+.scoreboard ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.scoreboard li { display: grid; grid-template-columns: 10px 1fr auto 22px 22px; gap: 8px; align-items: center; font-size: 13px; color: var(--mist); }
+.scoreboard li.me { color: var(--paper); font-weight: 700; }
+.scoreboard li i { width: 10px; height: 10px; border-radius: 2px; }
+.scoreboard li .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scoreboard li .t { font-size: 11px; color: var(--dim); letter-spacing: 0.06em; }
+.scoreboard li .k, .scoreboard li .d { text-align: right; font-variant-numeric: tabular-nums; }
+.scoreboard li .d { color: var(--dim); }
+
+.feed { position: absolute; right: var(--hud-pad); top: calc(var(--hud-pad) + 260px); display: grid; gap: 4px; justify-items: end; pointer-events: none; }
+.feed > div { font-family: var(--sans); font-size: 13px; letter-spacing: 0.06em; padding: 5px 10px; background: var(--glass); border-right: 2px solid var(--accent); animation: fade 0.3s var(--ease); }
+
+.downed { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; background: radial-gradient(60% 50% at 50% 50%, rgba(80,10,20,0.35), rgba(10,11,16,0.55)); animation: fade 0.4s var(--ease); }
+.downed .jp { font-family: var(--serif); font-size: 92px; line-height: 1; color: var(--accent); }
+.downed p { font-family: var(--sans); letter-spacing: 0.12em; margin: 10px 0 0; }
+.downed p.s { color: var(--mist); font-size: 13px; }
+
+.online-note { font-size: 12px; color: var(--dim); letter-spacing: 0.06em; margin: 10px 0 0; max-width: 36ch; line-height: 1.5; }
+
+@media (max-width: 720px) {
+  .scoreboard { width: 190px; }
+  .online-join input { width: 140px; }
+}

@@ -10,6 +10,7 @@ import { audit as auditOffers } from '../rooftop/offers';
 import type { TechniqueId } from '../techniques/kit';
 import type { PoseName } from '../hands/poses';
 import { MASTERY_CONFIG } from '../mastery/mastery';
+import { netUi } from '../net/net';
 
 export interface DebugApi {
   game: Game;
@@ -46,6 +47,22 @@ export interface DebugApi {
     offers(): { name: string; slot: string; tags: string[]; text: string; valid: boolean; errors: string[] }[];
   };
   stats(): { fps: number; drawCalls: number; triangles: number; props: number; enemies: number };
+  // The online room as the multiplayer check reads it: this player, the
+  // others as drawn here, and the hits sent and health changes heard.
+  net(): NetView | null;
+}
+
+export interface NetView {
+  id: number | null;
+  status: string;
+  room: string;
+  hp: number;
+  downed: boolean;
+  me: { kills: number; downs: number } | null;
+  pos: [number, number, number];
+  remotes: { id: number; name: string; drawn: [number, number, number] | null; alive: boolean; hp: number; visible: boolean; kills: number; downs: number }[];
+  sent: { target: number; amount: number; t: number }[];
+  hpLog: { id: number; hp: number; by: number | null; amount: number; t: number }[];
 }
 
 export function installDebug(game: Game): void {
@@ -93,6 +110,19 @@ export function installDebug(game: Game): void {
         const shapes = game.techniques.def.shapes;
         return game.rooftop.offers.map((o) => { const v = validatePact(o.pact, shapes); return { name: o.pact.name, slot: o.pact.slot, tags: o.tags, text: o.text, valid: v.ok, errors: v.errors }; });
       },
+    },
+    net() {
+      const n = game.net;
+      if (!n) return null;
+      const me = netUi.me.value;
+      const p = game.player.position;
+      return {
+        id: n.id, status: netUi.status.value, room: netUi.room.value, hp: game.combat.hp, downed: n.downed,
+        me: me ? { kills: me.kills, downs: me.downs } : null,
+        pos: [p.x, p.y, p.z],
+        remotes: [...n.remotes.values()].map((r) => ({ id: r.id, name: r.info.name, drawn: r.drawn ? [r.drawn.x, r.drawn.y, r.drawn.z] as [number, number, number] : null, alive: r.alive, hp: r.hp, visible: r.avatar.root.visible && !r.disposed, kills: r.info.kills, downs: r.info.downs })),
+        sent: [...n.log.sent], hpLog: [...n.log.hp],
+      };
     },
     stats() {
       const i = game.renderer.gl.info;

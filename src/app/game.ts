@@ -33,6 +33,8 @@ import { Rooftop } from '../rooftop/rooftop';
 import { Navigation } from '../nav/navigation';
 import { Waypoints } from '../world/waypoints';
 import { installDebug } from './debug';
+import { Net } from '../net/net';
+import type { Enemy } from '../combat/enemies';
 
 export const hud = {
   zone: signal<Zone | null>(null),
@@ -87,6 +89,8 @@ export class Game {
   waypoints!: Waypoints;
   nav!: Navigation;
   techniqueId: TechniqueId = 'recoil';
+  // The online room, while the player is in one.
+  net: Net | null = null;
   private titleOrbit = 0;
   private fpsAcc = 0;
   private fpsN = 0;
@@ -149,6 +153,42 @@ export class Game {
     this.book.setTechnique(id);
     this.techniques.select(id);
     this.hands.setTechnique(this.techniques.def);
+    this.net?.setTechnique(id);
+  }
+
+  // Everything a Technique can hit: the compound's enemies and, online, the other players.
+  targets(): Enemy[] {
+    return this.net ? [...this.encounters.enemies, ...this.net.remotes.values()] : this.encounters.enemies;
+  }
+
+  // Into an online room: the compound with other players, no tutorial and no
+  // fights against the compound's own enemies, which are single-player.
+  startOnline(room: string, name: string): void {
+    this.net?.leave();
+    this.rooftop.abandon();
+    this.combat.resetPlayer();
+    this.techniques.reset();
+    this.encounters.reset();
+    this.book.preview.value = null;
+    this.tutorial.skip();
+    this.clock.shared = true;
+    setState({ kind: 'explore' });
+    this.net = new Net(this);
+    this.net.connect(room, name);
+    this.requestLock();
+    this.audio.resumeContext();
+  }
+
+  leaveOnline(): void {
+    if (!this.net) return;
+    this.net.leave();
+    this.net = null;
+    this.clock.shared = false;
+    const url = new URL(location.href);
+    url.searchParams.delete('room');
+    history.replaceState(null, '', url);
+    this.input.releaseLock();
+    setState({ kind: 'title' });
   }
 
   startRun(opts: { skipTutorial?: boolean } = {}): void {
@@ -219,9 +259,10 @@ export class Game {
   private frame(): void {
     this.clock.tick();
     const st = appState.value;
-    const dt = worldRuns.value ? this.clock.dt : 0;
+    // Online, menus are overlays: the shared world keeps running under them.
+    const dt = worldRuns.value || this.net ? this.clock.dt : 0;
     const raw = this.clock.raw;
-    this.input.enabled = !uiBlocksInput.value && !this.cam.inShot;
+    this.input.enabled = !uiBlocksInput.value && !this.cam.inShot && !this.net?.downed;
 
     if (this.input.hitAny('pause')) {
       if (st.kind === 'paused') { resume(); this.requestLock(); }
@@ -245,6 +286,7 @@ export class Game {
     } else if (worldRuns.value || st.kind === 'workshop' || st.kind === 'paused' || st.kind === 'rooftop-offer') {
       this.simulate(dt, raw, st);
     }
+    this.net?.update(raw);
 
     this.world.update(this.clock.time);
     this.waypoints.update(raw, this.clock.time);
@@ -277,7 +319,7 @@ export class Game {
     const moving = this.player.planarSpeed.value > 0.5;
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.cam.yaw);
     this.avatar.root.quaternion.slerp(q, 1 - Math.exp(-(moving ? 14 : 8) * raw));
-    this.avatar.setLocomotion(this.player.velocity, this.player.grounded, raw);
+    if (!this.net?.downed) this.avatar.setLocomotion(this.player.velocity, this.player.grounded, raw);
     this.avatar.setAimPitch(this.cam.isTop ? 0 : this.cam.pitch);
     this.avatar.update(dt);
     this.avatar.root.visible = !this.cam.isFirst || this.cam.inShot;
@@ -354,12 +396,15 @@ export class Game {
       if (p.position.distanceTo(this.player.position) < 2.2) { best = { text: p.found ? `Reread: ${p.title}` : `Read plaque: ${p.title}`, act: () => { p.found = true; hud.plaque.value = { title: p.title, body: p.body }; this.audio.play('glass_002', 0.4); setTimeout(() => { hud.plaque.value = null; }, 7000); } }; break; }
     }
     if (!best && ARCHITECT_DESK.distanceTo(this.player.position) < 3.0) best = { text: 'Speak with the Pact Architect', act: () => this.openWorkshop() };
-    const enc = this.encounters.interactable(this.player.position);
-    if (!best && enc) best = enc;
-    const roof = this.rooftop.interactable(this.player.position);
-    if (!best && roof) best = roof;
-    const drill = this.drills.interactable(this.player.position);
-    if (!best && drill) best = drill;
+    // The fights, the rooftop trial and the drills are single-player.
+    if (!this.net) {
+      const enc = this.encounters.interactable(this.player.position);
+      if (!best && enc) best = enc;
+      const roof = this.rooftop.interactable(this.player.position);
+      if (!best && roof) best = roof;
+      const drill = this.drills.interactable(this.player.position);
+      if (!best && drill) best = drill;
+    }
     hud.prompt.value = best ? { text: best.text } : null;
     if (best && this.input.hit('interact')) best.act();
   }

@@ -5,6 +5,7 @@ import { hud, toast, banner } from '../app/game';
 import { setState } from '../app/state';
 import { KEY_SLOTS } from '../pacts/slots';
 import type { Enemy } from './enemies';
+import { AURA } from './field';
 
 export type EyeId = 'horizon' | 'empty' | 'thread' | 'vault' | 'covenant';
 export const EYES: Record<EyeId, { name: string; jp: string; color: number; text: string; locked?: boolean }> = {
@@ -80,7 +81,9 @@ export class Combat {
   hitEnemy(e: Enemy, amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number; kind?: 'kinetic' | 'cold' | 'pulse' | 'resonance' | 'cut'; heavy?: boolean; stagger?: boolean } = {}): number {
     const g = this.game;
     let m = this.wagerMultiplier;
-    if (g.aura.pressureOn(e.position)) m *= 1.15;
+    // A body in the player's open field, or one whose guard a clash broke, takes more.
+    m *= g.aura.damageOn(e.position);
+    if (e.guardBroken > 0) m *= 1 + AURA.guardBreak.taken;
     if (this.eye === 'empty') m *= 1.2;
     const final = Math.round(amount * m);
     if (this.eye === 'thread') this.threadSplash(e, final * 0.35);
@@ -103,6 +106,7 @@ export class Combat {
     let a = amount;
     if (!opts.self) a = g.techniques.def.effects.onStruck?.(g, a, opts.from ?? g.player.position) ?? a;
     if (this.eye === 'horizon' && !opts.self) a *= 0.7;
+    if (g.aura.guardBroken > 0 && !opts.self) a *= 1 + AURA.guardBreak.taken;
     if (a <= 0) return 0;
     if (g.net) { if (!opts.pvp) g.net.selfDamage(a); }
     else { this.hp = Math.max(0, this.hp - a); combatUi.hp.value = this.hp / this.maxHp; }

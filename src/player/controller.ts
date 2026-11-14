@@ -27,6 +27,8 @@ export class PlayerController {
   yaw = 0;
   moveYaw = 0;
   speedScale = 1;
+  // Someone else's aura field bearing down (src/combat/aura.ts).
+  fieldScale = 1;
   canDash = true;
   dashCooldown = 0;
   dashTimer = 0;
@@ -78,7 +80,7 @@ export class PlayerController {
     const right = new THREE.Vector3(-forward.z, 0, forward.x);
     const facing = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const wish = locked ? new THREE.Vector3() : new THREE.Vector3().addScaledVector(forward, axis.y).addScaledVector(right, axis.x);
-    const targetSpeed = (wantsSprint ? 6.6 : 4.1) * this.speedScale;
+    const targetSpeed = (wantsSprint ? 6.6 : 4.1) * this.speedScale * this.fieldScale;
     const accel = this.grounded ? 22 : 7;
     const planar = new THREE.Vector3(this.velocity.x, 0, this.velocity.z);
     const target = wish.multiplyScalar(targetSpeed);

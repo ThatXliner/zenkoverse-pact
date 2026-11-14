@@ -18,7 +18,6 @@ export const WAVES: readonly WaveDef[] = [
 export const WAVE_COUNT = WAVES.length;
 export const HEAL_BETWEEN = 0.35;
 export const EYE_AFTER = 3;
-export const AURA_AFTER = 4;
 
 export const SPAWN_GAP = 0.45;
 

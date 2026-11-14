@@ -17,7 +17,7 @@
 .rt-note { margin: 0; max-width: 78ch; font-size: 14px; line-height: 1.55; color: var(--mist); }
 .rt-sheet > footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 28px 18px; border-top: 1px solid var(--line); }
 .rt-hint { font-size: 12px; letter-spacing: 0.12em; color: var(--dim); }
-.rt-hint kbd, .rt-aura kbd, .rt-top kbd { font-family: var(--sans); font-size: 11px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 3px; color: var(--paper); }
+.rt-hint kbd, .rt-top kbd { font-family: var(--sans); font-size: 11px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 3px; color: var(--paper); }
 
 .rt-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 20px 28px; overflow: auto; min-height: 0; align-content: start; }
 .rt-cards.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -38,8 +38,6 @@
 .rt-foot b.up { color: #7dffb2; }
 .rt-foot i { font-style: normal; line-height: 1.45; }
 
-.rt-aura { display: grid; gap: 14px; padding: 22px 28px 26px; justify-items: start; }
-.rt-aura p { margin: 0; max-width: 70ch; font-size: 16px; line-height: 1.65; }
 
 .rt-sheet.end { width: min(760px, calc(100vw - 48px)); }
 .rt-sheet.end.lose > header h2 .big { color: #ff6b6b; }

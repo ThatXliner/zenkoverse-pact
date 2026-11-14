@@ -28,6 +28,9 @@ export class RemotePlayer extends Enemy {
   info: PlayerInfo;
   away = false;
   cine = false;
+  // Their aura field as their own screen draws it.
+  fieldRadius = 0;
+  fieldDensity = 0;
   private buf: PlayerState[] = [];
   // The sender's clock minus ours, from recent arrivals. The largest is the
   // least delayed sample, so it tracks the sender without the jitter.
@@ -165,6 +168,8 @@ export class RemotePlayer extends Enemy {
     if (!s) return;
     this.sample = s;
     this.cine = s.cine;
+    this.fieldRadius = this.alive ? s.f?.[0] ?? 0 : 0;
+    this.fieldDensity = s.f?.[1] ?? 0;
     this.position.set(s.p[0], s.p[1], s.p[2]);
     this.velocity.set(s.v[0], s.v[1], s.v[2]);
     this.yaw = s.yaw;

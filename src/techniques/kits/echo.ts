@@ -40,6 +40,7 @@ function resonate(ctx: Parameters<TechniqueKit['effects']['cast']>[0], e: import
 export const echo: TechniqueKit = {
   id: 'echo', name: 'Echo', glyph: '響', color: COLOR, type: 'Manipulation',
   blurb: 'Manipulate mechanical vibration through connected matter. Air is matter too. The strongest effects come from resonance.',
+  breadth: 4,
   resource: { name: 'Phase', max: 100, regen: 12, startsFull: true },
   primitive: { name: 'Echo', short: 'a faint vibration', description: 'Add a little vibration to whatever you touch. Keep the phase or lose the build-up.' },
   parameters: ['direction', 'range', 'target', 'trigger', 'duration', 'resource', 'body'],

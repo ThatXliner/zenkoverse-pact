@@ -139,13 +139,13 @@ await page.evaluate(() => {
 {
   const on = await hallFrame('on');
   // The same frame two steps later with her field dropped.
-  await page.evaluate(() => { const g = window.game; const boss = g.game.encounters.enemies.find((e) => e.def.ai === 'ancient'); boss.aura.active = false; boss.aura.radius = 0; g.step(2); });
+  await page.evaluate(() => { const g = window.game; const boss = g.game.encounters.enemies.find((e) => e.def.ai === 'ancient'); boss.field.end('retracted'); boss.field.radius = 0; boss.hold(1e6); g.step(2); });
   const off = await hallFrame('off');
-  await page.evaluate(() => { const g = window.game; const boss = g.game.encounters.enemies.find((e) => e.def.ai === 'ancient'); boss.aura.active = true; g.step(150); });
+  await page.evaluate(() => { const g = window.game; const boss = g.game.encounters.enemies.find((e) => e.def.ai === 'ancient'); boss.hold(0); boss.field.reset(); g.step(150); });
   const s = await page.evaluate(() => {
     const G = window.game.game;
     const boss = G.encounters.enemies.find((e) => e.def.ai === 'ancient');
-    return { r: boss.aura.radius, player: boss.position.distanceTo(G.player.position), camera: boss.center().distanceTo(G.renderer.camera.position) };
+    return { r: boss.field.radius, player: boss.position.distanceTo(G.player.position), camera: boss.center().distanceTo(G.renderer.camera.position) };
   });
   check(s.r > 6 && s.r < 9, `her field closes in to fit the hall (radius ${s.r.toFixed(1)} m)`);
   check(s.camera < s.r && s.player > s.r, `the camera is inside her field (${s.camera.toFixed(1)} m) and the player is not (${s.player.toFixed(1)} m)`);
@@ -156,7 +156,7 @@ await page.evaluate(() => {
   await shot('04-hall-field-outside');
   // Step into her field: now it tints.
   await page.evaluate(() => { const g = window.game, G = g.game; const boss = G.encounters.enemies.find((e) => e.def.ai === 'ancient'); g.teleport([boss.position.x + 3.5, 0.3, boss.position.z + 1.5]); g.step(30); });
-  const side = await page.evaluate(() => window.game.game.aura.bossShell.material.side);
+  const side = await page.evaluate(() => { const G = window.game.game; return G.aura.viewOf(G.encounters.enemies.find((e) => e.def.ai === 'ancient')).side; });
   check(side === 2, 'inside her field, its far wall draws and tints the frame');
   await shot('05-hall-field-inside');
 }

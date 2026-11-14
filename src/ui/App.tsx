@@ -11,7 +11,8 @@ import { KITS, techUi, type SlotLabel, type SignState } from '../techniques/tech
 import { MASTERY_CONFIG } from '../mastery/mastery';
 import { TECHNIQUE_IDS, type TechniqueId } from '../pacts/schema';
 import { combatUi, EYES } from '../combat/combat';
-import { auraUi } from '../combat/aura';
+import { clashUi } from '../combat/clash';
+import { AuraMeter, ClashLayer } from './Aura';
 import { tutorialUi } from '../tutorial/tutorial';
 import { drillUi } from '../drills/drills';
 import { cutsceneUi } from '../cutscene/cutscene';
@@ -132,7 +133,9 @@ function Hud({ game }: { game: Game }) {
   const tut = tutorialUi.step.value;
   const drill = drillUi.active.value;
   const boss = combatUi.boss.value;
-  const cut = cutsceneUi.active.value;
+  const cine = cutsceneUi.active.value;
+  // A Maximum Output cutscene or an Aura Clash: the HUD steps aside.
+  const cut = cine || clashUi.value !== null;
   const title = cutsceneUi.title.value;
   const hurt = hud.hurt.value;
   const [flash, setFlash] = useState(false);
@@ -142,7 +145,7 @@ function Hud({ game }: { game: Game }) {
   const blind = blinkUi.blind.value;
   const pl = hud.plaque.value;
   return (
-    <div class={`hud ${cut ? 'letterbox' : ''}`} style={{ '--c': c } as never}>
+    <div class={`hud ${cine ? 'letterbox' : ''}`} style={{ '--c': c } as never}>
       <div class={`damage ${flash ? 'hit' : ''}`} />
       {blind > 0 && <div style={{ position: 'absolute', inset: 0, background: '#000', opacity: Math.min(1, blind / 1.5) }} />}
       {!cut && view !== 'top' && <div class={`reticle ${techUi.cooldowns.value.primary > 0 ? 'hot' : ''} ${third ? 'third' : ''}`} />}
@@ -152,7 +155,7 @@ function Hud({ game }: { game: Game }) {
           <Meter label="Health" value={combatUi.hp.value} />
           <Meter label={kit.resource.name} value={techUi.resource.value} color={c} cls="resource" />
           {techUi.strain.value > 0.02 && <Meter label="Strain" value={techUi.strain.value} cls="strain" />}
-          {auraUi.active.value && <Meter label="Aura" value={auraUi.energy.value} />}
+          <AuraMeter />
         </div>
       )}
       {!cut && (
@@ -170,17 +173,16 @@ function Hud({ game }: { game: Game }) {
       {!cut && <TopLeft game={game} />}
       {game.net && <OnlineHud game={game} />}
       {combatUi.wagerArmed.value && !cut && <div class="wager-arm">WAGER DECLARED · THE NEXT STRIKE CONNECTS</div>}
-      {auraUi.active.value && !cut && <div class="aura-ring" />}
-      {auraUi.clash.value !== null && !cut && <div class="clash"><span class="kicker">Aura clash · hold {keyLabel('aura')}</span><div class="track"><i style={{ left: `${50 + auraUi.clash.value * 50}%`, width: '3px' }} /></div></div>}
+      <ClashLayer game={game} />
       {boss && !cut && <div class="boss" style={{ '--c': hex(boss.color) } as never}><span class="n">{boss.name}</span><div class="track"><i style={{ width: `${boss.frac * 100}%` }} /></div></div>}
       {prompt && !cut && <div class="prompt"><kbd>{keyLabel('interact')}</kbd><span>{prompt.text}</span></div>}
       {tut && !cut && <div class="objective"><span class="step">Tutorial {tut.index} / {tut.total} · {tut.jp}</span><span class="t">{tut.title}</span><span class="b">{tut.body()}</span><span class="step">{keyLabel('pause')} pauses · Skip tutorial is in the pause menu</span></div>}
-      {drill && !cut && <div class="drill-hud"><span class="big">{drill.score} / {drill.needed}</span><span class="s">{drill.jp} · {drill.tier} · {drill.left} left</span></div>}
+      {drill && !cut && <div class="drill-hud"><span class="big">{drill.score} / {drill.needed}</span><span class="s">{drill.jp} · {drill.tier} · {drill.left} left</span>{drill.cue && <span class="cue">{drill.cue}</span>}</div>}
       {pl && !cut && <div class="objective" style="top:auto;bottom:calc(var(--hud-pad) + 120px);right:var(--hud-pad);border-color:#9fdfff"><span class="step">Lore plaque</span><span class="t">{pl.title}</span><span class="b">{pl.body}</span></div>}
-      <div class="toasts">{hud.toasts.value.map((t) => <div key={t.id} class={`toast ${t.tone}`}>{t.text}</div>)}</div>
+      {!clashUi.value && <div class="toasts">{hud.toasts.value.map((t) => <div key={t.id} class={`toast ${t.tone}`}>{t.text}</div>)}</div>}
       {ban && <div class="banner" key={ban.id}><div class="big jp">{ban.big}</div><div class="small">{ban.small}</div></div>}
       {title && <div class="cut-title" key={title.id} style={{ '--c': hex(title.color) } as never}><div class="jp">{title.jp}</div><div class="en">{title.en}</div></div>}
-      {cut && <div class="skip">{keyLabel('jump').toUpperCase()} · SKIP</div>}
+      {cine && <div class="skip">{keyLabel('jump').toUpperCase()} · SKIP</div>}
       <div style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none">
         {combatUi.numbers.value.map((n) => <span key={n.id} style={{ position: 'absolute', left: `${n.x}%`, top: `${n.y}%`, transform: 'translate(-50%,-50%)', color: n.color, fontFamily: 'var(--serif)', fontSize: n.big ? '34px' : '20px', fontWeight: 700, textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>{n.text}</span>)}
       </div>
@@ -265,7 +267,7 @@ const CODEX: { id: string; title: string; jp: string; body: string | (() => stri
   { id: 'training', title: 'Training', jp: '修行', body: () => `Drills raise Output, Precision, Efficiency, Range, Speed, Control, Activation, and Tolerance. A beginner needs the full hand sign. As Activation rises the sign shortens until activation is silent. The original sign still enhances the grown baseline: ${keyLabel('fullsign')} performs it deliberately. You are rooted until it completes, and the next cast within a few seconds skips its wind-up and carries the boost, which grows with Activation.` },
   { id: 'max', title: 'Maximum Output', jp: '全力', body: 'The greatest concentrated expression of a Technique: everything you can presently commit, in one formulation. The full sign always plays. The world waits.' },
   { id: 'eyes', title: 'Eyes', jp: '眼', body: 'Five finite physical artifacts. Installing one permanently replaces a natural eye. They are not Techniques, and most people do not know they exist.' },
-  { id: 'aura', title: 'Aurabending', jp: '気', body: () => `A separate universal faculty, formalized only twenty years ago despite five thousand years of Technique history. Aura does not fuel Techniques. Hold ${keyLabel('aura')} to expand your field; two fields meeting become an Aura Clash.` },
+  { id: 'aura', title: 'Aurabending', jp: '気', body: () => `A separate universal faculty, formalized only twenty years ago despite five thousand years of Technique history. Aura does not fuel Techniques. ${keyLabel('aura')} expands your field and spends your whole aura on it; ${keyLabel('aura')} again retracts it, with nothing refunded, and it must refill completely before the next. Inside your field your Techniques are sharper and others are slowed. Two fields that touch become an Aura Clash: push beats hold, hold beats feint, feint beats push, and the denser field takes a tie. The loser's field collapses and their guard breaks; nobody is hurt by the clash itself. Refinement, trained at the listening stone in the yard, sets how dense your field is. A broader Technique and every Pact you inscribe lower how far it can go.` },
   { id: 'kuroda', title: 'The Kuroda', jp: '黒田', body: 'A lineage whose "fire" is fuel. They manifest a volatile liquid and light it. The sheen on the ground comes before the flame.', after: 'kuroda' },
   { id: 'views', title: 'Camera', jp: '視点', body: () => `${keyLabel('camera')} cycles the view. Top-down: you move with the screen and aim with the cursor. Over the shoulder: the camera follows the mouse and you aim at the crosshair. First person: the sign is in your own hands.` },
 ];

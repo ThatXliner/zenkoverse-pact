@@ -24,7 +24,7 @@ interface EncounterDef {
 const DEFS: EncounterDef[] = [
   { id: 'sparring', title: 'The Sparring Ring', jp: '稽古場', where: new THREE.Vector3(-8, 0, 8), prompt: 'Call the sparring partners', spawns: [{ key: 'thug', offset: [-4.5, 0, -3] }, { key: 'thug', offset: [4.5, 0, -3] }, { key: 'bruiser', offset: [0, 0, -5] }], intro: 'Underworld hands, paid to spar. They want the Technique, not the lesson.' },
   { id: 'kuroda', title: 'The Gate', jp: '門', where: new THREE.Vector3(0, 0, 12), prompt: 'Challenge the Kuroda Enforcer at the gate', spawns: [{ key: 'kuroda', offset: [0, 0, 5] }, { key: 'thug', offset: [-4, 0, 4] }], intro: 'Watch the ground. Their "fire" is fuel, and the sheen comes before the flame.' },
-  { id: 'ancient', title: 'The Hall', jp: '道場', where: new THREE.Vector3(-4, 0.3, -9), prompt: 'Challenge the Master of the hall', spawns: [{ key: 'ancient', offset: [0, 0, -7] }], intro: 'Five thousand years of Technique. Hold F to meet her field with yours.' },
+  { id: 'ancient', title: 'The Hall', jp: '道場', where: new THREE.Vector3(-4, 0.3, -9), prompt: 'Challenge the Master of the hall', spawns: [{ key: 'ancient', offset: [0, 0, -7] }], intro: 'Five thousand years of Technique. Press F to open your field against hers.' },
   { id: 'dummy-room', title: 'Dummy Room', jp: '稽古', where: new THREE.Vector3(8, 0.3, -12), prompt: 'Spar with training dummies', spawns: [{ key: 'dummy', offset: [-3, 0, 0] }, { key: 'dummy', offset: [0, 0, -1] }, { key: 'dummy', offset: [3, 0, 0] }] },
 ];
 
@@ -79,12 +79,11 @@ export class Encounters {
   }
 
   // Adds one enemy to the shared list, facing the player. Bosses raise their
-  // health bar and the Ancient opens its field, as in the compound fights.
+  // health bar; the Ancient opens her field on her own.
   spawn(key: string, pos: THREE.Vector3, scale: EnemyScale = NO_SCALE, showBar = false): Enemy {
     const g = this.game;
     const e = new Enemy(g, key, pos, scale, showBar);
     e.yaw = Math.atan2(-(g.player.position.x - pos.x), -(g.player.position.z - pos.z));
-    if (key === 'ancient') e.aura.active = true;
     this.enemies.push(e);
     if (e.isBoss) combatUi.boss.value = { name: e.def.title ?? e.def.name, frac: 1, color: e.def.emissive ?? 0xff6a1a };
     return e;
@@ -111,8 +110,7 @@ export class Encounters {
         for (let i = 1; i <= 4; i++) g.vfx.after(i * 0.06, () => g.vfx.ring(c.clone().add(new THREE.Vector3(0, 0.1 + i * 0.2, 0)), 0x7dffb2, 0.5, 6 * i, 0.7));
         g.vfx.flash(boss.center(), 0x7dffb2, 120, 0.7, 30);
         const d = g.player.position.distanceTo(c);
-        const shielded = g.aura.active && g.aura.clashing;
-        if (d < 22 && !shielded) g.combat.hurtPlayer(34 * (1 - d / 30), { from: c, kinetic: true });
+        if (d < 22) g.combat.hurtPlayer(34 * (1 - d / 30), { from: c, kinetic: true });
         for (const p of g.props.instances) if (p.mesh.position.distanceTo(c) < 22) { p.body.wakeUp(); p.body.applyImpulse(p.mesh.position.clone().sub(c).setY(0.8).normalize().multiplyScalar(p.def.mass * 9), true); }
       },
       onVfx: () => undefined,

@@ -73,6 +73,7 @@ function freezeArea(g: import('../../app/game').Game, center: THREE.Vector3, rad
 export const rime: TechniqueKit = {
   id: 'rime', name: 'Rime', glyph: '霜', color: COLOR, type: 'Generation, Manipulation',
   blurb: 'Nucleate water through your fingernails. The koi pond in the yard is a great deal of water.',
+  breadth: 2,
   resource: { name: 'Warmth', max: 100, regen: 9, startsFull: true },
   primitive: { name: 'Rime', short: 'frost what you touch', description: 'Frost whatever water your nails touch. Imprecise, and it takes the heat out of your hands.' },
   parameters: ['direction', 'range', 'target', 'trigger', 'duration', 'resource', 'body'],

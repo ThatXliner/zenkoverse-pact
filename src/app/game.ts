@@ -179,6 +179,7 @@ export class Game {
     this.encounters.reset();
     this.book.preview.value = null;
     this.tutorial.skip();
+    this.aura.reset();
     this.clock.shared = true;
     setState({ kind: 'explore' });
     this.net = new Net(this);
@@ -191,6 +192,7 @@ export class Game {
     if (!this.net) return;
     this.net.leave();
     this.net = null;
+    this.aura.reset();
     this.clock.shared = false;
     const url = new URL(location.href);
     url.searchParams.delete('room');
@@ -206,6 +208,7 @@ export class Game {
     this.vfx.clear();
     this.props.thaw();
     this.techniques.reset();
+    this.aura.reset();
     this.player.speedScale = 1;
   }
 
@@ -357,7 +360,7 @@ export class Game {
     this.techniques.update(dt, raw);
     this.hands.update(raw, this.player, this.cam, this.input);
     this.combat.update(dt);
-    this.aura.update(dt);
+    this.aura.update(dt, raw);
     this.encounters.update(dt);
     this.rooftop.update(dt);
     this.props.update(dt);

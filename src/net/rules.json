@@ -11,5 +11,7 @@
   "maxHitDamage": 300,
   "maxHitRange": 48,
   "reconnectGraceSeconds": 20,
+  "field": { "maxRadius": 14, "clashSlack": 1.5, "clashCooldownMs": 1000 },
+  "clash": { "introMs": 700, "windowMs": 1200, "graceMs": 250, "revealMs": 650, "rounds": 3, "winAt": 2, "tieMargin": 0.1, "closeMargin": 0.02 },
   "spawns": [[-3, 0, 6], [-8, 0, 8], [0, 0, 12], [-6, 0.3, -9], [-17, 0, -2.6], [11, 0, 15.5]]
 }

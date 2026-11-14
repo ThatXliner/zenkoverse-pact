@@ -3,7 +3,7 @@ import { signal, computed } from '@preact/signals';
 export type TutorialStepId = 'move' | 'look' | 'camera' | 'primary' | 'secondary' | 'art' | 'pact' | 'wager' | 'max' | 'done';
 export type PauseTab = 'menu' | 'settings' | 'controls' | 'codex' | 'map';
 export type EncounterId = 'sparring' | 'kuroda' | 'ancient' | 'dummy-room';
-export type DrillId = 'recoil-crane';
+export type DrillId = 'recoil-crane' | 'field-reading';
 
 export type AppState =
   | { kind: 'boot'; progress: number; label: string }

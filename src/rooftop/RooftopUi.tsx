@@ -7,7 +7,7 @@ import { keyLabel } from '../app/keymap';
 import { slotDef } from '../pacts/slots';
 import { rooftopUi, type RunResult } from './rooftop';
 import { readFor, type Offer } from './offers';
-import { WAVE_COUNT, HEAL_BETWEEN, EYE_AFTER, AURA_AFTER } from './waves';
+import { WAVE_COUNT, HEAL_BETWEEN, EYE_AFTER } from './waves';
 import './rooftop.css';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
@@ -57,7 +57,6 @@ function OfferScreen({ game }: { game: Game }) {
   const step = rooftopUi.offer.value;
   if (!step) return null;
   if (step.kind === 'eye') return <EyeStep game={game} />;
-  if (step.kind === 'aura') return <AuraStep game={game} />;
   return <PactStep game={game} offers={step.offers} />;
 }
 
@@ -134,21 +133,6 @@ function EyeStep({ game }: { game: Game }) {
             </button>
           );
         })}
-      </div>
-    </Shell>
-  );
-}
-
-function AuraStep({ game }: { game: Game }) {
-  const btn = useRef<HTMLButtonElement>(null);
-  useEffect(() => { btn.current?.focus(); }, []);
-  return (
-    <Shell kicker={`Wave ${AURA_AFTER} cleared · something new`} title="Aura Expansion" jp="気"
-      note="Aura is a separate faculty from your Technique, formalized only twenty years ago despite five thousand years of Technique history.">
-      <div class="rt-aura">
-        <p>Hold <kbd>{keyLabel('aura')}</kbd> to expand a field around you. Enemies inside it move slower. It drains your Aura while it is open and refills when you let go.</p>
-        <p>The strongest opponents carry fields of their own. Where two fields meet you are in an Aura Clash. Keep your health high and keep holding {keyLabel('aura')} to push her field back.</p>
-        <button ref={btn} class="btn primary" onClick={() => game.rooftop.acceptAura()}>Continue</button>
       </div>
     </Shell>
   );

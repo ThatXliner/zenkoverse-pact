@@ -30,6 +30,7 @@ const cutscene = anchored({
 export const blink: TechniqueKit = {
   id: 'blink', name: 'Blink', glyph: '瞬', color: COLOR, type: 'Manifestation',
   blurb: 'Close both eyes and a concussive pulse leaves your tear ducts. It cannot curve and it cannot fire anywhere but forward.',
+  breadth: 1,
   resource: { name: 'Tears', max: 100, regen: 9, startsFull: true },
   primitive: { name: 'Blink', short: 'a weak forward pulse', description: 'A weak pressure pulse from the eyes when they close. Only forward. Only ever forward.' },
   parameters: ['direction', 'range', 'target', 'trigger', 'duration', 'resource', 'body'],

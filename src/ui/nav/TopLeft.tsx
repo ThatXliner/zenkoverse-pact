@@ -5,6 +5,7 @@ import { MASTERY_STATS, MASTERY_CONFIG } from '../../mastery/mastery';
 import { navUi } from '../../nav/navigation';
 import { keyLabel } from '../../app/keymap';
 import { hud } from '../../app/game';
+import { auraUi } from '../../combat/aura';
 import { CAMERA_LABEL } from '../../player/camera';
 
 const KEYS = [['camera', 'camera'], ['workshop', 'workshop'], ['map', 'map'], ['wager', 'wager'], ['aura', 'aura'], ['pause', 'menu']] as const;
@@ -18,6 +19,7 @@ export function TopLeft({ game }: { game: Game }) {
   const s = settings.value;
   const kit = KITS[game.techniqueId];
   const mast = game.mastery.stats.value[game.techniqueId];
+  const aura = auraUi.training.value;
   const sign = techUi.variant.value === 'none' ? 'silent activation' : techUi.variant.value === 'short' ? 'short sign' : 'full sign';
   return (
     <div class="top-left">
@@ -33,7 +35,9 @@ export function TopLeft({ game }: { game: Game }) {
           <span>{kit.name} · {sign} · {keyLabel('fullsign')} performs the full sign</span>
           <span>{CAMERA_LABEL[hud.camera.value]} · {keyLabel('camera')} changes the view</span>
           <span class="keys">{KEYS.map(([action, what]) => <span key={action}><b>{keyLabel(action)}</b> {what}</span>)}</span>
-          {MASTERY_CONFIG.showNumbers && <div class="mastery">{MASTERY_STATS.map((st) => <span key={st}>{st} <b>{Math.round(mast[st] * 100)}</b></span>)}</div>}
+          {MASTERY_CONFIG.showNumbers && <div class="mastery">{MASTERY_STATS.map((st) => st === 'refinement'
+            ? <span key={st}>refinement <b>{Math.round(aura.refinement * 100)} / {Math.round(aura.potential * 100)}</b></span>
+            : <span key={st}>{st} <b>{Math.round(mast[st] * 100)}</b></span>)}</div>}
         </div>
       )}
     </div>

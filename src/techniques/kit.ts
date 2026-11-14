@@ -22,6 +22,11 @@ export interface TechniqueKit {
   color: number;
   type: string;
   blurb: string;
+  // The Technique's innate possibility space, 1 (narrow) to 5 (vast). A
+  // broader Technique leaves less room for aura: it lowers the ceiling on
+  // aura refinement (src/combat/field.ts, issue #4). It is not how strong
+  // the Technique is.
+  breadth: number;
   resource: { name: string; max: number; regen: number; startsFull: boolean; free?: AbilityKind[] };
   // `short` is the HUD's few words on what a key does, in sentence case.
   primitive: { name: string; short: string; description: string };

@@ -10,6 +10,7 @@
     "serve": "node server/index.mjs",
     "assets": "node tools/build-assets.mjs",
     "capture": "node tools/capture.mjs",
+    "check:aura": "node tools/check-aura.mjs",
     "check:controls": "node tools/check-controls.mjs",
     "check:effects": "node tools/check-effects.mjs",
     "check:keybinds": "node tools/check-keybinds.mjs",

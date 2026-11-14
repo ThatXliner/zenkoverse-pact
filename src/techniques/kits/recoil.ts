@@ -85,23 +85,30 @@ const drill: DrillDef = {
     { name: 'Rhythm', count: 6, interval: 2.2, dropHeight: 9, pass: 4, gains: { efficiency: 0.14, tolerance: 0.08, activation: 0.08 } },
     { name: 'Hailstorm', count: 9, interval: 1.4, dropHeight: 10, pass: 7, gains: { efficiency: 0.16, output: 0.1, activation: 0.1 } },
   ],
+  // Each item is one crate or barrel off the hoist: caught scores, landed does not.
   spawn(game, tier, index) {
     const hook = game.world.craneHook.position;
-    const at = new THREE.Vector3(hook.x + (Math.random() - 0.5) * 2.5, tier.dropHeight, hook.z + (Math.random() - 0.5) * 2.5 + (index % 2) * 1.5);
+    const at = new THREE.Vector3(hook.x + (Math.random() - 0.5) * 2.5, tier.dropHeight ?? 8, hook.z + (Math.random() - 0.5) * 2.5 + (index % 2) * 1.5);
     const p = game.props.spawn(index % 3 === 2 ? 'barrel' : 'crate', at);
     p.body.setLinvel({ x: 0, y: -1.5, z: 0 }, true);
-    return p;
-  },
-  judge(game, prop, event) {
-    if (event === 'caught') return 1;
-    game.vfx.until(4, () => game.props.remove(prop));
-    return 0;
+    game.audio.play('impactMetal_light_000', 0.3, 0.8);
+    return {
+      notify: (prop, event) => (prop === p && event === 'caught' ? 1 : null),
+      update: () => {
+        if (!p.alive) return 0;
+        if (p.body.translation().y >= p.half.y + 0.08 || p.body.linvel().y <= -0.5) return null;
+        game.audio.play('impactWood_heavy_000', 0.5);
+        game.vfx.until(4, () => game.props.remove(p));
+        return 0;
+      },
+    };
   },
 };
 
 export const recoil: TechniqueKit = {
   id: 'recoil', name: 'Recoil', glyph: '反', color: COLOR, type: 'Manipulation, Energy family',
   blurb: 'Take in kinetic energy, store it, release it later as motion. Energy never disappears: every softened blow is a debt.',
+  breadth: 2,
   resource: { name: 'Reserve', max: 100, regen: 7, startsFull: false, free: ['primary', 'secondary'] },
   primitive: { name: 'Recoil', short: 'a weak shove', description: 'Absorb a little kinetic energy from any direction and leak most of it. Release what is left as a shove.' },
   parameters: ['direction', 'range', 'target', 'trigger', 'duration', 'resource', 'body'],

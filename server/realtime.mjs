@@ -11,6 +11,7 @@
 // downs, respawns and the score. Movement is relayed at a fixed tick.
 import { WebSocketServer } from 'ws';
 import rules from '../src/net/rules.json' with { type: 'json' };
+import { ClashReferee, isPick } from '../src/net/clash.js';
 
 const TICK_MS = 1000 / rules.tickHz;
 const AWAY_MS = 1500;
@@ -32,6 +33,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
   const rooms = new Map();
   let nextId = 1;
   let nextHit = 1;
+  let nextClash = 1;
 
   httpServer.on('upgrade', (req, socket, head) => {
     if (new URL(req.url ?? '/', 'http://x').pathname !== '/ws') { socket.destroy(); return; }
@@ -54,7 +56,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
     let room = rooms.get(code);
     if (!room) {
       if (rooms.size >= MAX_ROOMS) return null;
-      room = { code, players: new Map(), pending: new Map(), timer: null };
+      room = { code, players: new Map(), pending: new Map(), clashes: new Map(), timer: null };
       room.timer = setInterval(() => tick(room), TICK_MS);
       rooms.set(code, room);
     }
@@ -90,6 +92,8 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
     target.respawnAt = Date.now() + rules.respawnSeconds * 1000;
     if (by && by !== target) by.kills++;
     for (const [id, h] of room.pending) if (h.target === target.id) room.pending.delete(id);
+    const c = target.clash !== null ? room.clashes.get(target.clash) : null;
+    if (c) for (const ev of c.ref.forfeit(c.a === target.id ? 0 : 1)) clashStep(room, c, ev);
     broadcast(room, { type: 'down', id: target.id, by: by && by !== target ? by.id : null });
     broadcast(room, { type: 'info', player: info(target) });
     if (by && by !== target) broadcast(room, { type: 'info', player: info(by) });
@@ -102,6 +106,36 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
     const at = spawnPoint(room, p);
     if (p.state) p.state = { ...p.state, p: at, v: [0, 0, 0] };
     broadcast(room, { type: 'respawn', id: p.id, p: at, hp: p.hp });
+  }
+
+  // Aura Clash between two players (issue #4). The server runs the referee in
+  // src/net/clash.js on its own clock, so both screens play the same picks
+  // and the same winner. Every step goes to the whole room: the two in it
+  // play it, everyone else just sees it. Health never changes in a clash.
+  function clashStep(room, c, ev) {
+    broadcast(room, { type: 'clash-step', id: c.id, a: c.a, b: c.b, ev });
+    if (ev.kind !== 'end') return;
+    room.clashes.delete(c.id);
+    for (const id of [c.a, c.b]) { const q = room.players.get(id); if (q?.clash === c.id) q.clash = null; }
+  }
+
+  // A request is taken when both players stand in the room, neither is in a
+  // clash, the asker is not asking faster than the cooldown, and both report
+  // an open field whose edges touch, with some slack for the network.
+  function startClash(room, p, target, now) {
+    if (now - p.clashAt < rules.field.clashCooldownMs) return;
+    p.clashAt = now;
+    if (!target?.ws || target === p || p.down || target.down || p.clash !== null || target.clash !== null) return;
+    const fa = p.state?.f, fb = target.state?.f;
+    if (!fa || !fb || fa[0] < 0.5 || fb[0] < 0.5) return;
+    if (dist(p.state.p, target.state.p) > fa[0] + fb[0] + rules.field.clashSlack) return;
+    const id = nextClash++;
+    // Picks may arrive a little after the window the screens show.
+    const timing = { ...rules.clash, windowMs: rules.clash.windowMs + rules.clash.graceMs };
+    const c = { id, a: p.id, b: target.id, ref: new ClashReferee([fa[1], fb[1]], timing, now) };
+    room.clashes.set(id, c);
+    p.clash = target.clash = id;
+    broadcast(room, { type: 'clash', id, a: c.a, b: c.b });
   }
 
   function tick(room) {
@@ -118,6 +152,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
       if (p.down && now >= p.respawnAt && p.ws) respawn(room, p);
       if (!p.ws && now - p.leftAt > rules.reconnectGraceSeconds * 1000) room.players.delete(p.id);
     }
+    for (const c of room.clashes.values()) for (const ev of c.ref.step(now)) clashStep(room, c, ev);
     if (room.players.size === 0) { clearInterval(room.timer); rooms.delete(room.code); return; }
     const live = present(room);
     if (!live.length) return;
@@ -139,7 +174,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
         if (absent) room.players.delete(absent.id);
       }
       if (present(room).length >= rules.maxPlayers || freeSlot(room) < 0) { send(ws, { type: 'full', room: code, max: rules.maxPlayers }); return null; }
-      p = { id: nextId++, token, slot: freeSlot(room), hp: rules.maxHp, down: false, kills: 0, downs: 0, state: null, fresh: [], stateAt: 0, protectUntil: 0, respawnAt: 0, leftAt: 0, bucket: HITS_PER_SECOND, bucketAt: Date.now(), seen: new Set() };
+      p = { id: nextId++, token, slot: freeSlot(room), hp: rules.maxHp, down: false, kills: 0, downs: 0, state: null, fresh: [], stateAt: 0, protectUntil: 0, respawnAt: 0, leftAt: 0, bucket: HITS_PER_SECOND, bucketAt: Date.now(), seen: new Set(), clash: null, clashAt: 0 };
       room.players.set(p.id, p);
     }
     p.ws = ws;
@@ -163,6 +198,9 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
     p.leftAt = Date.now();
     if (chose) room.players.delete(p.id);
     for (const [id, h] of room.pending) if (h.by === p.id) room.pending.delete(id);
+    // Leaving mid-clash loses it.
+    const c = p.clash !== null ? room.clashes.get(p.clash) : null;
+    if (c) for (const ev of c.ref.forfeit(c.a === p.id ? 0 : 1)) clashStep(room, c, ev);
     broadcast(room, { type: 'leave', id: p.id });
     log(`[rt] ${p.name} (#${p.id}) left ${room.code}`);
   }
@@ -175,7 +213,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
       case 'state': {
         const s = m.s, pos = vec(s?.p), v = vec(s?.v);
         if (!pos || !v || !Number.isFinite(s.ct)) return;
-        const st = { ct: s.ct, p: p.down ? (p.state?.p ?? pos) : pos, v, yaw: num(s.yaw, -1e3, 1e3), pitch: num(s.pitch, -2, 2), g: !!s.g, sign: s.sign === 1 || s.sign === 2 ? s.sign : 0, cine: !!s.cine };
+        const st = { ct: s.ct, p: p.down ? (p.state?.p ?? pos) : pos, v, yaw: num(s.yaw, -1e3, 1e3), pitch: num(s.pitch, -2, 2), g: !!s.g, sign: s.sign === 1 || s.sign === 2 ? s.sign : 0, cine: !!s.cine, f: Array.isArray(s.f) ? [num(s.f[0], 0, rules.field.maxRadius), num(s.f[1], 0, 1)] : [0, 0] };
         p.state = st;
         p.stateAt = now;
         if (p.fresh.length < 6) p.fresh.push(st);
@@ -230,6 +268,16 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
         const target = room.players.get(m.target);
         if (!target?.ws || target.down || p.down || now < target.protectUntil) return;
         send(target.ws, { type: 'status', by: p.id, frozen: num(m.frozen, 0, 6), slow: num(m.slow, 0.1, 1) });
+        return;
+      }
+      case 'clash':
+        startClash(room, p, room.players.get(Number(m.target)), now);
+        return;
+      case 'clash-pick': {
+        const c = p.clash !== null ? room.clashes.get(p.clash) : null;
+        if (!c || c.id !== Number(m.id) || c.ref.round !== Number(m.round) || !isPick(m.pick)) return;
+        if (!c.ref.pick(c.a === p.id ? 0 : 1, m.pick, now)) return;
+        for (const ev of c.ref.step(now)) clashStep(room, c, ev);
         return;
       }
       case 'ping':

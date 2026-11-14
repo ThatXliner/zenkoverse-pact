@@ -143,10 +143,6 @@ body.top-view .hud { cursor: none; }
 .damage { position: absolute; inset: 0; box-shadow: inset 0 0 160px rgba(255,40,60,0.0); transition: box-shadow 0.25s; }
 .damage.hit { box-shadow: inset 0 0 160px rgba(255,40,60,0.55); }
 .wager-arm { position: absolute; left: 50%; top: 56%; transform: translateX(-50%); font-size: 12px; letter-spacing: 0.4em; color: #ffd34d; animation: pulse 0.9s ease-in-out infinite; }
-.aura-ring { position: absolute; left: 50%; top: 50%; width: 180px; height: 180px; margin: -90px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.35); pointer-events: none; animation: aura 1.4s ease-out infinite; }
-.clash { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); width: 360px; display: grid; gap: 6px; text-align: center; }
-.clash .track { height: 6px; background: rgba(243,238,228,0.12); position: relative; }
-.clash .track > i { position: absolute; left: 50%; top: 0; bottom: 0; background: var(--paper); }
 .cut-title { position: absolute; left: 0; right: 0; top: 18%; text-align: center; animation: cut 1.2s var(--ease) forwards; }
 .cut-title .jp { font-size: clamp(48px, 9vw, 120px); font-weight: 800; letter-spacing: 0.1em; line-height: 1; text-shadow: 0 0 40px color-mix(in oklab, var(--c) 60%, transparent); }
 .cut-title .en { font-size: 14px; letter-spacing: 0.6em; text-transform: uppercase; margin-top: 8px; color: var(--mist); }
@@ -333,6 +329,7 @@ button.ph.on { background: var(--c); color: var(--ink); border-bottom-color: tra
 .drill-hud { position: absolute; left: 50%; top: var(--below-compass); transform: translateX(-50%); display: grid; gap: 6px; justify-items: center; }
 .drill-hud .big { font-family: var(--serif); font-size: 44px; line-height: 1; font-variant-numeric: tabular-nums; }
 .drill-hud .s { font-size: 11px; letter-spacing: 0.35em; text-transform: uppercase; color: var(--mist); }
+.drill-hud .cue { font-family: var(--sans); font-size: 14px; letter-spacing: 0.04em; color: var(--paper); text-shadow: 0 1px 8px #000; max-width: 70vw; text-align: center; }
 .defeat { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(6,7,10,0.8); animation: fade 1.2s; text-align: center; }
 .defeat .jp { font-size: 96px; font-weight: 800; }
 .defeat p { color: var(--mist); letter-spacing: 0.1em; }
@@ -341,7 +338,6 @@ button.ph.on { background: var(--c); color: var(--ink); border-bottom-color: tra
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 @keyframes banner { 0% { opacity: 0; transform: scale(1.08); letter-spacing: 0.3em; } 12% { opacity: 1; transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes aura { 0% { transform: scale(0.6); opacity: 0.6; } 100% { transform: scale(1.6); opacity: 0; } }
 @keyframes cut { 0% { opacity: 0; transform: translateX(-40px); } 15% { opacity: 1; transform: translateX(0); } 85% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes box { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }

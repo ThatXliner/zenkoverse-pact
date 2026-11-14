@@ -36,10 +36,12 @@ function freezeProp(ctx: { game: import('../../app/game').Game }, p: import('../
 
 function freezeArea(g: import('../../app/game').Game, center: THREE.Vector3, radius: number, potency: number, pin: boolean, seconds: number): number {
   let hits = 0;
-  g.vfx.patch(center.clone().setY(Math.max(0, center.y)), radius, 'frost', seconds + 3);
+  // The frost lies on the floor it hits; over the pond, on the water's level, not its bed.
+  const floor = center.clone().setY(Math.max(0, center.y));
+  g.vfx.patch(floor, radius, 'frost', seconds + 3);
   for (let i = 0; i < Math.round(radius * 1.6); i++) {
     const a = Math.random() * Math.PI * 2, r = Math.random() * radius;
-    g.vfx.iceSpike(center.clone().add(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r)), 0.5 + Math.random() * 1.2 * potency, seconds + 1);
+    g.vfx.iceSpike(floor.clone().add(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r)), 0.5 + Math.random() * 1.2 * potency, seconds + 1);
   }
   for (const e of g.techniques.enemiesInSphere(center, radius)) {
     g.combat.hitEnemy(e, 16 * potency, { from: center, kind: 'cold', stagger: true });
@@ -110,7 +112,7 @@ export const rime: TechniqueKit = {
         const start = g.player.position.clone();
         for (let i = 1; i <= 7; i++) {
           const at = start.clone().addScaledVector(flat, i * range / 7);
-          at.y = 0;
+          at.y = start.y;
           g.vfx.after(i * 0.055, () => { g.vfx.iceSpike(at, 0.8 + i * 0.25 * ctx.potency, 7); g.vfx.patch(at, 0.9, 'frost', 8); if (i % 2 === 0) g.audio.play('impactGlass_light_000', 0.4, 1.1 - i * 0.05); });
         }
         for (const p of propsInCone(g, ctx.origin, flat, range, 0.3)) { p.body.wakeUp(); p.body.applyImpulse(new THREE.Vector3(flat.x, 1.5, flat.z).multiplyScalar(p.def.mass * 3), true); if (ctx.behaviors.includes('pin')) freezeProp(ctx, p, 5); }

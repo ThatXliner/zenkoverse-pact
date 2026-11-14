@@ -33,7 +33,7 @@ export class Vfx {
   // whenever a shard or spike is on screen, which doubles the frame.
   private iceMat = new THREE.MeshPhysicalMaterial({ color: 0xcfefff, roughness: 0.12, emissive: 0x6fd3ff, emissiveIntensity: 0.3, transparent: true, opacity: 0.75 });
   private iceSpikeGeo = new THREE.ConeGeometry(0.22, 1.4, 6);
-  readonly spikes: { mesh: THREE.Mesh; life: number }[] = [];
+  readonly spikes: { mesh: THREE.Mesh; life: number; floor: number }[] = [];
   private timers: Timer[] = [];
   private held: Held[] = [];
 
@@ -140,7 +140,7 @@ export class Vfx {
     m.castShadow = true;
     this.scene.add(m);
     (m as unknown as { targetH: number }).targetH = height;
-    this.spikes.push({ mesh: m, life });
+    this.spikes.push({ mesh: m, life, floor: pos.y });
   }
 
   afterimage(source: THREE.Object3D, color: number, life = 0.35): void {
@@ -219,7 +219,7 @@ export class Vfx {
       s.life -= dt;
       const th = (s.mesh as unknown as { targetH: number }).targetH;
       s.mesh.scale.y = THREE.MathUtils.lerp(s.mesh.scale.y, s.life < 1 ? 0.01 : th, 1 - Math.exp(-(s.life < 1 ? 5 : 14) * dt));
-      s.mesh.position.y = Math.max(0, s.mesh.scale.y * 0.7 - 0.2);
+      s.mesh.position.y = s.floor + Math.max(0, s.mesh.scale.y * 0.7 - 0.2);
       if (s.life <= 0) { this.scene.remove(s.mesh); this.spikes.splice(i, 1); }
     }
   }

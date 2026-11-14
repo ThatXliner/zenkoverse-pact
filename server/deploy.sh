@@ -13,7 +13,7 @@ while true; do
     npm run build -- --outDir dist.next --emptyOutDir
     rm -rf dist.prev && { [ -d dist ] && mv dist dist.prev || true; } && mv dist.next dist
     echo "deployed $(git rev-parse --short HEAD)"
-    [ "$server_changed" = yes ] && vanityctl restart zenkoverse
+    [ "$server_changed" = yes ] && launchctl kickstart -k "gui/$(id -u)/com.bryanhu.zenkoverse"
   fi
   sleep 60
 done

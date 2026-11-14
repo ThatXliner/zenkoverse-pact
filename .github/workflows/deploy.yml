@@ -1,8 +1,11 @@
-name: Deploy to GitHub Pages
+name: Redirect GitHub Pages to the self-hosted site
 
+# The game is served from zenkoverse.bryanhu.com (see server/). This keeps the
+# old Pages URL alive as a redirect.
 on:
   push:
     branches: [main]
+    paths: [redirect/**, .github/workflows/deploy.yml]
   workflow_dispatch:
 
 permissions:
@@ -15,27 +18,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run build
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
   deploy:
-    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: redirect
       - id: deployment
         uses: actions/deploy-pages@v4

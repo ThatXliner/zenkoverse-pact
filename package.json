@@ -27,7 +27,7 @@
     "postprocessing": "6.36.4",
     "preact": "10.25.4",
     "three": "0.170.0",
-    "ws": "8.18.0"
+    "ws": "8.21.0"
   },
   "devDependencies": {
     "@gltf-transform/cli": "4.1.1",

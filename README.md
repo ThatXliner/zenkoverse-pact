@@ -34,7 +34,7 @@ A first- and third-person sandbox set in one rainy night district of the Zenkove
 
 ## Hosting
 
-The game is served from a self-hosted Mac at zenkoverse.bryanhu.com. `server/index.mjs` serves the build (and will host realtime multiplayer). `server/deploy.sh` runs there under launchd: it rebuilds whenever `main` moves, so merging to `main` deploys. The old GitHub Pages URL redirects to the new host.
+The game is served from a self-hosted Mac at zenkoverse.bryanhu.com. `server/index.mjs` serves the build (and will host realtime multiplayer). `server/deploy.sh` runs there as the vanityctl service `zenkoverse-deploy` (the server is `zenkoverse`): it rebuilds whenever `main` moves, so merging to `main` deploys. The old GitHub Pages URL redirects to the new host.
 
 ## Run it locally
 

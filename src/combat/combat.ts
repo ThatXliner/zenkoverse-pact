@@ -100,9 +100,12 @@ export class Combat {
   // Online the server owns health: a blow from another player (`pvp`) is
   // reported back by the caller, and health this player spends on itself goes
   // to the server here; the new value arrives through `setHp`.
-  hurtPlayer(amount: number, opts: { from?: THREE.Vector3; kinetic?: boolean; self?: boolean; pvp?: boolean } = {}): number {
+  // A Maximum Output cutscene shields both people in it from everything but
+  // its own blow (`cutscene`), for the cutscene's length and no longer.
+  hurtPlayer(amount: number, opts: { from?: THREE.Vector3; kinetic?: boolean; self?: boolean; pvp?: boolean; cutscene?: boolean } = {}): number {
     const g = this.game;
-    if (this.god || (this.invuln > 0 && !opts.self)) return 0;
+    if (this.god) return 0;
+    if (!opts.self && !opts.cutscene && (this.invuln > 0 || g.cutscenes.locksPlayer)) return 0;
     let a = amount;
     if (!opts.self) a = g.techniques.def.effects.onStruck?.(g, a, opts.from ?? g.player.position) ?? a;
     if (this.eye === 'horizon' && !opts.self) a *= 0.7;

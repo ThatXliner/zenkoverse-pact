@@ -137,11 +137,11 @@ export class Game {
     this.book = new PactBook();
     this.hands = new Hands(this.renderer.overlayScene, this.renderer.overlayCamera, this.assets);
     this.drills = new Drills(this);
+    this.cutscenes = new Cutscenes(this);
     this.techniques = new Techniques(this);
     this.combat = new Combat(this);
     this.aura = new Aura(this);
     this.encounters = new Encounters(this);
-    this.cutscenes = new Cutscenes(this);
     this.tutorial = new Tutorial(this);
     this.rooftop = new Rooftop(this);
     this.waypoints = new Waypoints(this.physics, scene, this.vfx);
@@ -172,6 +172,7 @@ export class Game {
   // Into an online room: the compound with other players, no tutorial and no
   // fights against the compound's own enemies, which are single-player.
   startOnline(room: string, name: string): void {
+    this.cutscenes.cancel();
     this.net?.leave();
     this.rooftop.abandon();
     this.combat.resetPlayer();
@@ -190,6 +191,7 @@ export class Game {
 
   leaveOnline(): void {
     if (!this.net) return;
+    this.cutscenes.cancel();
     this.net.leave();
     this.net = null;
     this.aura.reset();
@@ -205,6 +207,7 @@ export class Game {
   // made it: Vfx owns them all, props come out of the ice, and each kit
   // drops what it holds.
   private endEffects(): void {
+    this.cutscenes.cancel();
     this.vfx.clear();
     this.props.thaw();
     this.techniques.reset();
@@ -290,7 +293,7 @@ export class Game {
     // Online, menus are overlays: the shared world keeps running under them.
     const dt = worldRuns.value || this.net ? this.clock.dt : 0;
     const raw = this.clock.raw;
-    this.input.enabled = !uiBlocksInput.value && !this.cam.inShot && !this.net?.downed;
+    this.input.enabled = !uiBlocksInput.value && !this.cam.inShot && !this.net?.downed && !this.cutscenes.locksPlayer;
 
     if (this.input.hitAny('pause')) {
       if (st.kind === 'paused') { resume(); this.requestLock(); }
@@ -339,6 +342,8 @@ export class Game {
     this.player.yaw = this.cam.yaw;
     this.player.moveYaw = this.cam.heading;
     const sprintOk = !this.techniques.casting;
+    // A Maximum Output cutscene holds both people in it where they stand.
+    if (this.cutscenes.locksPlayer) this.player.rooted = Math.max(this.player.rooted, 0.05);
     this.player.update(dt, this.input, sprintOk, this.cam.isTop);
     this.physics.tick(dt);
 
@@ -364,8 +369,9 @@ export class Game {
     this.encounters.update(dt);
     this.rooftop.update(dt);
     this.props.update(dt);
-    this.vfx.update(dt);
-    this.cutscenes.update(raw);
+    // In a cutscene the effects bloom at half speed while the world holds still.
+    this.vfx.update(this.cutscenes.active && !this.clock.frozen ? Math.max(dt, raw * 0.5) : dt);
+    this.cutscenes.update(raw, dt);
     this.tutorial.update(dt);
     this.drills.update(dt);
     this.mastery.update(dt);

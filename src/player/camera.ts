@@ -16,6 +16,10 @@ export interface Shot {
   lookAt(t: number, out: THREE.Vector3): void;
   fov?: (t: number) => number;
   roll?: (t: number) => number;
+  // A cutscene's shot: its owner's timeline gives the normalized time, the
+  // shot holds the frame outright (a hard cut, no blend with the view), and
+  // it lasts until `cutBack` hands the camera back.
+  progress?: () => number;
 }
 
 const ease = (t: number): number => t * t * (3 - 2 * t);
@@ -63,7 +67,6 @@ export class CameraRig {
   private switchFrom: { pos: THREE.Vector3; quat: THREE.Quaternion; fov: number } | null = null;
   private switchT = 0;
   readonly forward = new THREE.Vector3(0, 0, -1);
-  skipRequested = false;
 
   constructor(readonly camera: THREE.PerspectiveCamera, private physics: Physics) {}
 
@@ -93,19 +96,44 @@ export class CameraRig {
     this.mode = mode;
     if (mode === 'top') this.pitch = 0;
   }
-  // Jumps straight to `mode`, for the debug hooks and the cutscene player.
+  // Jumps straight to `mode`, for the debug hooks.
   snap(mode: CameraMode): void { this.mode = mode; this.switchFrom = null; this.blend = mode === 'first' ? 0 : 1; this.topSettled = false; }
   cycleMode(): CameraMode { const next = CAMERA_MODES[(CAMERA_MODES.indexOf(this.mode) + 1) % CAMERA_MODES.length]!; this.setMode(next); return next; }
 
   play(shot: Shot): void {
     this.shot = shot;
     this.shotT = 0;
-    this.skipRequested = false;
   }
 
   // Ends the shot playing now with a short blend back to the view, for a
   // shot whose length was not known when it began (an Aura Clash).
   release(seconds: number): void { if (this.shot) this.shot.duration = Math.min(this.shot.duration, this.shotT + seconds); }
+
+  // Ends a cutscene's shot: the camera eases from the pose it holds back to
+  // the view the player uses, whichever it is.
+  cutBack(): void {
+    if (!this.shot) return;
+    this.shot = null;
+    this.switchFrom = { pos: this.camera.position.clone(), quat: this.camera.quaternion.clone(), fov: this.camera.fov };
+    this.switchT = 0;
+    this.topSettled = false;
+  }
+
+  // Puts a cutscene's shot on screen now, so a cut lands on the frame it is
+  // made rather than the one after.
+  showCut(): void {
+    const s = this.shot;
+    if (!s?.progress) return;
+    const u = s.progress();
+    s.position(u, this.tmpPos);
+    s.lookAt(u, this.tmpLook);
+    this.camera.position.copy(this.tmpPos);
+    this.camera.quaternion.setFromRotationMatrix(new THREE.Matrix4().lookAt(this.tmpPos, this.tmpLook, new THREE.Vector3(0, 1, 0)));
+    if (s.roll) this.camera.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), s.roll(u)));
+    if (s.fov) this.camera.fov = s.fov(u);
+    this.camera.updateProjectionMatrix();
+    this.forward.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
+  }
 
   get inShot(): boolean { return this.shot !== null; }
   get isFirst(): boolean { return this.blend < 0.5; }
@@ -191,18 +219,19 @@ export class CameraRig {
 
     if (this.shot) {
       this.shotT += rawDt;
-      const u = Math.min(1, this.shotT / this.shot.duration);
+      const cut = !!this.shot.progress;
+      const u = cut ? this.shot.progress!() : Math.min(1, this.shotT / this.shot.duration);
       this.shot.position(u, this.tmpPos);
       this.shot.lookAt(u, this.tmpLook);
       const inT = Math.min(1, this.shotT / 0.25);
       const outT = Math.max(0, (this.shotT - (this.shot.duration - 0.3)) / 0.3);
-      const w = ease(inT) * (1 - ease(outT));
+      const w = cut ? 1 : ease(inT) * (1 - ease(outT));
       this.camera.position.lerp(this.tmpPos, w);
       const lookQ2 = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(this.tmpPos, this.tmpLook, new THREE.Vector3(0, 1, 0)));
       if (this.shot.roll) lookQ2.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), this.shot.roll(u)));
       this.camera.quaternion.slerp(lookQ2, w);
       if (this.shot.fov) this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, this.shot.fov(u), w);
-      if (u >= 1 || this.skipRequested) { this.shot = null; this.skipRequested = false; }
+      if (u >= 1 && !cut) this.shot = null;
     }
 
     this.camera.updateProjectionMatrix();

@@ -8,6 +8,9 @@ import { FxWire } from './fxwire';
 import { RemotePlayer, seatSuit } from './remote';
 import { RULES, type ClientMsg, type PlayerInfo, type ServerMsg, type Vec3 } from './protocol';
 import type { Pick } from './clash';
+import { cutsceneTiming, enemyActor, playerActor, type CutsceneDef } from '../cutscene/cutscene';
+
+const kitOfCutscene = (id: string) => Object.values(KITS).find((k) => k.cutscene.id === id) ?? null;
 
 export type NetStatus = 'off' | 'connecting' | 'online' | 'reconnecting' | 'full';
 
@@ -230,7 +233,6 @@ export class Net {
           const d = r.position.distanceTo(g.player.position);
           const a = kit.audio[kind] ?? kit.audio.primary;
           if (d < 30) g.audio.play(a.cast, (a.volume ?? 0.6) * (1 - d / 30) * 0.8, a.pitch ?? 1);
-          if (kind === 'max') toast(`${r.info.name}: Maximum Output, ${kit.cutscene.title.en}`, 'bad');
         });
         return;
       }
@@ -244,7 +246,8 @@ export class Net {
         const from = new THREE.Vector3(...m.from);
         // This player's own defences decide what gets through: the same
         // rules as a hit from anything else in the compound.
-        const taken = g.combat.hurtPlayer(m.amount, { from, kinetic: true, pvp: true });
+        // In a Maximum Output's cutscene only its caster's blow lands.
+        const taken = g.combat.hurtPlayer(m.amount, { from, kinetic: true, pvp: true, cutscene: g.cutscenes.role === 'target' && g.cutscenes.partner === m.by });
         if (taken > 0 && m.knock > 0) {
           const away = g.player.position.clone().sub(from).setY(0).normalize();
           g.player.velocity.addScaledVector(away, m.knock);
@@ -299,7 +302,40 @@ export class Net {
       case 'clash-step':
         g.aura.clash.serverStep(m.id, m.a, m.b, m.ev);
         return;
+      case 'max': this.maxStarted(m); return;
+      case 'max-end':
+        if (m.caster === this.id || m.target === this.id) g.cutscenes.serverEnd();
+        return;
+      case 'max-denied':
+        if (g.cutscenes.role === 'caster' && !g.cutscenes.confirmed) { g.cutscenes.cancel(); toast('Maximum Output is not ready', 'bad'); }
+        return;
     }
+  }
+
+  // A Maximum Output began in the room. The caster's own screen already
+  // plays it; the target's plays the same cutscene from the receiving end,
+  // pulled into the shot and held; everyone else keeps playing and sees the
+  // two glow and stand still while the effects arrive.
+  private maxStarted(m: Extract<ServerMsg, { type: 'max' }>): void {
+    const g = this.game;
+    if (m.caster === this.id) { g.cutscenes.confirm(); return; }
+    const caster = this.remotes.get(m.caster), kit = kitOfCutscene(m.cut);
+    if (!caster || !kit) return;
+    if (m.target === this.id && !this.downed) {
+      // Our own Output, if one is starting, lost the race at the server.
+      if (g.cutscenes.active) g.cutscenes.cancel();
+      g.techniques.interrupt();
+      g.cutscenes.play({
+        def: kit.cutscene, caster: enemyActor(caster), target: playerActor(g), role: 'target', yaw: m.yaw, origin: new THREE.Vector3(...m.p),
+        sub: `${caster.info.name} · Maximum Output`, partner: m.caster,
+        gesture: () => undefined,
+        // The blow itself arrives from the caster through the server.
+        resolve: () => undefined,
+      });
+      return;
+    }
+    const target = m.target === null ? null : this.nameOf(m.target);
+    this.feed(target ? `${caster.info.name}: ${kit.cutscene.title.en} on ${target}` : `${caster.info.name}: ${kit.cutscene.title.en}`);
   }
 
   private goDown(by: number | null): void {
@@ -334,6 +370,12 @@ export class Net {
   // Health this player spends on its own Pacts and Risks.
   selfDamage(amount: number): void { if (!this.downed) this.send({ type: 'self', amount }); }
 
+  // This player began a Maximum Output: the server locks it and its target.
+  beginMax(def: CutsceneDef, target: number | null, yaw: number): void {
+    this.send({ type: 'max', cut: def.id, target, ms: Math.round(cutsceneTiming(def).total * 1000), p: v3(this.game.player.position), yaw });
+  }
+  endMax(): void { this.send({ type: 'max-end' }); }
+
   cast(kind: string, name: string): void {
     this.send({ type: 'cast', ct: performance.now(), kind, tech: this.game.techniqueId, name, dir: v3(this.game.cam.aimDirection()) });
   }
@@ -355,7 +397,7 @@ export class Net {
       if (now - this.lastSend >= SEND_MS - 2) {
         this.lastSend = now;
         const s = g.techniques.sign;
-        this.send({ type: 'state', s: { ct: now, p: v3(g.player.position), v: v3(g.player.velocity), yaw: Math.round(g.cam.yaw * 1000) / 1000, pitch: g.cam.isTop ? 0 : Math.round(g.cam.pitch * 1000) / 1000, g: g.player.grounded, sign: s.kind === 'signing' ? 1 : s.kind === 'primed' ? 2 : 0, cine: g.cutscenes.active, f: [Math.round(g.aura.field.radius * 100) / 100, Math.round(g.aura.field.density * 100) / 100] } });
+        this.send({ type: 'state', s: { ct: now, p: v3(g.player.position), v: v3(g.player.velocity), yaw: Math.round(g.cam.yaw * 1000) / 1000, pitch: g.cam.isTop ? 0 : Math.round(g.cam.pitch * 1000) / 1000, g: g.player.grounded, sign: s.kind === 'signing' || g.cutscenes.sealing ? 1 : s.kind === 'primed' ? 2 : 0, cine: g.cutscenes.active, f: [Math.round(g.aura.field.radius * 100) / 100, Math.round(g.aura.field.density * 100) / 100] } });
       }
     } else this.fx.take();
     for (const r of this.remotes.values()) r.update(raw);

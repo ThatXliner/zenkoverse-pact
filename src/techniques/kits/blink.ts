@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { signal } from '@preact/signals';
 import type { TechniqueKit } from '../kit';
 import { signGesture, gestureSet, rangeFor, hitCone, propsInCone, shoveProps } from './shared';
-import { anchored } from './shift';
 import type { Pact } from '../../pacts/schema';
+import { opening, blow, type CutsceneDef } from '../../cutscene/cutscene';
 
 const COLOR = 0xc6a8ff;
 export const blinkUi = { blind: signal(0), stare: signal(0) };
@@ -18,14 +18,18 @@ const catalogue: Pact[] = [
     { kind: 'restrict', restriction: { param: 'resource', value: 'all' } }, { kind: 'restrict', restriction: { param: 'trigger', value: 'eyesClosed' } }, { kind: 'restrict', restriction: { param: 'body', value: 'eyes' } }] },
 ];
 
-const cutscene = anchored({
-  id: 'max-blink', title: { jp: '閉眼', en: 'Eyes Shut' }, color: COLOR, timeScale: 0.1, letterbox: true,
+// Eyes Shut: an extreme close-up as the hands veil the eyes, over the
+// shoulder onto the target, then from in front of the target as the pulse
+// comes straight down the lens, and a wide side-on of the aftermath.
+const cutscene: CutsceneDef = {
+  id: 'max-blink', title: { jp: '閉眼', en: 'Eyes Shut' }, color: COLOR, pull: 4.5, reach: 12,
   shots: [
-    { duration: 1.2, from: [0.35, 1.62, -0.9], to: [0.2, 1.6, -0.6], look: [0, 1.58, 0], fov: [38, 30], events: [{ at: 0, kind: 'gesture' }, { at: 0.3, kind: 'title' }, { at: 0.1, kind: 'sfx', id: 'lowRandom', pitch: 0.6 }] },
-    { duration: 1.2, from: [0, 1.4, 3.2], to: [0, 1.6, 4.5], look: [0, 1.5, 0], lookTo: [0, 1.3, -6], fov: [60, 84], roll: [0, 0.06], events: [{ at: 0.4, kind: 'impactFrame', frames: 3 }, { at: 0.45, kind: 'resolveHit' }, { at: 0.45, kind: 'shake', amount: 1 }, { at: 0.45, kind: 'sfx', id: 'impactBell_heavy_002', pitch: 0.5 }, { at: 0.5, kind: 'slow', scale: 0.4 }] },
-    { duration: 0.7, from: [-3, 2, -5], to: [-3.5, 2.2, -6], look: [0, 1, -3], fov: [66, 60] },
+    { duration: 1.05, timeScale: 0.03, from: { pos: [0.42, 1.55, 1.05], look: [0, 1.5, 0], fov: 34 }, to: { pos: [0.28, 1.53, 0.78], fov: 26, roll: -0.03 }, events: opening('powerUp9', 0.6) },
+    { duration: 0.5, timeScale: 0.03, from: { pos: [0.55, 1.8, -1.1], look: [0, 1.35, 0], lookRel: 'target', fov: 50 }, to: { pos: [0.45, 1.75, -0.8], fov: 42 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'phaserUp3', pitch: 0.6 }] },
+    { duration: 0.95, timeScale: 0.3, from: { rel: 'target', pos: [-1.3, 1.45, 2.6], look: [0, 1.45, 0], lookRel: 'mid', fov: 64 }, to: { pos: [-1.8, 1.6, 3.8], fov: 84, roll: 0.06 }, events: [...blow(0, 'impactBell_heavy_002', 0.5)] },
+    { duration: 0.75, timeScale: 0.5, from: { rel: 'mid', pos: [6, 1.8, -0.5], look: [0, 1.0, 0.5], fov: 56 }, to: { pos: [6.6, 2.3, -1], fov: 52 }, ease: 'inOut' },
   ],
-});
+};
 
 export const blink: TechniqueKit = {
   id: 'blink', name: 'Blink', glyph: '瞬', color: COLOR, type: 'Manifestation',

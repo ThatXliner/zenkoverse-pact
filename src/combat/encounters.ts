@@ -4,7 +4,8 @@ import { appState, setState, type EncounterId } from '../app/state';
 import { banner, toast } from '../app/game';
 import { Enemy, NO_SCALE, type EnemyScale } from './enemies';
 import { combatUi } from './combat';
-import { anchored } from '../techniques/kits/shift';
+import { BOSS_ULTIMATES } from './ultimates';
+import { playerActor, enemyActor } from '../cutscene/cutscene';
 
 interface EncounterDef {
   id: EncounterId;
@@ -27,14 +28,6 @@ const DEFS: EncounterDef[] = [
   { id: 'ancient', title: 'The Hall', jp: '道場', where: new THREE.Vector3(-4, 0.3, -9), prompt: 'Challenge the Master of the hall', spawns: [{ key: 'ancient', offset: [0, 0, -7] }], intro: 'Five thousand years of Technique. Press F to open your field against hers.' },
   { id: 'dummy-room', title: 'Dummy Room', jp: '稽古', where: new THREE.Vector3(8, 0.3, -12), prompt: 'Spar with training dummies', spawns: [{ key: 'dummy', offset: [-3, 0, 0] }, { key: 'dummy', offset: [0, 0, -1] }, { key: 'dummy', offset: [3, 0, 0] }] },
 ];
-
-const bossUltimate = anchored({
-  id: 'boss-ancient', title: { jp: '五千年', en: 'Five Thousand Years' }, color: 0x7dffb2, timeScale: 0.1, letterbox: true,
-  shots: [
-    { duration: 1.0, from: [0.9, 1.5, -1.6], to: [0.6, 1.4, -1.2], look: [0, 1.4, 0], fov: [44, 38], events: [{ at: 0, kind: 'gesture' }, { at: 0.2, kind: 'title' }, { at: 0.1, kind: 'sfx', id: 'phaserUp3', pitch: 0.35 }] },
-    { duration: 1.2, from: [-3, 1.2, 2], to: [-4, 1.6, 3], look: [0, 1.2, 0], lookTo: [0, 1, -4], roll: [0.15, 0], fov: [62, 76], events: [{ at: 0.45, kind: 'impactFrame', frames: 3 }, { at: 0.5, kind: 'resolveHit' }, { at: 0.5, kind: 'shake', amount: 1 }, { at: 0.5, kind: 'sfx', id: 'impactBell_heavy_000', pitch: 0.35 }, { at: 0.55, kind: 'slow', scale: 0.5 }] },
-  ],
-});
 
 export class Encounters {
   readonly enemies: Enemy[] = [];
@@ -100,20 +93,20 @@ export class Encounters {
     return true;
   }
 
-  bossUltimate(boss: Enemy): void {
+  // A boss's Maximum Output: the same cutscene player as the player's, with
+  // the boss as the caster and the player pulled into the shot. False when
+  // the boss has none or another cutscene is running.
+  bossUltimate(boss: Enemy): boolean {
     const g = this.game;
-    g.cutscenes.play({
-      def: bossUltimate, caster: boss.avatar.root, casterYaw: boss.yaw, target: g.player.position.clone().add(new THREE.Vector3(0, 1.2, 0)),
-      onGesture: () => boss.avatar.playUpper('Spell_Simple_Enter', 0.8),
-      onResolve: () => {
-        const c = boss.position.clone();
-        for (let i = 1; i <= 4; i++) g.vfx.after(i * 0.06, () => g.vfx.ring(c.clone().add(new THREE.Vector3(0, 0.1 + i * 0.2, 0)), 0x7dffb2, 0.5, 6 * i, 0.7));
-        g.vfx.flash(boss.center(), 0x7dffb2, 120, 0.7, 30);
-        const d = g.player.position.distanceTo(c);
-        if (d < 22) g.combat.hurtPlayer(34 * (1 - d / 30), { from: c, kinetic: true });
-        for (const p of g.props.instances) if (p.mesh.position.distanceTo(c) < 22) { p.body.wakeUp(); p.body.applyImpulse(p.mesh.position.clone().sub(c).setY(0.8).normalize().multiplyScalar(p.def.mass * 9), true); }
-      },
-      onVfx: () => undefined,
+    const ult = BOSS_ULTIMATES[boss.def.ai];
+    if (!ult || g.cutscenes.active || !boss.alive) return false;
+    const d = g.player.position.clone().sub(boss.position);
+    const yaw = Math.atan2(-d.x, -d.z);
+    boss.yaw = yaw;
+    return g.cutscenes.play({
+      def: ult.cutscene, caster: enemyActor(boss), target: playerActor(g), role: 'target', yaw, sub: boss.def.name,
+      gesture: () => boss.avatar.playUpper('Spell_Simple_Enter', 0.8),
+      resolve: () => ult.resolve(g, boss),
     });
   }
 

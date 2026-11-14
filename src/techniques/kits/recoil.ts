@@ -4,7 +4,7 @@ import { signGesture, gestureSet, rangeFor, hitCone, propsInCone, shoveProps, fr
 import type { PropInstance } from '../../world/props';
 import { RAPIER } from '../../physics/world';
 import type { Pact } from '../../pacts/schema';
-import { anchored } from './shift';
+import { opening, blow, type CutsceneDef } from '../../cutscene/cutscene';
 import type { DrillDef } from '../../drills/drills';
 
 const COLOR = 0xff7a2f;
@@ -68,14 +68,18 @@ function releaseHeld(ctx: AbilityContext): number {
   return n;
 }
 
-const cutscene = anchored({
-  id: 'max-recoil', title: { jp: '零時', en: 'Zero Hour' }, color: COLOR, timeScale: 0.12, letterbox: true,
+// Zero Hour: a slow push in on the sign, a worm's-eye look up at the caster
+// with the target beyond, a hard cut wide as every stored joule leaves at
+// once, and a crane up over the wreck.
+const cutscene: CutsceneDef = {
+  id: 'max-recoil', title: { jp: '零時', en: 'Zero Hour' }, color: COLOR, pull: 3.4, reach: 12,
   shots: [
-    { duration: 1.1, from: [0.9, 1.55, -1.6], to: [0.6, 1.5, -1.2], look: [0, 1.45, 0], fov: [48, 40], events: [{ at: 0, kind: 'gesture' }, { at: 0.25, kind: 'title' }, { at: 0.1, kind: 'vfx', id: 'charge' }, { at: 0.2, kind: 'sfx', id: 'powerUp3', pitch: 0.7 }] },
-    { duration: 1.2, from: [-2.4, 0.5, 1.8], to: [-1.8, 0.7, 2.6], look: [0, 1.2, 0], lookTo: [0, 1.0, -3], roll: [0.22, 0.08], fov: [60, 72], events: [{ at: 0.45, kind: 'impactFrame', frames: 3 }, { at: 0.5, kind: 'resolveHit' }, { at: 0.5, kind: 'shake', amount: 0.9 }, { at: 0.5, kind: 'vfx', id: 'flash' }, { at: 0.5, kind: 'sfx', id: 'impactMining_000', pitch: 0.6 }, { at: 0.6, kind: 'slow', scale: 0.5 }] },
-    { duration: 0.8, from: [3.5, 2.6, 4.5], to: [3.0, 2.2, 3.5], look: [0, 1.0, -2], fov: [70, 62] },
+    { duration: 1.05, timeScale: 0.03, from: { pos: [1.05, 1.5, 2.0], look: [0, 1.38, 0], fov: 36 }, to: { pos: [0.72, 1.48, 1.5], fov: 30, roll: -0.04 }, events: opening('powerUp3', 0.7) },
+    { duration: 0.5, timeScale: 0.03, from: { pos: [-1.3, 0.25, -1.0], look: [0, 1.3, 0], lookRel: 'mid', fov: 60, roll: 0.14 }, to: { pos: [-1.0, 0.3, -0.6], fov: 54, roll: 0.1 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'phaserUp3', pitch: 0.5 }] },
+    { duration: 0.95, timeScale: 0.35, from: { rel: 'mid', pos: [5.2, 1.8, 1.0], look: [0, 1.0, 0], fov: 62, roll: -0.1 }, to: { pos: [6.4, 2.4, 1.6], fov: 76, roll: -0.03 }, events: [...blow(0, 'impactMining_000', 0.55), { at: 0.03, kind: 'sfx', id: 'impactBell_heavy_000', pitch: 0.6 }] },
+    { duration: 0.75, timeScale: 0.55, from: { rel: 'mid', pos: [-2.5, 6.5, -5.5], look: [0, 0.4, 0], fov: 58 }, to: { pos: [-3, 8.2, -6.8], fov: 62 }, ease: 'inOut' },
   ],
-});
+};
 
 const drill: DrillDef = {
   id: 'recoil-crane', technique: 'recoil', title: 'Crane Catch', jp: '受け身', brief: 'Crates drop from the hoist. Face them and hold Absorption before they land.',

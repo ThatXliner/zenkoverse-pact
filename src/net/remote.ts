@@ -183,8 +183,9 @@ export class RemotePlayer extends Enemy {
       this.avatar.setLocomotion(this.velocity, s.g, dt);
       this.avatar.setAimPitch(s.pitch);
       this.avatar.seal = s.sign === 1 ? 1 : 0;
-      // A Maximum Output in progress: the caster glows and cannot be hurt.
-      if (s.cine) this.avatar.flash(0.55);
+      // In a Maximum Output's cutscene: the two in it glow for everyone
+      // watching, but not in the cutscene's own close-ups.
+      if (s.cine && this.game.cutscenes.partner !== this.id) this.avatar.flash(0.55);
     }
     this.avatar.update(dt);
   }

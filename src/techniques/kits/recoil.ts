@@ -94,7 +94,7 @@ const drill: DrillDef = {
   },
   judge(game, prop, event) {
     if (event === 'caught') return 1;
-    setTimeout(() => game.props.remove(prop), 4000);
+    game.vfx.until(4, () => game.props.remove(prop));
     return 0;
   },
 };
@@ -157,7 +157,7 @@ export const recoil: TechniqueKit = {
         const hits = hitCone(ctx, range, 0.18, dmg, { knock: 5 + 8 * reserveFrac, lift: 3, kind: 'kinetic' });
         shoveProps(ctx, propsInCone(g, ctx.origin, ctx.dir, range, 0.2), 4 + 8 * reserveFrac, 0.8);
         g.techniques.resource *= 0.35;
-        for (let i = 1; i <= 6; i++) { const at = g.player.position.clone().addScaledVector(ctx.dir.clone().setY(0).normalize(), i * range / 6); at.y = 0.05; setTimeout(() => { g.vfx.ring(at, COLOR, 0.3, 1.6, 0.35); g.vfx.burst(at, 3, 'debris', 3); }, i * 45); }
+        for (let i = 1; i <= 6; i++) { const at = g.player.position.clone().addScaledVector(ctx.dir.clone().setY(0).normalize(), i * range / 6); at.y = 0.05; g.vfx.after(i * 0.045, () => { g.vfx.ring(at, COLOR, 0.3, 1.6, 0.35); g.vfx.burst(at, 3, 'debris', 3); }); }
         g.audio.play('impactMining_000', 0.7, 1.1);
         return { hits: hits.length, hitStop: hits.length ? 0.05 : 0, cameraKick: { fov: 7, pitch: 0.025 } };
       }
@@ -188,6 +188,12 @@ export const recoil: TechniqueKit = {
     hold(ctx, dt) { catchProps(ctx, dt); },
     release(ctx) { absorbing = false; releaseHeld(ctx); },
     passive(game) { if (!game.techniques.casting && absorbing) { absorbing = false; releaseHeld({ game, behaviors: [], potency: 0.5 } as unknown as AbilityContext); } },
+    // Whatever was caught drops where it is.
+    reset() {
+      absorbing = false;
+      for (const h of held) if (h.prop.alive) h.prop.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+      held.length = 0;
+    },
     onStruck(game, amount, from) {
       if (!absorbing) return amount;
       const dir = from.clone().sub(game.player.position).setY(0).normalize();

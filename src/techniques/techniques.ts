@@ -17,7 +17,6 @@ import { shift } from './kits/shift';
 import { rime } from './kits/rime';
 import { blink } from './kits/blink';
 import { echo } from './kits/echo';
-import { blinkUi } from './kits/blink';
 import { GROUP_PROP, GROUP_WORLD, GROUP_ENEMY } from '../physics/world';
 
 export const KITS: Record<TechniqueId, TechniqueKit> = { recoil, shift, rime, blink, echo };
@@ -83,13 +82,13 @@ export class Techniques {
     this.game.cutscenes.register(`max-${id}`, () => this.cast('max', true));
   }
 
-  // Drops any cast in flight and the sign state, for a new run or Technique.
-  // Blink's darkness only lifts while Blink is selected, so it is cleared
-  // here too, or a Technique change mid-blind would leave the screen black.
+  // Drops any cast in flight, the sign state and every kit's own state, for
+  // a new run or Technique. Every kit resets, not only the selected one: a
+  // kit's passive only runs while it is selected, so nothing else would.
   reset(): void {
     this.cast_ = null;
     this.sign = SIGN_IDLE;
-    blinkUi.blind.value = 0;
+    for (const k of Object.values(KITS)) k.effects.reset?.(this.game);
     this.game.hands.stop();
   }
 
@@ -253,7 +252,7 @@ export class Techniques {
     const risk = pact?.clauses.find((k) => k.kind === 'risk');
     if (risk && risk.kind === 'risk' && c.ctx.aim && restriction(pact!, 'range') === 'short' && c.ctx.aim.distanceTo(c.ctx.origin) > 6) {
       if (risk.cost === 'health') g.combat.hurtPlayer(8, { self: true });
-      if (risk.cost === 'exhaustion') { g.player.speedScale = 0.6; setTimeout(() => { g.player.speedScale = 1; }, 4000); }
+      if (risk.cost === 'exhaustion') { g.player.speedScale = 0.6; g.vfx.until(4, () => { g.player.speedScale = 1; }); }
       if (risk.cost === 'seal') this.seal(3);
       toast('Risk invoked: you pushed past the limit', 'bad');
     }

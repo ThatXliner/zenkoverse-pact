@@ -44,6 +44,10 @@ export interface TechniqueKit {
     release?(ctx: AbilityContext): void;
     passive?(game: Game, dt: number): void;
     onStruck?(game: Game, amount: number, from: THREE.Vector3): number;
+    // Drops whatever the kit keeps between frames (props held, a stance, a
+    // stare), for a new run or a new Technique. Effects in the world belong
+    // to Vfx and end with it.
+    reset?(game: Game): void;
   };
   audio: Record<AbilityKind, { cast: string; pitch?: number; volume?: number }>;
 }

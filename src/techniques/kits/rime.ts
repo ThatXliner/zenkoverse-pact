@@ -26,8 +26,6 @@ const cutscene = anchored({
   ],
 });
 
-const icePlatforms: { col: RAPIER.Collider; body: RAPIER.RigidBody; t: number }[] = [];
-
 function freezeProp(ctx: { game: import('../../app/game').Game }, p: import('../../world/props').PropInstance, seconds: number): void {
   const g = ctx.game;
   if (!p.def.traits.includes('freezable') && !p.def.traits.includes('porous') && !p.def.traits.includes('wood')) return;
@@ -54,12 +52,16 @@ function freezeArea(g: import('../../app/game').Game, center: THREE.Vector3, rad
   const pond = g.world.pond;
   if (Math.hypot(center.x - pond.center.x, center.z - pond.center.z) < pond.radius + radius * 0.5 && center.y < pond.surfaceY + 1) {
     const body = g.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(pond.center.x, pond.surfaceY - 0.1, pond.center.z));
-    const col = g.physics.world.createCollider(RAPIER.ColliderDesc.cylinder(0.1, pond.radius + 0.4), body);
-    icePlatforms.push({ col, body, t: seconds + 4 });
+    g.physics.world.createCollider(RAPIER.ColliderDesc.cylinder(0.1, pond.radius + 0.4), body);
     const slab = new THREE.Mesh(new THREE.CylinderGeometry(pond.radius + 0.4, pond.radius + 0.2, 0.2, 32), toon(0xdff6ff, { transparent: true, opacity: 0.9 }));
     slab.position.set(pond.center.x, pond.surfaceY - 0.1, pond.center.z);
     g.renderer.scene.add(slab);
-    setTimeout(() => g.renderer.scene.remove(slab), (seconds + 4) * 1000);
+    g.vfx.until(seconds + 4, () => {
+      g.renderer.scene.remove(slab);
+      slab.geometry.dispose();
+      (slab.material as THREE.Material).dispose();
+      g.physics.world.removeRigidBody(body);
+    });
   }
   g.vfx.burst(center.clone().add(new THREE.Vector3(0, 0.3, 0)), 12, 'shard', 5);
   g.audio.play('impactGlass_medium_000', 0.7, 0.9);
@@ -109,7 +111,7 @@ export const rime: TechniqueKit = {
         for (let i = 1; i <= 7; i++) {
           const at = start.clone().addScaledVector(flat, i * range / 7);
           at.y = 0;
-          setTimeout(() => { g.vfx.iceSpike(at, 0.8 + i * 0.25 * ctx.potency, 7); g.vfx.patch(at, 0.9, 'frost', 8); if (i % 2 === 0) g.audio.play('impactGlass_light_000', 0.4, 1.1 - i * 0.05); }, i * 55);
+          g.vfx.after(i * 0.055, () => { g.vfx.iceSpike(at, 0.8 + i * 0.25 * ctx.potency, 7); g.vfx.patch(at, 0.9, 'frost', 8); if (i % 2 === 0) g.audio.play('impactGlass_light_000', 0.4, 1.1 - i * 0.05); });
         }
         for (const p of propsInCone(g, ctx.origin, flat, range, 0.3)) { p.body.wakeUp(); p.body.applyImpulse(new THREE.Vector3(flat.x, 1.5, flat.z).multiplyScalar(p.def.mass * 3), true); if (ctx.behaviors.includes('pin')) freezeProp(ctx, p, 5); }
         g.audio.play('impactGlass_heavy_001', 0.6, 1);
@@ -129,7 +131,7 @@ export const rime: TechniqueKit = {
       if (ctx.shape === 'tenfold') {
         const center = g.player.position.clone();
         let hits = 0;
-        for (let ring = 1; ring <= 3; ring++) setTimeout(() => { hits += freezeArea(g, center, 4 * ring * (0.8 + ctx.potency * 0.4), ctx.potency * 1.4, true, 9); g.cam.shake(0.3); }, ring * 90);
+        for (let ring = 1; ring <= 3; ring++) g.vfx.after(ring * 0.09, () => { hits += freezeArea(g, center, 4 * ring * (0.8 + ctx.potency * 0.4), ctx.potency * 1.4, true, 9); g.cam.shake(0.3); });
         g.vfx.flash(center.clone().add(new THREE.Vector3(0, 1.5, 0)), COLOR, 100, 0.6, 24);
         g.vfx.ring(center.clone().add(new THREE.Vector3(0, 0.1, 0)), COLOR, 0.5, 16, 0.8);
         g.audio.play('impactGlass_heavy_000', 1, 0.5);
@@ -138,7 +140,6 @@ export const rime: TechniqueKit = {
       return undefined;
     },
     passive(game, dt) {
-      for (let i = icePlatforms.length - 1; i >= 0; i--) { const p = icePlatforms[i]!; p.t -= dt; if (p.t <= 0) { game.physics.world.removeRigidBody(p.body); icePlatforms.splice(i, 1); } }
       if (game.techniques.resource < 1 && game.techniques.casting) game.combat.hurtPlayer(dt * 6, { self: true });
     },
   },

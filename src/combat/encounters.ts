@@ -114,7 +114,7 @@ export class Encounters {
       onGesture: () => boss.avatar.playUpper('Spell_Simple_Enter', 0.8),
       onResolve: () => {
         const c = boss.position.clone();
-        for (let i = 1; i <= 4; i++) setTimeout(() => g.vfx.ring(c.clone().add(new THREE.Vector3(0, 0.1 + i * 0.2, 0)), 0x7dffb2, 0.5, 6 * i, 0.7), i * 60);
+        for (let i = 1; i <= 4; i++) g.vfx.after(i * 0.06, () => g.vfx.ring(c.clone().add(new THREE.Vector3(0, 0.1 + i * 0.2, 0)), 0x7dffb2, 0.5, 6 * i, 0.7));
         g.vfx.flash(boss.center(), 0x7dffb2, 120, 0.7, 30);
         const d = g.player.position.distanceTo(c);
         const shielded = g.aura.active && g.aura.clashing;

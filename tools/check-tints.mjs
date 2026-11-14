@@ -1,7 +1,8 @@
 // Fails when a character's suit colour reads as bare skin, or when an enemy's
 // suit sits too close to the player's. Suits are flat fills in the cel look,
 // so a warm, low-saturation, mid-light suit makes a character look naked, and
-// two suits of one hue make a fight unreadable from the top-down camera.
+// two suits of one hue make a fight unreadable from the top-down camera. It
+// also holds each role to its own costume, with no piece in a skin tone.
 // Run: npm run check:tints
 import { readFileSync } from 'node:fs';
 
@@ -43,4 +44,20 @@ for (const [a, b] of pairs) {
   const gap = hueGap(ta, tb), dl = Math.abs(hsl(ta).l - hsl(tb).l);
   report(gap > 30 || dl > 0.25, `${a} and ${b} are told apart (hue gap ${gap.toFixed(0)}°, lightness gap ${dl.toFixed(2)})`);
 }
+// Costumes (src/character/costume.ts): every role wears its own, and no
+// piece of one reads as bare skin either, or a sash or a robe would look like
+// a bare chest or a bare leg.
+const costumes = readFileSync('src/character/costume.ts', 'utf8');
+const ids = [...enemies.matchAll(/^\s*(\w+): \{[^\n]*costume: '(\w+)'/gim)].map((m) => ({ key: m[1], costume: m[2] }));
+report(ids.length === rows.length, `every enemy role names a costume (${ids.length} of ${rows.length})`);
+const worn = ids.map((r) => r.costume);
+report(new Set(worn).size === worn.length, `no two roles share a costume (${worn.join(', ')})`);
+const start = costumes.indexOf('export const COSTUMES');
+const body = costumes.slice(start, costumes.indexOf('\n};', start));
+for (const id of new Set(worn)) report(new RegExp(`^  ${id}: \\[`, 'm').test(body), `costume ${id} is defined`);
+const named = Object.fromEntries([...costumes.matchAll(/^const (\w+) = (0x[0-9a-f]{6});/gim)].map((m) => [m[1], parseInt(m[2], 16)]));
+const pieceColors = [...body.matchAll(/color: (0x[0-9a-f]{6}|[A-Z_]+)/g)].map((m) => (m[1].startsWith('0x') ? parseInt(m[1], 16) : named[m[1]]));
+report(pieceColors.length >= 30 && pieceColors.every((c) => c !== undefined), `${pieceColors.length} costume piece colours found`);
+const skinPieces = [...new Set(pieceColors.filter((c) => c !== undefined && skinLike(c)))];
+report(skinPieces.length === 0, `no costume piece reads as skin${skinPieces.length ? ` (${skinPieces.map((c) => c.toString(16)).join(', ')})` : ''}`);
 if (failed) { console.error(`${failed} tint checks failed`); process.exit(1); }

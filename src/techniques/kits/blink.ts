@@ -103,6 +103,9 @@ export const blink: TechniqueKit = {
       blinkUi.stare.value = Math.min(1, stare / 6);
       if (blinkUi.blind.value > 0) blinkUi.blind.value = Math.max(0, blinkUi.blind.value - dt);
     },
+    // The darkness only lifts in the passive, which runs only while Blink is
+    // selected, so a Technique change mid-blind must lift it here.
+    reset() { stare = 0; blinkUi.stare.value = 0; blinkUi.blind.value = 0; },
   },
   audio: { primary: { cast: 'lowRandom', volume: 0.35, pitch: 1.2 }, secondary: { cast: 'lowRandom', volume: 0.3, pitch: 0.9 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 0.6 } },
 };

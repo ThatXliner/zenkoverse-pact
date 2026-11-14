@@ -54,6 +54,13 @@ export function banner(big: string, small: string): void {
   hud.banner.value = { big, small, id: ++toastId };
   setTimeout(() => { if (hud.banner.value?.big === big) hud.banner.value = null; }, 2500);
 }
+// Toasts and banners speak about the scene they were raised in, so a new
+// scene starts with none: a run restarted inside a toast's few seconds would
+// otherwise show the last run's message above its own copy of it.
+function clearMessages(): void {
+  hud.toasts.value = [];
+  hud.banner.value = null;
+}
 
 // The Architect's desk in the hall, where the Workshop can also be opened by hand.
 const ARCHITECT_DESK = new THREE.Vector3(-10, 0.3, -16.4);
@@ -148,14 +155,32 @@ export class Game {
     this.techniqueId = id;
     this.book.setTechnique(id);
     this.techniques.select(id);
+    this.endEffects();
     this.hands.setTechnique(this.techniques.def);
+  }
+
+  // Every effect in the world ends with the Technique, run or scene that
+  // made it: Vfx owns them all, props come out of the ice, and each kit
+  // drops what it holds.
+  private endEffects(): void {
+    this.vfx.clear();
+    this.props.thaw();
+    this.techniques.reset();
+    this.player.speedScale = 1;
+  }
+
+  // A scene ends: a run restarts, the rooftop trial begins or ends. Its
+  // effects, its enemies and its messages go with it.
+  endScene(): void {
+    this.endEffects();
+    this.encounters.reset();
+    clearMessages();
   }
 
   startRun(opts: { skipTutorial?: boolean } = {}): void {
     this.rooftop.abandon();
     this.combat.resetPlayer();
-    this.techniques.reset();
-    this.encounters.reset();
+    this.endScene();
     this.book.preview.value = null;
     this.player.teleport(SPAWN.courtyard.clone());
     this.cam.yaw = 0;

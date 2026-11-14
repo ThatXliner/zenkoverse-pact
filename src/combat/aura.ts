@@ -26,7 +26,7 @@ export class Aura {
     const mk = (color: number) => new THREE.ShaderMaterial({ uniforms: { color: { value: new THREE.Color(color) }, time: { value: 0 }, strength: { value: 1 } }, vertexShader: shellVert, fragmentShader: shellFrag, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
     this.mat = mk(0xffffff);
     this.bossMat = mk(0x7dffb2);
-    // Her field is wide enough to swallow the camera indoors; keep it a tint, not a wash.
+    // Seen from inside, her field tints the whole frame; keep it a tint, not a wash.
     this.bossMat.uniforms.strength!.value = 0.4;
     this.shell = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), this.mat);
     this.bossShell = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), this.bossMat);
@@ -59,7 +59,7 @@ export class Aura {
         banner('崩壊', 'Her field collapsed. Press the opening.');
         g.renderer.impactFrame(2, new THREE.Color(0xffffff));
         g.clock.hitStop(0.1);
-        setTimeout(() => { if (boss.alive) boss.aura.active = true; }, 9000);
+        g.vfx.after(9, () => { if (boss.alive) boss.aura.active = true; });
       } else if (this.clash <= -1) {
         this.clash = 0;
         this.energy = 0;
@@ -78,11 +78,21 @@ export class Aura {
     this.shell.position.copy(g.player.position).add(new THREE.Vector3(0, 0.9, 0));
     this.shell.scale.setScalar(Math.max(0.01, this.radius));
     if (boss) {
-      this.bossShell.visible = boss.aura.radius > 0.2;
-      this.bossShell.position.copy(boss.center());
-      this.bossShell.scale.setScalar(Math.max(0.01, boss.aura.radius));
+      const r = boss.aura.radius, center = boss.center();
+      const inside = boss.position.distanceTo(g.player.position) < r;
+      this.bossShell.visible = r > 0.2;
+      this.bossShell.position.copy(center);
+      // Under a roof the field fills the room up to its ceiling, not out through it.
+      const zone = g.world.zoneAt(boss.position);
+      const tall = zone?.indoors ? Math.max(0.5, zone.max.y - center.y) : r;
+      this.bossShell.scale.set(Math.max(0.01, r), Math.max(0.01, Math.min(r, tall)), Math.max(0.01, r));
+      // The far wall of the field is what tints the frame from inside it. It
+      // draws only while the player stands in the field: a camera that has
+      // drifted inside while the player is out sees nothing.
+      const side = inside ? THREE.DoubleSide : THREE.FrontSide;
+      if (this.bossMat.side !== side) { this.bossMat.side = side; this.bossMat.needsUpdate = true; }
       this.bossMat.uniforms.time!.value = g.clock.time;
-      if (boss.aura.active && !this.active && boss.position.distanceTo(g.player.position) < boss.aura.radius) g.player.speedScale = 0.6;
+      if (boss.aura.active && !this.active && inside) g.player.speedScale = 0.6;
       else if (g.player.speedScale < 1 && !clashing) g.player.speedScale = Math.min(1, g.player.speedScale + dt);
     } else this.bossShell.visible = false;
     auraUi.active.value = this.active;

@@ -82,7 +82,7 @@ export const echo: TechniqueKit = {
         let hits = 0;
         if (allow.people) for (const e of g.techniques.enemiesInCone(ctx.origin, ctx.dir, range, 0.5)) { resonate(ctx, e, ctx.behaviors.includes('stack') ? 1.4 : 1); hits++; }
         if (allow.props) for (const p of propsInCone(g, ctx.origin, ctx.dir, range, 0.55)) { if (p.def.traits.includes('resonant')) { echo.traits.resonant!(p, ctx); hits++; } else { p.body.wakeUp(); p.body.applyImpulse(ctx.dir.clone().multiplyScalar(p.def.mass * 1.5), true); } }
-        for (let i = 1; i <= 4; i++) setTimeout(() => g.vfx.ring(ctx.origin.clone().addScaledVector(ctx.dir, i * range / 4), COLOR, 0.4, 1.2 + i * 0.6, 0.3, ctx.dir), i * 40);
+        for (let i = 1; i <= 4; i++) g.vfx.after(i * 0.04, () => g.vfx.ring(ctx.origin.clone().addScaledVector(ctx.dir, i * range / 4), COLOR, 0.4, 1.2 + i * 0.6, 0.3, ctx.dir));
         g.audio.play('impactBell_heavy_000', 0.45, 1.3);
         g.mastery.gain('echo', 'precision', 0.003);
         return { hits, hitStop: hits ? 0.03 : 0, cameraKick: { fov: 4 } };
@@ -94,7 +94,7 @@ export const echo: TechniqueKit = {
         let hits = 0;
         for (const e of g.techniques.enemiesInSphere(center, radius)) { e.resonance = 5; resonate(ctx, e, 1); g.combat.hitEnemy(e, 70 * ctx.potency, { from: center, knock: 8, lift: 4, kind: 'resonance', heavy: true }); hits++; }
         for (const p of [...g.props.instances]) if (p.mesh.position.distanceTo(center) < radius) { if (p.def.breakable) breakProp(g, p, center); else { p.body.wakeUp(); p.body.applyImpulse(new THREE.Vector3(0, p.def.mass * 4, 0), true); } }
-        for (let i = 1; i <= 5; i++) setTimeout(() => { g.vfx.ring(center.clone().add(new THREE.Vector3(0, 0.1 + i * 0.3, 0)), COLOR, 0.5, radius * (0.5 + i * 0.15), 0.6); g.cam.shake(0.25); }, i * 70);
+        for (let i = 1; i <= 5; i++) g.vfx.after(i * 0.07, () => { g.vfx.ring(center.clone().add(new THREE.Vector3(0, 0.1 + i * 0.3, 0)), COLOR, 0.5, radius * (0.5 + i * 0.15), 0.6); g.cam.shake(0.25); });
         g.vfx.flash(center.clone().add(new THREE.Vector3(0, 1.5, 0)), COLOR, 120, 0.7, 28);
         g.audio.play('impactBell_heavy_000', 1, 0.4);
         g.combat.hurtPlayer(g.combat.maxHp * 0.1, { self: true });
@@ -108,6 +108,7 @@ export const echo: TechniqueKit = {
       for (const e of g.techniques.enemiesInSphere(g.player.position, 5)) e.resonance = Math.max(0, e.resonance - dt * 2);
     },
     release() { quiet = false; },
+    reset() { quiet = false; },
     passive(game) { if (!game.techniques.casting) quiet = false; },
     onStruck(game, amount) {
       if (!quiet) return amount;

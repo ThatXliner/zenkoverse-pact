@@ -235,13 +235,35 @@ const BEATS = { push: 'hold', hold: 'feint', feint: 'push' };
 const KEY = { push: 'KeyW', hold: 'KeyS', feint: 'KeyA' };
 const COUNTER_PICK = { push: 'feint', hold: 'push', feint: 'hold' };
 let shotTell = false, shotReveal = false, speeds = [];
+// Her body as the clash shot sees it: each hand in her own frame from the
+// ground point she stands on, x to her right, y up, z toward the player.
+const posed = {};
+const masterPose = () => page.evaluate(() => {
+  const G = window.game.game;
+  const m = G.encounters.enemies.find((e) => e.def.ai === 'ancient');
+  const V = G.player.position.constructor;
+  const fwd = new V(-Math.sin(m.yaw), 0, -Math.cos(m.yaw)), right = new V(-fwd.z, 0, fwd.x);
+  const at = (n) => { const p = m.avatar.boneWorld(n, new V()).sub(m.position); return { x: p.dot(right), y: p.y, z: p.dot(fwd) }; };
+  return { stance: m.avatar.stance, l: at('hand_l'), r: at('hand_r') };
+});
+// What each pick must look like: a push drives both hands out at the
+// opponent, a hold crosses them together before the chest, a feint throws
+// the lead hand high and the rear one low and back.
+const POSE_TEST = {
+  push: (p) => Math.min(p.l.z, p.r.z) > 0.45,
+  hold: (p) => Math.abs(p.l.x - p.r.x) < 0.2 && Math.max(p.l.z, p.r.z) < 0.35,
+  feint: (p) => p.r.y - p.l.y > 0.25 && p.r.z - p.l.z > 0.2,
+};
+const poseWords = (p) => `hands at ${['l', 'r'].map((h) => `${h} ${p[h].x.toFixed(2)},${p[h].y.toFixed(2)},${p[h].z.toFixed(2)}`).join('; ')}`;
 async function fight(answer) {
   for (let i = 0; i < 400; i++) {
     const s = await page.evaluate(() => { const G = window.game.game; return { stage: G.aura.clash.stage, pick: G.aura.clash.masterPick, mine: window.game.aura().clash.view?.mine ?? null, ratio: G.clock.dt / G.clock.raw }; });
     if (s.stage === null) return;
     speeds.push(s.ratio);
     if (s.stage === 'choose' && s.pick && !s.mine) {
-      await step(3);
+      await step(15);
+      const pose = await masterPose();
+      if (!posed[s.pick]) { posed[s.pick] = pose; await shot(`clash-tell-${s.pick}`); }
       if (!shotTell) {
         const wash = await fieldWash();
         check(wash < 4, `in the hall the clash shot is not washed by the fields (mean change ${wash.toFixed(2)} of 255 above the floor)`);
@@ -288,6 +310,18 @@ check(a.state === 'open', `the player's field stays open (${a.state})`);
 check(a.hp === hp1 && a.master.hp === master1.hp, `nobody lost health (player ${hp1} to ${a.hp}, Master ${master1.hp} to ${a.master.hp})`);
 await page.evaluate(() => { window.game.step(20); });
 await shot('clash-after');
+
+console.log("\nthe Master's tells read from her body");
+for (const [pick, p] of Object.entries(posed)) check(p.stance === pick && POSE_TEST[pick](p), `in the clash her ${pick} shows in her pose (${p.stance}, ${poseWords(p)})`);
+// Every pick, whichever she happened to choose above, with her held still.
+await page.evaluate(() => { const G = window.game.game; const m = G.encounters.enemies.find((e) => e.def.ai === 'ancient'); m.hold(1e6); m.velocity.set(0, 0, 0); window.game.step(90); });
+const neutral = await masterPose();
+for (const pick of ['push', 'hold', 'feint']) {
+  await page.evaluate((k) => { const G = window.game.game; G.encounters.enemies.find((e) => e.def.ai === 'ancient').avatar.stance = k; window.game.step(30); }, pick);
+  const p = await masterPose();
+  check(POSE_TEST[pick](p) && !POSE_TEST[pick](neutral), `her ${pick} stance reads apart from her rest pose (${poseWords(p)}; at rest ${poseWords(neutral)})`);
+}
+await page.evaluate(() => { const G = window.game.game; G.encounters.enemies.find((e) => e.def.ai === 'ancient').avatar.stance = null; G.encounters.enemies.find((e) => e.def.ai === 'ancient').hold(0); window.game.step(30); });
 
 const pageErrors = await page.evaluate(() => window.game.errors);
 errors.push(...pageErrors.map((e) => `window: ${e}`));

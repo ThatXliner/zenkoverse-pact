@@ -13,6 +13,10 @@ import type { PoseName } from '../hands/poses';
 import { MASTERY_CONFIG } from '../mastery/mastery';
 import { netUi } from '../net/net';
 import { clashUi } from '../combat/clash';
+import { setSetting, type Settings } from './settings';
+import { KITS } from '../techniques/techniques';
+import { BOSS_ULTIMATES } from '../combat/ultimates';
+import { cutsceneTiming, type CutsceneLog } from '../cutscene/cutscene';
 
 export interface DebugApi {
   game: Game;
@@ -30,7 +34,12 @@ export interface DebugApi {
   drill(id: DrillId): void;
   workshop(open: boolean): void;
   tutorialStep(step: string): void;
+  // Plays a Maximum Output's cutscene: a Technique's by its cutscene id
+  // (max-recoil, ...), with the Technique switched in and the charge full.
   cutscene(id: string): void;
+  // The cutscene player as the checks read it.
+  cutscenes(): CutsceneView;
+  setting<K extends keyof Settings>(key: K, value: Settings[K]): void;
   freezeTime(on: boolean): void;
   loop(on: boolean): void;
   step(frames: number, dt?: number): void;
@@ -58,6 +67,19 @@ export interface DebugApi {
   // The online room as the multiplayer check reads it: this player, the
   // others as drawn here, and the hits sent and health changes heard.
   net(): NetView | null;
+}
+
+export interface CutsceneView {
+  ids: string[];
+  active: boolean;
+  presenting: boolean;
+  role: string | null;
+  timeline: { t: number; beat: number | null; end: number } | null;
+  log: CutsceneLog[];
+  defs: Record<string, { total: number; beat: number | null; shots: number; pull: number | null; reach: number }>;
+  cam: { mode: string; inShot: boolean; pos: [number, number, number] };
+  slowMo: number;
+  inputEnabled: boolean;
 }
 
 export interface AuraView {
@@ -106,6 +128,19 @@ export function installDebug(game: Game): void {
     workshop(open) { if (open) game.openWorkshop(); else game.closeWorkshop(); },
     tutorialStep(step) { game.tutorial.jump(step as never); },
     cutscene(id) { game.cutscenes.playById(id); },
+    setting(key, value) { setSetting(key, value); },
+    cutscenes() {
+      const c = game.cutscenes, cam = game.renderer.camera.position;
+      const defs: CutsceneView['defs'] = {};
+      for (const d of [...Object.values(KITS).map((k) => k.cutscene), ...Object.values(BOSS_ULTIMATES).map((u) => u!.cutscene)]) {
+        const t = cutsceneTiming(d);
+        defs[d.id] = { total: t.total, beat: t.beat, shots: d.shots.length, pull: d.pull, reach: d.reach };
+      }
+      return {
+        ids: c.ids, active: c.active, presenting: c.presenting, role: c.role, timeline: c.timeline, log: c.log.map((l) => ({ ...l, events: [...l.events] })), defs,
+        cam: { mode: game.cam.mode, inShot: game.cam.inShot, pos: [cam.x, cam.y, cam.z] }, slowMo: game.clock.slowMo, inputEnabled: game.input.enabled,
+      };
+    },
     freezeTime(on) { game.clock.slowMo = on ? 0 : 1; },
     loop(on) { game.loop(on); },
     step(frames, dt) { game.step(frames, dt); },

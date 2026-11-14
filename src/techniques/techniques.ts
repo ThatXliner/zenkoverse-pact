@@ -18,6 +18,8 @@ import { rime } from './kits/rime';
 import { blink } from './kits/blink';
 import { echo } from './kits/echo';
 import { GROUP_PROP, GROUP_WORLD, GROUP_ENEMY } from '../physics/world';
+import { playerActor, enemyActor } from '../cutscene/cutscene';
+import { RULES } from '../net/protocol';
 
 export const KITS: Record<TechniqueId, TechniqueKit> = { recoil, shift, rime, blink, echo };
 
@@ -65,10 +67,16 @@ export class Techniques {
   private struckRecently = 0;
   sealed = 0;
   sign: SignState = SIGN_IDLE;
+  // When this player last began a Maximum Output (performance.now()).
+  private maxAt = -Infinity;
   readonly limbTrail: THREE.Vector3[] = [];
 
   constructor(private game: Game) {
-    for (const k of Object.values(KITS)) { game.book.registerCatalogue(k.id, k.catalogue); if (k.drill) game.drills.register(k.drill); }
+    for (const k of Object.values(KITS)) {
+      game.book.registerCatalogue(k.id, k.catalogue);
+      if (k.drill) game.drills.register(k.drill);
+      game.cutscenes.register(k.cutscene.id, () => { if (game.techniqueId !== k.id) game.setTechnique(k.id); this.charge = 1; this.beginMax(); });
+    }
     effect(() => this.refreshSlots());
   }
 
@@ -79,7 +87,6 @@ export class Techniques {
     this.charge = 0;
     this.reset();
     this.refreshSlots();
-    this.game.cutscenes.register(`max-${id}`, () => this.cast('max', true));
   }
 
   // Drops any cast in flight, the sign state and every kit's own state, for
@@ -228,12 +235,14 @@ export class Techniques {
     // Inside an open aura field the player senses and acts faster (issue #4).
     const speed = (1 + g.mastery.get(this.def.id, 'speed') * 0.7) * (variant === 'long' ? 1 : 1.15) * g.aura.castSpeed;
     const held = restriction(pact ?? ({ clauses: [] } as unknown as Pact), 'duration') === 'held' || !!(!pact && kind === 'secondary' && this.def.effects.hold);
-    g.hands.play(gesture, speed, () => undefined, (k) => g.cam.kick(k));
+    // A Maximum Output's sign is already playing in its cutscene, timed to this beat.
+    const cut = kind === 'max' && g.cutscenes.active;
+    if (!cut) g.hands.play(gesture, speed, () => undefined, (k) => g.cam.kick(k));
     g.avatar.playUpper(this.def.avatarClips[kind], speed * 1.1);
     this.cast_ = { slot, ctx, t: 0, impactAt: gesture.impactAt / speed, duration: gesture.duration / speed, fired: false, held };
     const a = this.def.audio[kind];
-    g.audio.play(a.cast, a.volume ?? 0.6, (a.pitch ?? 1) * (variant === 'none' ? 1.15 : 1));
-    if (kind !== 'max') g.net?.cast(kind, pact?.name ?? `Raw ${this.def.primitive.name}`);
+    if (!cut) g.audio.play(a.cast, a.volume ?? 0.6, (a.pitch ?? 1) * (variant === 'none' ? 1.15 : 1));
+    g.net?.cast(kind, kind === 'max' ? this.def.cutscene.title.en : pact?.name ?? `Raw ${this.def.primitive.name}`);
     this.cooldown[slot] = KIND_DEFS[kind].cooldown;
     if (kind === 'max') this.charge = 0;
     if (g.combat.wagerArmed) g.combat.wagerCommitted(slot);
@@ -289,6 +298,7 @@ export class Techniques {
         for (const s of KEY_SLOTS) {
           if (!inp.hit(s)) continue;
           if (this.kindOf(s) !== 'max') { this.cast(s); continue; }
+          if (g.net && performance.now() - this.maxAt < RULES.max.cooldownMs) { toast('Maximum Output is not ready', 'bad'); continue; }
           if (this.charge >= (g.combat.flags.overextension ? 0.5 : 1) && this.sealed <= 0 && !this.cast_) {
             if (g.combat.flags.overextension && this.charge < 1) g.combat.hurtPlayer(g.combat.maxHp * 0.25, { self: true });
             this.beginMax();
@@ -373,30 +383,50 @@ export class Techniques {
     } else if (s.kind === 'primed') {
       s.left -= dt;
       if (s.left <= 0) { this.sign = SIGN_IDLE; g.hands.stop(); g.avatar.playUpper('Spell_Simple_Exit', 1); }
-    } else g.avatar.seal = 0;
+    } else if (!g.cutscenes.active) g.avatar.seal = 0;
   }
 
-  // Maximum Output routes through the cutscene player: the world freezes, the
-  // full sign plays regardless of Activation, and the effect fires on the
-  // resolveHit beat.
-  beginMax(): void {
-    const g = this.game;
-    const target = g.targets().filter((e) => e.alive && e.position.distanceTo(g.player.position) < 30).sort((a, b) => a.position.distanceTo(g.player.position) - b.position.distanceTo(g.player.position))[0];
-    const targetPos = target ? target.position.clone().add(new THREE.Vector3(0, 1.2, 0)) : null;
-    g.avatar.root.visible = true;
-    // Online the world does not wait for the cutscene: the caster is untouchable
-    // for its length instead, and glows on the other screens.
-    if (g.net) { g.combat.invuln = Math.max(g.combat.invuln, this.def.cutscene.shots.reduce((t, s) => t + s.duration, 0) + 0.2); g.net.cast('max', this.def.cutscene.title.en); }
-    g.cutscenes.play({
-      def: this.def.cutscene,
-      caster: g.avatar.root,
-      casterYaw: g.cam.yaw,
-      target: targetPos,
-      onGesture: () => { g.avatar.playUpper(this.def.avatarClips.max, 0.9); g.hands.play(this.def.gestures.max!.long, 0.9, () => undefined, () => undefined); },
-      onResolve: () => { this.cast('max', true); if (this.cast_) this.fire(this.cast_); },
-      onVfx: (id) => { if (id === 'charge') g.vfx.ring(g.player.position.clone().add(new THREE.Vector3(0, 0.05, 0)), this.def.color, 0.2, 3, 0.8); if (id === 'flash') g.vfx.flash(g.player.eye(), this.def.color, 60, 0.5, 20); },
-      onEnd: () => { this.cast_ = null; },
+  // Maximum Output plays through the cutscene player (issue #27): the
+  // nearest body within the Output's reach is pulled into the shot, the full
+  // sign plays whatever the Activation, timed so its strike lands on the
+  // beat, and the kit's effect fires on that beat, aimed at the target.
+  beginMax(): boolean {
+    const g = this.game, def = this.def.cutscene;
+    if (g.cutscenes.active) return false;
+    const me = g.player.position;
+    const target = g.targets()
+      .filter((e) => e.alive && e.position.distanceTo(me) < def.reach && !g.aura.clash.involves(e))
+      .sort((a, b) => a.position.distanceTo(me) - b.position.distanceTo(me))[0] ?? null;
+    let yaw = g.cam.yaw;
+    if (target) { const d = target.position.clone().sub(me); yaw = Math.atan2(-d.x, -d.z); }
+    g.cam.yaw = yaw;
+    const partner = target?.def.ai === 'rival' ? (target as Enemy & { id: number }).id : null;
+    const charge = this.charge;
+    const ok = g.cutscenes.play({
+      def, caster: playerActor(g), target: target ? enemyActor(target) : null, role: 'caster', yaw, partner,
+      sub: `Maximum Output · ${this.def.name}`,
+      gesture: (beatIn) => {
+        const gesture = this.def.gestures.max!.long;
+        g.hands.play(gesture, gesture.impactAt / beatIn, () => undefined, () => undefined);
+      },
+      resolve: () => {
+        g.cam.yaw = yaw;
+        g.cam.pitch = 0;
+        this.cast('max', true);
+        if (this.cast_) this.fire(this.cast_);
+      },
+      end: (resolved) => {
+        this.cast_ = null;
+        // Ended before the blow (the server refused it, the scene ended): the charge comes back.
+        if (!resolved) this.charge = Math.max(this.charge, charge);
+        g.net?.endMax();
+      },
     });
+    if (!ok) return false;
+    this.charge = 0;
+    this.maxAt = performance.now();
+    g.net?.beginMax(def, partner, yaw);
+    return true;
   }
 
   // Shared spatial queries for kits.

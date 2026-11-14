@@ -13,18 +13,25 @@ export interface Settings {
   camera: CameraMode;
   invertY: boolean;
   showMastery: boolean;
-  skipCutscenes: boolean;
+  // Maximum Output cutscenes: always in full, in full the first time and
+  // shortened after, or never (the sign and the blow play from your own view).
+  cutscenes: CutscenePlay;
 }
+export type CutscenePlay = 'always' | 'first' | 'never';
 
 // v3: the camera gained the top-down view and it became the default.
 const KEY = 'zenko.settings.v3';
-const defaults: Settings = { sensitivity: 1, fov: 80, quality: 'high', volume: 0.8, music: 0.6, camera: 'top', invertY: false, showMastery: true, skipCutscenes: false };
+const defaults: Settings = { sensitivity: 1, fov: 80, quality: 'high', volume: 0.8, music: 0.6, camera: 'top', invertY: false, showMastery: true, cutscenes: 'always' };
 
 function load(): Settings {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return defaults;
-    return { ...defaults, ...(JSON.parse(raw) as Partial<Settings>) };
+    const saved = JSON.parse(raw) as Partial<Settings> & { skipCutscenes?: boolean };
+    // The old on/off skip toggle becomes "never".
+    if (saved.skipCutscenes && !saved.cutscenes) saved.cutscenes = 'never';
+    delete saved.skipCutscenes;
+    return { ...defaults, ...saved };
   } catch { return defaults; }
 }
 

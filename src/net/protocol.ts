@@ -10,6 +10,10 @@ export const RULES = rulesJson as {
   respawnSeconds: number; spawnProtectSeconds: number; hitTimeoutMs: number; maxHitDamage: number; maxHitRange: number;
   reconnectGraceSeconds: number; spawns: [number, number, number][];
   field: { maxRadius: number; clashSlack: number; clashCooldownMs: number };
+  // A Maximum Output cutscene's lock (issue #27): how long it may hold its
+  // two people, how often one player may start one, how far the target may
+  // stand, and how many blows the caster may land on each body during it.
+  max: { minMs: number; maxMs: number; cooldownMs: number; reach: number; slack: number; hitsPerTarget: number };
   clash: ClashRules & { graceMs: number };
 };
 
@@ -25,9 +29,9 @@ export interface PlayerState {
   yaw: number;
   pitch: number;
   g: boolean;
-  // 0 idle, 1 signing, 2 primed.
+  // 0 idle, 1 signing (or holding a Maximum Output's seal), 2 primed.
   sign: 0 | 1 | 2;
-  // In a Maximum Output cutscene: invulnerable, signing in place.
+  // In a Maximum Output cutscene, as caster or target: drawn glowing, held in place.
   cine: boolean;
   // The aura field as drawn: radius in metres (0 when there is none) and density 0..1.
   f?: [number, number];
@@ -67,6 +71,12 @@ export type ClientMsg =
   // This player's open field touches the target's: the server starts a clash if both check out.
   | { type: 'clash'; target: number }
   | { type: 'clash-pick'; id: number; round: number; pick: Pick }
+  // This player began a Maximum Output: `cut` names the cutscene, `target`
+  // the player pulled into it, `ms` its length, `p` and `yaw` where the
+  // caster stands and faces. The server locks the two for `ms` at most.
+  | { type: 'max'; cut: string; target: number | null; ms: number; p: Vec3; yaw: number }
+  // The caster's cutscene ended: the lock lifts for both.
+  | { type: 'max-end' }
   | { type: 'bye' };
 
 export type ServerMsg =
@@ -88,4 +98,11 @@ export type ServerMsg =
   // whole room. The server runs the referee in clash.js; picks and the winner
   // are in a, b order.
   | { type: 'clash'; id: number; a: number; b: number }
-  | { type: 'clash-step'; id: number; a: number; b: number; ev: ClashEvent };
+  | { type: 'clash-step'; id: number; a: number; b: number; ev: ClashEvent }
+  // A Maximum Output started, to the whole room: the caster and the target
+  // (null when the server dropped it) are locked until max-end. Until then
+  // neither can be hit by anyone else, and the target cannot act.
+  | { type: 'max'; id: number; caster: number; target: number | null; cut: string; ms: number; p: Vec3; yaw: number }
+  | { type: 'max-end'; id: number; caster: number; target: number | null }
+  // The server refused this player's Maximum Output (too soon, or locked).
+  | { type: 'max-denied' };

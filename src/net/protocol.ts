@@ -53,6 +53,14 @@ export interface FxCall { f: string; a: unknown[] }
 
 export type HitOpts = { from: Vec3; knock: number; lift: number };
 
+// One physics prop as its owner simulates it (src/net/propsync.ts):
+// [id, x, y, z, qx, qy, qz, qw, vx, vy, vz, flags, frozen seconds left].
+export type PropWire = [id: number, x: number, y: number, z: number, qx: number, qy: number, qz: number, qw: number, vx: number, vy: number, vz: number, flags: number, frozen: number];
+export const PROP_FLAG = { rest: 1, claim: 4 } as const;
+// The props as the room holds them, for a screen that joins: where the
+// props that have moved came to rest, which are broken, and who owns which.
+export interface PropSnapshot { rest: PropWire[]; broken: number[]; owners: [number, number][] }
+
 export type ClientMsg =
   | { type: 'hello'; room: string; name: string; token: string; tech: string }
   | { type: 'state'; s: PlayerState }
@@ -67,10 +75,16 @@ export type ClientMsg =
   // This player's open field touches the target's: the server starts a clash if both check out.
   | { type: 'clash'; target: number }
   | { type: 'clash-pick'; id: number; round: number; pick: Pick }
+  // The props this player simulates; an entry with the claim flag takes one over.
+  | { type: 'props'; s: PropWire[] }
+  // A blow on a breakable prop; `max` is its full health.
+  | { type: 'prop-hit'; prop: number; amount: number; max: number; from: Vec3 }
+  // Rime froze the koi pond into a floor for `s` seconds.
+  | { type: 'ice'; s: number }
   | { type: 'bye' };
 
 export type ServerMsg =
-  | { type: 'welcome'; id: number; room: string; you: PlayerInfo; players: PlayerInfo[]; spawn: Vec3; t: number }
+  | { type: 'welcome'; id: number; room: string; you: PlayerInfo; players: PlayerInfo[]; spawn: Vec3; t: number; props?: PropSnapshot }
   | { type: 'full'; room: string; max: number }
   | { type: 'join'; player: PlayerInfo }
   | { type: 'leave'; id: number }
@@ -88,4 +102,8 @@ export type ServerMsg =
   // whole room. The server runs the referee in clash.js; picks and the winner
   // are in a, b order.
   | { type: 'clash'; id: number; a: number; b: number }
-  | { type: 'clash-step'; id: number; a: number; b: number; ev: ClashEvent };
+  | { type: 'clash-step'; id: number; a: number; b: number; ev: ClashEvent }
+  | { type: 'props'; id: number; s: PropWire[] }
+  | { type: 'prop-owner'; prop: number; owner: number | null }
+  | { type: 'prop-break'; prop: number; by: number; from: Vec3 }
+  | { type: 'ice'; id: number; s: number };

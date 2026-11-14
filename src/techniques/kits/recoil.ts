@@ -33,6 +33,7 @@ function catchProps(ctx: AbilityContext, dt: number): void {
     const v = p.body.linvel();
     const speed = Math.hypot(v.x, v.y, v.z);
     if (speed < 1.5) continue;
+    g.props.touch(p);
     p.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true);
     held.push({ prop: p, offset: new THREE.Vector3(held.length * 0.9 - 0.9, -0.2, 2.0) });
     g.techniques.resource = Math.min(g.techniques.def.resource.max, g.techniques.resource + p.def.mass * speed * 0.12 * (ctx.behaviors.includes('store') ? 1.4 : 1) * (0.6 + ctx.potency * 0.5));
@@ -44,6 +45,8 @@ function catchProps(ctx: AbilityContext, dt: number): void {
     g.tutorial.notify('absorbed');
   }
   for (const h of held) {
+    // Held, it stays this player's to move.
+    g.props.touch(h.prop);
     const target = eye.clone().addScaledVector(dir, h.offset.z).add(new THREE.Vector3(0, h.offset.y, 0)).addScaledVector(new THREE.Vector3(dir.z, 0, -dir.x), h.offset.x);
     const cur = h.prop.body.translation();
     const next = new THREE.Vector3(cur.x, cur.y, cur.z).lerp(target, 1 - Math.exp(-12 * dt));
@@ -58,7 +61,7 @@ function releaseHeld(ctx: AbilityContext): number {
   for (const h of held) {
     h.prop.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
     if (ctx.behaviors.includes('relaunch')) {
-      h.prop.body.setLinvel(dir.clone().multiplyScalar(16 + ctx.potency * 14), true);
+      g.props.launch(h.prop, dir.clone().multiplyScalar(16 + ctx.potency * 14));
       g.vfx.trail([h.prop.mesh.position.clone(), h.prop.mesh.position.clone().addScaledVector(dir, -1.5)], COLOR, 0.3, 0.2);
       n++;
     }
@@ -179,7 +182,7 @@ export const recoil: TechniqueKit = {
         const dmg = (60 + 140 * reserveFrac) * ctx.potency;
         let hits = 0;
         for (const e of g.techniques.enemiesInSphere(center, radius)) { g.combat.hitEnemy(e, dmg * (1 - e.position.distanceTo(center) / (radius * 1.5)), { from: center, knock: 14, lift: 6, kind: 'kinetic', heavy: true }); hits++; }
-        for (const p of g.props.instances) if (p.mesh.position.distanceTo(center) < radius) { p.body.wakeUp(); p.body.applyImpulse(p.mesh.position.clone().sub(center).setY(0.6).normalize().multiplyScalar(p.def.mass * (8 + 10 * reserveFrac)), true); }
+        for (const p of g.props.instances) if (p.mesh.position.distanceTo(center) < radius) g.props.push(p, p.mesh.position.clone().sub(center).setY(0.6).normalize().multiplyScalar(p.def.mass * (8 + 10 * reserveFrac)));
         g.techniques.resource = 0;
         g.vfx.ring(center.clone().add(new THREE.Vector3(0, 0.1, 0)), COLOR, 0.5, radius * 1.3, 0.7);
         g.vfx.ring(center.clone().add(new THREE.Vector3(0, 1.2, 0)), 0xffffff, 0.2, radius, 0.5, new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), g.cam.yaw));

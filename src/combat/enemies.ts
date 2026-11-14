@@ -303,7 +303,7 @@ export class Enemy {
         g.audio.play('impactBell_heavy_000', 0.8, 0.6);
         const d = g.player.position.distanceTo(this.position);
         if (d < 14) g.combat.hurtPlayer(this.dmg * (1 - d / 16), { from: c, kinetic: true });
-        for (const p of g.props.instances) if (p.mesh.position.distanceTo(this.position) < 14) p.body.applyImpulse(p.mesh.position.clone().sub(this.position).normalize().multiplyScalar(p.def.mass * 5).setY(p.def.mass * 3), true);
+        for (const p of g.props.instances) if (p.mesh.position.distanceTo(this.position) < 14) g.props.push(p, p.mesh.position.clone().sub(this.position).normalize().multiplyScalar(p.def.mass * 5).setY(p.def.mass * 3));
       }
     }
   }

@@ -118,7 +118,7 @@ export const shift: TechniqueKit = {
         if (dest.distanceTo(from) < 1) { toast('No room to Shift there', 'bad'); return { hits: 0 }; }
         let hits = 0;
         for (const e of g.techniques.enemiesInSphere(dest, 2.0)) { g.combat.hitEnemy(e, 30 * ctx.potency, { from: dest, knock: 7, lift: 3, kind: 'cut' }); hits++; }
-        for (const p of g.props.instances) if (p.mesh.position.distanceTo(dest) < 1.4) { p.body.wakeUp(); p.body.applyImpulse(p.mesh.position.clone().sub(dest).setY(0.5).normalize().multiplyScalar(p.def.mass * 5), true); }
+        for (const p of g.props.instances) if (p.mesh.position.distanceTo(dest) < 1.4) g.props.push(p, p.mesh.position.clone().sub(dest).setY(0.5).normalize().multiplyScalar(p.def.mass * 5));
         g.vfx.afterimage(g.avatar.model, COLOR, 0.45);
         g.vfx.ring(from.clone().add(new THREE.Vector3(0, 1, 0)), COLOR, 0.3, 1.6, 0.35, flat);
         g.player.displace(dest.clone().sub(from));

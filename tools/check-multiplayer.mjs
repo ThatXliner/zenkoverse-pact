@@ -38,9 +38,37 @@ const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
 const browser = await chromium.launch({ channel: 'chrome', args: ['--use-angle=metal', '--ignore-gpu-blocklist'] });
 
+// A tab that can go to the background the way Chrome sends it there: the
+// page reads hidden, animation frames stop (so the game loop stops), and
+// timers fire at most once a second. Headless Chrome never hides a tab on
+// its own, so the page is told before any of its scripts run.
+const BACKGROUND_TAB = () => {
+  let hidden = false;
+  const raf = window.requestAnimationFrame.bind(window);
+  const waiting = [];
+  window.requestAnimationFrame = (cb) => { if (hidden) { waiting.push(cb); return 0; } return raf(cb); };
+  Object.defineProperty(Document.prototype, 'visibilityState', { configurable: true, get: () => (hidden ? 'hidden' : 'visible') });
+  Object.defineProperty(Document.prototype, 'hidden', { configurable: true, get: () => hidden });
+  const st = window.setTimeout.bind(window), si = window.setInterval.bind(window);
+  window.setTimeout = (fn, ms = 0, ...a) => {
+    const at = performance.now();
+    const fire = () => { const left = 1000 - (performance.now() - at); if (hidden && left > 0) st(fire, left); else if (typeof fn === 'function') fn(...a); };
+    return st(fire, ms);
+  };
+  window.setInterval = (fn, ms = 0, ...a) => {
+    let last = 0;
+    return si(() => { const now = performance.now(); if (hidden && now - last < 1000) return; last = now; if (typeof fn === 'function') fn(...a); }, ms);
+  };
+  window.__tab = {
+    hide() { hidden = true; document.dispatchEvent(new Event('visibilitychange')); },
+    show() { hidden = false; document.dispatchEvent(new Event('visibilitychange')); for (const cb of waiting.splice(0)) raf(cb); },
+  };
+};
+
 async function player(name, tech) {
   const ctx = await browser.newContext({ viewport: { width: 960, height: 600 } });
   const page = await ctx.newPage();
+  await page.addInitScript(BACKGROUND_TAB);
   page.on('pageerror', (e) => errors.push(`${name} pageerror: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error' && !/favicon|WebGL|GPU stall|Automatic fallback|WebSocket/.test(m.text())) errors.push(`${name} console: ${m.text()}`); });
   await page.goto(`${url}?debug&room=${room}`);
@@ -193,6 +221,166 @@ for (let i = 1; i <= 6; i++) {
 }
 b = await until(B, (v) => v.hp < before, 3000 * slack);
 check(b.hp < before, `Shockline from 6 m lands on B (${before} to ${b.hp.toFixed(1)})`);
+
+console.log('\nprops, breakage and the ice floor are one simulation');
+// Both stand by the crates in the east of the courtyard. Each prop's pose is
+// read on both screens straight from its physics body.
+await A.api((g) => { g.camera('top'); g.teleport([12, 0, 0]); });
+await B.api((g) => { g.camera('top'); g.teleport([12, 0, 5]); });
+await wait(800 * slack);
+const poses = (p) => p.api((g) => Object.fromEntries(g.game.props.instances.map((q) => { const t = q.body.translation(), r = q.body.rotation(); return [q.id, [t.x, t.y, t.z, r.x, r.y, r.z, r.w]]; })));
+const propsView = (p) => p.api((g) => g.game.net.props.view());
+const propNear = (p, at) => p.api((g, at) => {
+  const near = (x) => Math.hypot(x.mesh.position.x - at[0], x.mesh.position.z - at[1]);
+  const q = g.game.props.instances.filter((x) => x.def.breakable).sort((x, y) => near(x) - near(y))[0];
+  return q ? { id: q.id, hp: q.def.breakable.hp } : null;
+}, at);
+const apart = (a, b) => (a && b ? Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) : Infinity);
+// The angle between the two screens' rotations of a prop, in radians.
+const turn = (a, b) => (a && b ? 2 * Math.acos(Math.min(1, Math.abs(a[3] * b[3] + a[4] * b[4] + a[5] * b[5] + a[6] * b[6]))) : Infinity);
+{
+  const [pa, pb] = await Promise.all([poses(A), poses(B)]);
+  const ids = Object.keys(pa);
+  const off = ids.filter((id) => apart(pa[id], pb[id]) > 0.05);
+  check(ids.length > 10 && ids.length === Object.keys(pb).length && !off.length, `the two screens start with the same ${ids.length} props in the same places${off.length ? ` (${off.length} differ)` : ''}`);
+}
+// A push through the same call every Technique uses.
+const shove = (p, id, impulse) => p.api((g, id, imp) => { const q = g.game.props.byId(id); g.game.props.push(q, new q.mesh.position.constructor(...imp).multiplyScalar(q.def.mass)); }, id, impulse);
+// Waits until nobody is moving any prop, then compares one prop on both screens.
+async function settled(id, label) {
+  const t1 = Date.now();
+  let pa, pb;
+  for (;;) {
+    await wait(300);
+    const [va, vb] = await Promise.all([propsView(A), propsView(B)]);
+    [pa, pb] = await Promise.all([poses(A), poses(B)]);
+    const busy = va.mine.length + va.following.length + vb.mine.length + vb.following.length;
+    if ((!busy && apart(pa[id], pb[id]) < 0.03) || Date.now() - t1 > 6000 * slack) break;
+  }
+  check(apart(pa[id], pb[id]) < 0.05 && turn(pa[id], pb[id]) < 0.05, `${label}: at rest in the same place on both screens (${(apart(pa[id], pb[id]) * 100).toFixed(1)} cm, ${(turn(pa[id], pb[id]) * 57.3).toFixed(1)} degrees apart)`);
+  return pa[id];
+}
+// A shoves a crate east. While it slides, B follows A's simulation of it.
+const crate = await propNear(A, [15.2, 1.8]);
+const start = (await poses(A))[crate.id];
+await shove(A, crate.id, [7, 2.5, 1]);
+await wait(250 + latency * 2);
+check((await propsView(B)).following.includes(crate.id), "while A's crate slides, B's screen follows A's simulation of it");
+const rest1 = await settled(crate.id, 'A shoves a crate');
+check(apart(start, rest1) > 1, `and it moved (${apart(start, rest1).toFixed(1)} m)`);
+// B shoves the same crate back: it becomes B's to move.
+await shove(B, crate.id, [-6, 2, 0.5]);
+await wait(250 + latency * 2);
+check((await propsView(A)).following.includes(crate.id), "B shoves it back: now A's screen follows B's");
+const rest2 = await settled(crate.id, 'B shoves it back');
+check(apart(rest1, rest2) > 1, `and it moved again (${apart(rest1, rest2).toFixed(1)} m)`);
+
+// A crate takes blows from both players: the server adds them up, and it
+// breaks once, on both screens, when they reach its health.
+const box = await propNear(A, [16.4, 2.0]);
+const alive = (p, id) => p.api((g, id) => !!g.game.props.byId(id), id);
+const blow = (p, id, n) => p.api((g, id, n) => g.game.net.props.hit(g.game.props.byId(id), n), id, n);
+await blow(A, box.id, box.hp * 0.6);
+await wait(400 + latency * 2);
+check(await alive(A, box.id) && await alive(B, box.id), 'a blow for 60% of a crate\'s health leaves it whole on both screens');
+await blow(B, box.id, box.hp * 0.6);
+const t2 = Date.now();
+while (Date.now() - t2 < 3000 * slack && (await alive(A, box.id) || await alive(B, box.id))) await wait(80);
+const breaks = await Promise.all([A, B].map((p) => p.api((g, id) => g.game.net.props.broken.filter((x) => x === id).length, box.id)));
+check(!(await alive(A, box.id)) && !(await alive(B, box.id)) && breaks[0] === 1 && breaks[1] === 1, `B's blow on top of A's breaks it, once on each screen (${breaks.join(', ')} breaks heard)`);
+
+// B freezes the koi pond with Cold Stitch: the ice is a floor on A's screen too.
+const pondFloor = (p) => p.api((g) => {
+  const G = g.game, c = G.world.pond.center;
+  const hit = G.physics.castRay(new c.constructor(c.x + 0.5, 3, c.z + 0.5), new c.constructor(0, -1, 0), 10);
+  return { y: hit ? hit.point.y : null, surface: G.world.pond.surfaceY };
+});
+const dry = await pondFloor(A);
+await B.api((g) => {
+  g.teleport('pond'); g.camera('third'); g.step(2);
+  const G = g.game, p = G.player.eye(), c = G.world.pond.center;
+  g.look(Math.atan2(-(c.x - p.x), -(c.z - p.z)), Math.atan2(G.world.pond.surfaceY - p.y, Math.hypot(c.x - p.x, c.z - p.z)));
+  G.techniques.resource = G.techniques.def.resource.max;
+  g.cast('secondary');
+});
+const t3 = Date.now();
+let iced = dry;
+while (Date.now() - t3 < 3000 * slack) { iced = await pondFloor(A); if (iced.y !== null && iced.y > dry.surface - 0.05) break; await wait(100); }
+check(dry.y !== null && dry.y < dry.surface - 0.2 && iced.y > dry.surface - 0.05, `B's Cold Stitch freezes the pond into a floor on A's screen too (floor at ${dry.y?.toFixed(2)} m, then ${iced.y?.toFixed(2)} m; water at ${dry.surface.toFixed(2)} m)`);
+await B.api((g) => { g.camera('top'); g.teleport([12, 0, 5]); });
+
+console.log("\nanother player's tab goes to the background");
+// B shoves a crate and hides its tab while the crate is still in the air.
+// B stops sending; A sees B as away; A's screen takes over the crate and
+// brings it down; A hits B, and the hit lands once though B's game loop is
+// stopped. Then B comes back and both screens agree again.
+await wait(600 * slack);
+const flier = await propNear(B, [15.8, 3.1]);
+await shove(B, flier.id, [1.5, 7, 0]);
+await wait(150 + latency * 2);
+await B.page.evaluate(() => window.__tab.hide());
+check(await B.page.evaluate(() => document.visibilityState === 'hidden'), "B's tab reads hidden");
+// A frame already asked for before the tab hid may still run; none after it.
+await wait(100);
+const clockHidden = await B.api((g) => g.game.clock.time);
+const isAway = () => A.api((g, id) => !!g.game.net.remotes.get(id)?.away, idB);
+const tAway = Date.now();
+while (Date.now() - tAway < 4000 * slack && !(await isAway())) await wait(100);
+check(await isAway(), `A sees B as away ${((Date.now() - tAway) / 1000).toFixed(1)} s after B's tab hid`);
+await wait(2500 * slack);
+const fallen = await A.api((g, id) => { const q = g.game.props.byId(id); return { y: q.body.translation().y, half: q.half.y, followed: g.game.net.props.view().following.includes(id), dynamic: q.body.bodyType() === 0 }; }, flier.id);
+check(!fallen.followed && fallen.dynamic && fallen.y < fallen.half + 0.3, `A's screen takes over the crate B was moving, and it comes down (${fallen.y.toFixed(2)} m, ${fallen.followed ? "still following B's stream" : 'simulated here'})`);
+// A steps up to where B stands, frozen in the background, and swings once.
+const hpHidden = (await B.net()).hp;
+const bAt = remoteOf(await A.net(), idB).drawn;
+await A.api((g, at) => { g.camera('third'); g.teleport([at[0], 0, at[2] + 1.4]); g.look(0, -0.05); g.game.techniques.resource = g.game.techniques.def.resource.max; }, bAt);
+await wait(900 * slack);
+const sentHidden = (await A.net()).sent.length;
+await A.page.mouse.move(480, 300);
+await A.page.mouse.down(); await A.page.mouse.up();
+let bHidden = await until(B, (v) => v.hp < hpHidden, 4000 * slack);
+await wait(1000 * slack);
+a = await A.net(); bHidden = await B.net();
+const sentToB = a.sent.slice(sentHidden).filter((x) => x.target === idB);
+check(sentToB.length === 1, `A's blow on the hidden B was sent once (${sentToB.length})`);
+check(bHidden.hp < hpHidden && Math.abs(remoteOf(a, idB).hp - bHidden.hp) < 0.11, `it landed while B's game was stopped (${hpHidden} to ${bHidden.hp.toFixed(1)}), and A's screen agrees`);
+check(await B.api((g) => g.game.clock.time) === clockHidden, "B's game loop did not run while hidden");
+await B.page.evaluate(() => window.__tab.show());
+await A.api((g) => g.camera('top'));
+const tBack = Date.now();
+while (Date.now() - tBack < 4000 * slack && await isAway()) await wait(100);
+check(!(await isAway()), "B is back for A once B's tab shows again");
+check(await B.api((g) => g.game.clock.time) > clockHidden, "B's game runs again");
+await walk(B, A, 'KeyA', 'B walks again after the background, A watches');
+await walk(A, B, 'KeyD', 'A walks, B watches after the background');
+{
+  b = await B.net(); a = await A.net();
+  check(Math.abs(b.hp - remoteOf(a, idB).hp) < 0.11, `B's health reads the same on both screens after (${b.hp.toFixed(1)})`);
+  const [pa, pb] = await Promise.all([poses(A), poses(B)]);
+  const off = Object.keys(pa).filter((id) => apart(pa[id], pb[id]) > 0.05);
+  check(!off.length && apart(pa[flier.id], pb[flier.id]) < 0.05, `every prop agrees after B's background, the crate A took over too (${(apart(pa[flier.id], pb[flier.id]) * 100).toFixed(1)} cm)${off.length ? `; ${off.join(', ')} differ` : ''}`);
+}
+
+// After a while Chrome freezes a background tab outright: no scripts at
+// all, not even the socket. A blow on a frozen B still lands, at A's
+// amount, when B does not answer in time.
+const cdpB = await B.ctx.newCDPSession(B.page);
+const bAt2 = remoteOf(await A.net(), idB).drawn;
+await A.api((g, at) => { g.camera('third'); g.teleport([at[0], 0, at[2] + 1.4]); g.look(0, -0.05); g.game.techniques.resource = g.game.techniques.def.resource.max; }, bAt2);
+await wait(900 * slack);
+await cdpB.send('Page.setWebLifecycleState', { state: 'frozen' });
+const hpFrozen = remoteOf(await A.net(), idB).hp;
+const sentFrozen = (await A.net()).sent.length;
+await A.page.mouse.down(); await A.page.mouse.up();
+await wait(2600 * slack);
+a = await A.net();
+const frozenHit = a.sent.slice(sentFrozen).filter((x) => x.target === idB);
+check(frozenHit.length === 1 && remoteOf(a, idB).hp < hpFrozen, `a blow on a frozen B lands once without B's answer (${hpFrozen} to ${remoteOf(a, idB).hp.toFixed(1)})`);
+await cdpB.send('Page.setWebLifecycleState', { state: 'active' });
+b = await until(B, (v) => Math.abs(v.hp - remoteOf(a, idB).hp) < 0.11, 3000 * slack);
+check(Math.abs(b.hp - remoteOf(a, idB).hp) < 0.11, `B wakes with the health the room gave it (${b.hp.toFixed(1)})`);
+await A.api((g) => g.camera('top'));
+await until(B, (v) => !v.downed, 7000 * slack);
 
 console.log('\nan Aura Clash between A and B, while C walks past');
 // C joins for this part only. A and B open their fields with F six metres

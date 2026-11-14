@@ -5,6 +5,8 @@ import { toast } from '../app/game';
 import { KITS } from '../techniques/techniques';
 import { PLAYER_SUIT } from '../character/avatar';
 import { FxWire } from './fxwire';
+import { PropSync } from './propsync';
+import { freezePond } from '../techniques/kits/rime';
 import { RemotePlayer, seatSuit } from './remote';
 import { RULES, type ClientMsg, type PlayerInfo, type ServerMsg, type Vec3 } from './protocol';
 import type { Pick } from './clash';
@@ -63,12 +65,14 @@ export class Net {
   private retryTimer: number | null = null;
   private feedId = 0;
   private fx: FxWire;
+  readonly props: PropSync;
   // What the check scripts read: every hit this client sent and every health
   // change the server announced.
   readonly log = { sent: [] as { target: number; amount: number; t: number }[], hp: [] as { id: number; hp: number; by: number | null; amount: number; t: number }[] };
 
   constructor(private game: Game) {
     this.fx = new FxWire(game.vfx);
+    this.props = new PropSync(game, (m) => this.send(m), () => this.connected, (fn) => this.fx.quiet(fn));
   }
 
   get active(): boolean { return netUi.status.value !== 'off'; }
@@ -117,6 +121,7 @@ export class Net {
     this.pingTimer = this.retryTimer = null;
     this.clearRemotes();
     this.fx.dispose();
+    this.props.dispose();
     this.id = null;
     if (this.downed) this.respawned(this.game.player.position.clone(), RULES.maxHp);
     this.game.avatar.setSuit(PLAYER_SUIT);
@@ -175,6 +180,7 @@ export class Net {
         for (const p of m.players) this.addRemote(p);
         this.refreshRoster();
         g.combat.setHp(m.you.hp);
+        this.props.welcome(m.props, m.id);
         if (!rejoin) { g.player.teleport(new THREE.Vector3(...m.spawn)); g.cam.yaw = Math.atan2(m.spawn[0], m.spawn[2]); }
         if (m.you.down && !this.downed) this.goDown(null);
         if (!m.you.down && this.downed) this.respawned(g.player.position.clone(), m.you.hp);
@@ -299,6 +305,18 @@ export class Net {
       case 'clash-step':
         g.aura.clash.serverStep(m.id, m.a, m.b, m.ev);
         return;
+      case 'props':
+        this.props.poses(m.s);
+        return;
+      case 'prop-owner':
+        this.props.owner(m.prop, m.owner, this.id);
+        return;
+      case 'prop-break':
+        this.props.shattered(m.prop, m.from);
+        return;
+      case 'ice':
+        freezePond(g, m.s);
+        return;
     }
   }
 
@@ -340,6 +358,9 @@ export class Net {
 
   setTechnique(id: string): void { this.send({ type: 'tech', tech: id }); }
 
+  // Rime froze the pond here: it freezes on every screen.
+  ice(seconds: number): void { this.send({ type: 'ice', s: Math.round(seconds * 10) / 10 }); }
+
   // This player's field touches another's: the server decides whether a clash starts.
   askClash(target: number): void { if (!this.downed) this.send({ type: 'clash', target }); }
   clashPick(id: number, round: number, pick: Pick): void { this.send({ type: 'clash-pick', id, round, pick }); }
@@ -358,6 +379,7 @@ export class Net {
         this.send({ type: 'state', s: { ct: now, p: v3(g.player.position), v: v3(g.player.velocity), yaw: Math.round(g.cam.yaw * 1000) / 1000, pitch: g.cam.isTop ? 0 : Math.round(g.cam.pitch * 1000) / 1000, g: g.player.grounded, sign: s.kind === 'signing' ? 1 : s.kind === 'primed' ? 2 : 0, cine: g.cutscenes.active, f: [Math.round(g.aura.field.radius * 100) / 100, Math.round(g.aura.field.density * 100) / 100] } });
       }
     } else this.fx.take();
+    this.props.update(raw);
     for (const r of this.remotes.values()) r.update(raw);
     this.plates();
   }

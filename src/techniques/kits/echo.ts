@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import type { TechniqueKit } from '../kit';
 import { signGesture, gestureSet, rangeFor, propsInCone, breakProp, targetsAllowed } from './shared';
-import { anchored } from './shift';
 import type { Pact } from '../../pacts/schema';
+import { opening, blow, type CutsceneDef } from '../../cutscene/cutscene';
 
 const COLOR = 0x7dffb2;
 let quiet = false;
@@ -16,14 +16,18 @@ const catalogue: Pact[] = [
     { kind: 'restrict', restriction: { param: 'body', value: 'palmContact' } }, { kind: 'restrict', restriction: { param: 'resource', value: 'all' } }, { kind: 'restrict', restriction: { param: 'trigger', value: 'grounded' } }] },
 ];
 
-const cutscene = anchored({
-  id: 'max-echo', title: { jp: '大聖堂共鳴', en: 'Cathedral Resonance' }, color: COLOR, timeScale: 0.1, letterbox: true,
+// Cathedral Resonance: the palms pressed close, a plan view from the vault
+// closing on the caster, a low wide as the whole floor rings, and a crane
+// up over everything still shaking.
+const cutscene: CutsceneDef = {
+  id: 'max-echo', title: { jp: '大聖堂共鳴', en: 'Cathedral Resonance' }, color: COLOR, pull: 4, reach: 14,
   shots: [
-    { duration: 1.1, from: [0.8, 0.5, -1.5], to: [0.5, 0.3, -1.2], look: [0, 0.4, 0], fov: [44, 38], events: [{ at: 0, kind: 'gesture' }, { at: 0.25, kind: 'title' }, { at: 0.1, kind: 'sfx', id: 'phaserUp3', pitch: 0.4 }] },
-    { duration: 1.3, from: [0, 6, 0.5], to: [0, 9, 1.5], look: [0, 0, 0], lookTo: [0, 0, -2], fov: [60, 80], roll: [0.1, -0.1], events: [{ at: 0.45, kind: 'impactFrame', frames: 3 }, { at: 0.5, kind: 'resolveHit' }, { at: 0.5, kind: 'shake', amount: 1 }, { at: 0.5, kind: 'sfx', id: 'impactBell_heavy_000', pitch: 0.4 }, { at: 0.55, kind: 'slow', scale: 0.45 }] },
-    { duration: 0.8, from: [-4, 1.4, 3], to: [-4.5, 1.6, 2.5], look: [0, 1.0, 0], fov: [66, 58] },
+    { duration: 1.05, timeScale: 0.03, from: { pos: [0.95, 1.4, 1.95], look: [0, 1.3, 0], fov: 38 }, to: { pos: [0.65, 1.38, 1.5], fov: 31, roll: 0.04 }, events: opening('phaserUp3', 0.4) },
+    { duration: 0.5, timeScale: 0.03, from: { rel: 'mid', pos: [0, 8, -0.8], look: [0, 0.4, 0], fov: 56 }, to: { pos: [0, 6, -0.6], fov: 50 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'impactBell_heavy_000', pitch: 0.3, volume: 0.4 }] },
+    { duration: 0.95, timeScale: 0.3, from: { pos: [-4.2, 0.45, 3.2], look: [0, 1.4, 0], lookRel: 'mid', fov: 70, roll: 0.1 }, to: { pos: [-5.2, 0.6, 4.2], fov: 80, roll: 0.04 }, events: [...blow(0, 'impactBell_heavy_000', 0.4, 1)] },
+    { duration: 0.75, timeScale: 0.5, from: { rel: 'mid', pos: [3, 6, -5], look: [0, 0.5, 0], fov: 60 }, to: { pos: [3.5, 7.6, -6], fov: 62 }, ease: 'inOut' },
   ],
-});
+};
 
 function resonate(ctx: Parameters<TechniqueKit['effects']['cast']>[0], e: import('../../combat/enemies').Enemy, amount: number): void {
   const g = ctx.game;

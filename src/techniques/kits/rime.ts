@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import type { TechniqueKit } from '../kit';
 import { signGesture, gestureSet, rangeFor, hitCone, propsInCone } from './shared';
-import { anchored } from './shift';
 import type { Pact } from '../../pacts/schema';
+import { opening, blow, type CutsceneDef } from '../../cutscene/cutscene';
 import { RAPIER } from '../../physics/world';
 import { toon } from '../../render/materials';
 
@@ -17,14 +17,18 @@ const catalogue: Pact[] = [
     { kind: 'restrict', restriction: { param: 'body', value: 'noMove' } }, { kind: 'restrict', restriction: { param: 'resource', value: 'all' } }, { kind: 'restrict', restriction: { param: 'trigger', value: 'declared' } }] },
 ];
 
-const cutscene = anchored({
-  id: 'max-rime', title: { jp: '十指氷河', en: 'Tenfold Glacier' }, color: COLOR, timeScale: 0.1, letterbox: true,
+// Tenfold Glacier: the claws low and close, a ground-level look as the
+// hands come down, a high cut as the glacier erupts under the target, and
+// a low close-up of the target held in the ice.
+const cutscene: CutsceneDef = {
+  id: 'max-rime', title: { jp: '十指氷河', en: 'Tenfold Glacier' }, color: COLOR, pull: 4, reach: 12,
   shots: [
-    { duration: 1.1, from: [0.5, 1.2, -1.3], to: [0.3, 1.0, -1.0], look: [0, 1.0, 0], fov: [42, 36], events: [{ at: 0, kind: 'gesture' }, { at: 0.25, kind: 'title' }, { at: 0.1, kind: 'sfx', id: 'highUp', pitch: 0.5 }] },
-    { duration: 1.3, from: [-1.8, 0.25, 1.2], to: [-2.6, 0.4, 2.4], look: [0, 0.3, 0], lookTo: [0, 0.4, -4], roll: [0.18, 0.04], fov: [64, 78], events: [{ at: 0.45, kind: 'impactFrame', frames: 3 }, { at: 0.5, kind: 'resolveHit' }, { at: 0.5, kind: 'shake', amount: 0.8 }, { at: 0.5, kind: 'sfx', id: 'impactGlass_heavy_000', pitch: 0.6 }, { at: 0.55, kind: 'slow', scale: 0.45 }] },
-    { duration: 0.9, from: [4, 3.5, 4], to: [3.5, 3.0, 3], look: [0, 0.5, -1], fov: [70, 60] },
+    { duration: 1.05, timeScale: 0.03, from: { pos: [0.9, 1.35, 1.9], look: [0, 1.25, 0], fov: 38 }, to: { pos: [0.62, 1.32, 1.45], fov: 31, roll: -0.05 }, events: opening('highUp', 0.5) },
+    { duration: 0.5, timeScale: 0.03, from: { pos: [-1.5, 0.18, 1.0], look: [0, 0.7, 0], fov: 60, roll: 0.16 }, to: { pos: [-1.7, 0.15, 1.3], fov: 56, roll: 0.12 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'impactSoft_heavy_001', pitch: 0.6, volume: 0.6 }] },
+    { duration: 0.95, timeScale: 0.3, from: { rel: 'mid', pos: [4.6, 4.2, -2.8], look: [0, 0.4, 0], fov: 58, roll: -0.06 }, to: { pos: [5.6, 5.2, -3.6], fov: 68 }, events: [...blow(0, 'impactGlass_heavy_000', 0.6, 0.8), { at: 0.03, kind: 'sfx', id: 'impactMining_000', pitch: 1.1 }] },
+    { duration: 0.75, timeScale: 0.4, from: { rel: 'target', pos: [1.5, 0.55, -1.7], look: [0, 1.0, 0], fov: 50 }, to: { pos: [1.7, 0.7, -2.1], fov: 46 }, ease: 'inOut' },
   ],
-});
+};
 
 function freezeProp(ctx: { game: import('../../app/game').Game }, p: import('../../world/props').PropInstance, seconds: number): void {
   const g = ctx.game;
@@ -155,7 +159,10 @@ export const rime: TechniqueKit = {
       if (ctx.shape === 'tenfold') {
         const center = g.player.position.clone();
         let hits = 0;
-        for (let ring = 1; ring <= 3; ring++) g.vfx.after(ring * 0.09, () => { hits += freezeArea(g, center, 4 * ring * (0.8 + ctx.potency * 0.4), ctx.potency * 1.4, true, 9); g.cam.shake(0.3); });
+        // The first ring is the blow and lands at once; the glacier spreads from it.
+        const spread = (ring: number) => { hits += freezeArea(g, center, 4 * ring * (0.8 + ctx.potency * 0.4), ctx.potency * 1.4, true, 9); g.cam.shake(0.3); };
+        spread(1);
+        for (let ring = 2; ring <= 3; ring++) g.vfx.after((ring - 1) * 0.09, () => spread(ring));
         g.vfx.flash(center.clone().add(new THREE.Vector3(0, 1.5, 0)), COLOR, 100, 0.6, 24);
         g.vfx.ring(center.clone().add(new THREE.Vector3(0, 0.1, 0)), COLOR, 0.5, 16, 0.8);
         g.audio.play('impactGlass_heavy_000', 1, 0.5);

@@ -55,6 +55,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
   let nextId = 1;
   let nextHit = 1;
   let nextClash = 1;
+  let nextMax = 1;
 
   httpServer.on('upgrade', (req, socket, head) => {
     if (new URL(req.url ?? '/', 'http://x').pathname !== '/ws') { socket.destroy(); return; }
@@ -113,6 +114,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
     target.respawnAt = Date.now() + rules.respawnSeconds * 1000;
     if (by && by !== target) by.kills++;
     for (const [id, h] of room.pending) if (h.target === target.id) room.pending.delete(id);
+    endMax(room, target);
     const c = target.clash !== null ? room.clashes.get(target.clash) : null;
     if (c) for (const ev of c.ref.forfeit(c.a === target.id ? 0 : 1)) clashStep(room, c, ev);
     broadcast(room, { type: 'down', id: target.id, by: by && by !== target ? by.id : null });
@@ -127,6 +129,49 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
     const at = spawnPoint(room, p);
     if (p.state) p.state = { ...p.state, p: at, v: [0, 0, 0] };
     broadcast(room, { type: 'respawn', id: p.id, p: at, hp: p.hp });
+  }
+
+  // Maximum Output cutscenes (issue #27). The caster's request locks the
+  // caster and the target it pulled in, for the cutscene's length and never
+  // longer than rules.max.maxMs, and one player may start one only every
+  // rules.max.cooldownMs, so a cutscene is never a way to stay untouchable.
+  // While locked, nobody else's hits or effects reach either of them, the
+  // target cannot act, and the caster lands only its own Output's blows.
+  const locked = (q, now) => q.max !== null && now < q.max.until;
+
+  function startMax(room, p, m, now) {
+    const ms = Math.round(num(m.ms, rules.max.minMs, rules.max.maxMs));
+    if (p.down || p.clash !== null || locked(p, now) || now - p.maxAt < rules.max.cooldownMs) { send(p.ws, { type: 'max-denied' }); return; }
+    let target = room.players.get(Number(m.target)) ?? null;
+    if (target && (!target.ws || target === p || target.down || target.clash !== null || locked(target, now) || !p.state || !target.state
+      || dist(p.state.p, target.state.p) > rules.max.reach + rules.max.slack)) target = null;
+    p.maxAt = now;
+    const id = nextMax++;
+    const until = now + ms;
+    p.max = { id, role: 'caster', partner: target?.id ?? null, until, hits: new Map() };
+    if (target) target.max = { id, role: 'target', partner: p.id, until, hits: null };
+    broadcast(room, { type: 'max', id, caster: p.id, target: target?.id ?? null, cut: String(m.cut ?? '').slice(0, 24), ms, p: vec(m.p) ?? p.state?.p ?? [0, 0, 0], yaw: num(m.yaw, -1e3, 1e3) });
+  }
+
+  // Lifts a lock for both people in it, at its end or when one of them leaves or falls.
+  function endMax(room, q) {
+    const lock = q.max;
+    if (!lock) return;
+    const caster = lock.role === 'caster' ? q : room.players.get(lock.partner);
+    const target = lock.role === 'caster' ? (lock.partner !== null ? room.players.get(lock.partner) : null) : q;
+    for (const x of [caster, target]) if (x?.max?.id === lock.id) x.max = null;
+    broadcast(room, { type: 'max-end', id: lock.id, caster: caster?.id ?? q.id, target: target?.id ?? null });
+  }
+
+  // Whether `p`'s blow or effect may reach `target` under the locks.
+  function lockAllows(p, target, now) {
+    if (locked(target, now) && !(target.max.role === 'target' && target.max.partner === p.id)) return false;
+    if (!locked(p, now)) return true;
+    if (p.max.role !== 'caster') return false;
+    const n = p.max.hits.get(target.id) ?? 0;
+    if (n >= rules.max.hitsPerTarget) return false;
+    p.max.hits.set(target.id, n + 1);
+    return true;
   }
 
   // Aura Clash between two players (issue #4). The server runs the referee in
@@ -146,6 +191,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
   function startClash(room, p, target, now) {
     if (now - p.clashAt < rules.field.clashCooldownMs) return;
     p.clashAt = now;
+    if (target && (locked(p, now) || locked(target, now))) return;
     if (!target?.ws || target === p || p.down || target.down || p.clash !== null || target.clash !== null) return;
     const fa = p.state?.f, fb = target.state?.f;
     if (!fa || !fb || fa[0] < 0.5 || fb[0] < 0.5) return;
@@ -193,6 +239,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
       if (!p.ws && now - p.leftAt > rules.reconnectGraceSeconds * 1000) room.players.delete(p.id);
     }
     for (const c of room.clashes.values()) for (const ev of c.ref.step(now)) clashStep(room, c, ev);
+    for (const p of room.players.values()) if (p.max?.role === 'caster' && now >= p.max.until) endMax(room, p);
     if (room.players.size === 0) { clearInterval(room.timer); rooms.delete(room.code); return; }
     const live = present(room);
     if (!live.length) return;
@@ -214,7 +261,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
         if (absent) room.players.delete(absent.id);
       }
       if (present(room).length >= rules.maxPlayers || freeSlot(room) < 0) { send(ws, { type: 'full', room: code, max: rules.maxPlayers }); return null; }
-      p = { id: nextId++, token, slot: freeSlot(room), hp: rules.maxHp, down: false, kills: 0, downs: 0, state: null, fresh: [], stateAt: 0, protectUntil: 0, respawnAt: 0, leftAt: 0, bucket: HITS_PER_SECOND, bucketAt: Date.now(), seen: new Set(), clash: null, clashAt: 0, propBucket: PROP_HITS_PER_SECOND, propBucketAt: Date.now(), iceAt: 0 };
+      p = { id: nextId++, token, slot: freeSlot(room), hp: rules.maxHp, down: false, kills: 0, downs: 0, state: null, fresh: [], stateAt: 0, protectUntil: 0, respawnAt: 0, leftAt: 0, bucket: HITS_PER_SECOND, bucketAt: Date.now(), seen: new Set(), clash: null, clashAt: 0, propBucket: PROP_HITS_PER_SECOND, propBucketAt: Date.now(), iceAt: 0, max: null, maxAt: -Infinity };
       room.players.set(p.id, p);
     }
     p.ws = ws;
@@ -239,6 +286,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
     if (chose) room.players.delete(p.id);
     for (const [id, h] of room.pending) if (h.by === p.id) room.pending.delete(id);
     releaseProps(room, p);
+    endMax(room, p);
     // Leaving mid-clash loses it.
     const c = p.clash !== null ? room.clashes.get(p.clash) : null;
     if (c) for (const ev of c.ref.forfeit(c.a === p.id ? 0 : 1)) clashStep(room, c, ev);
@@ -284,6 +332,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
         if (p.seen.size > 512) p.seen.delete(p.seen.values().next().value);
         if (now < target.protectUntil) return;
         if (p.state && target.state && dist(p.state.p, target.state.p) > rules.maxHitRange) return;
+        if (!lockAllows(p, target, now)) return;
         p.bucket = Math.min(HITS_PER_SECOND, p.bucket + ((now - p.bucketAt) / 1000) * HITS_PER_SECOND);
         p.bucketAt = now;
         if (p.bucket < 1) return;
@@ -308,9 +357,16 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
       case 'status': {
         const target = room.players.get(m.target);
         if (!target?.ws || target.down || p.down || now < target.protectUntil) return;
+        if ((locked(target, now) && target.max.partner !== p.id) || (locked(p, now) && p.max.role === 'target')) return;
         send(target.ws, { type: 'status', by: p.id, frozen: num(m.frozen, 0, 6), slow: num(m.slow, 0.1, 1) });
         return;
       }
+      case 'max':
+        startMax(room, p, m, now);
+        return;
+      case 'max-end':
+        if (p.max?.role === 'caster') endMax(room, p);
+        return;
       case 'clash':
         startClash(room, p, room.players.get(Number(m.target)), now);
         return;

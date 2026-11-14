@@ -3,7 +3,7 @@ import { toast } from '../../app/game';
 import type { TechniqueKit } from '../kit';
 import { signGesture, gestureSet, rangeFor, hitCone, propsInCone, shoveProps } from './shared';
 import type { Pact } from '../../pacts/schema';
-import type { CutsceneDef } from '../../cutscene/cutscene';
+import { opening, blow, type CutsceneDef } from '../../cutscene/cutscene';
 import { GROUP_WORLD } from '../../physics/world';
 
 const COLOR = 0x6fd3ff;
@@ -17,19 +17,18 @@ const catalogue: Pact[] = [
     { kind: 'restrict', restriction: { param: 'direction', value: 'line' } }, { kind: 'restrict', restriction: { param: 'resource', value: 'all' } }, { kind: 'restrict', restriction: { param: 'trigger', value: 'declared' } }] },
 ];
 
-function anchored(def: Omit<CutsceneDef, 'shots'> & { shots: { duration: number; from: [number, number, number]; to?: [number, number, number]; look: [number, number, number]; lookTo?: [number, number, number]; fov?: [number, number]; roll?: [number, number]; events?: CutsceneDef['shots'][number]['events']; rel?: 'caster' | 'target' | 'mid' }[] }): CutsceneDef {
-  return { ...def, shots: def.shots.map((s) => ({ duration: s.duration, fov: s.fov, roll: s.roll, events: s.events, from: { rel: s.rel ?? 'caster', offset: s.from }, to: s.to ? { rel: s.rel ?? 'caster', offset: s.to } : undefined, look: { rel: s.rel ?? 'caster', offset: s.look }, lookTo: s.lookTo ? { rel: s.rel ?? 'caster', offset: s.lookTo } : undefined })) };
-}
-export { anchored };
-
-const cutscene = anchored({
-  id: 'max-shift', title: { jp: '長距離転移', en: 'Long Translation' }, color: COLOR, timeScale: 0.1, letterbox: true,
+// Long Translation: the sign in profile, a low look down the line at the
+// target, then the cut to the caster already through it, low and side-on
+// with the line behind, and a hero shot with the target reeling beyond.
+const cutscene: CutsceneDef = {
+  id: 'max-shift', title: { jp: '長距離転移', en: 'Long Translation' }, color: COLOR, pull: 7, reach: 20,
   shots: [
-    { duration: 1.0, from: [-0.7, 1.5, -1.4], to: [-0.5, 1.45, -1.1], look: [0, 1.45, 0], fov: [44, 38], events: [{ at: 0, kind: 'gesture' }, { at: 0.2, kind: 'title' }, { at: 0.15, kind: 'sfx', id: 'phaseJump3', pitch: 0.6 }] },
-    { duration: 1.3, from: [2.2, 0.4, 0.6], to: [2.6, 0.6, -4], look: [0, 1.2, -2], lookTo: [0, 1.0, -14], roll: [-0.2, -0.05], fov: [66, 80], events: [{ at: 0.4, kind: 'impactFrame', frames: 2 }, { at: 0.45, kind: 'resolveHit' }, { at: 0.45, kind: 'shake', amount: 0.6 }, { at: 0.45, kind: 'sfx', id: 'zapTwoTone', pitch: 0.8 }, { at: 0.5, kind: 'slow', scale: 0.4 }] },
-    { duration: 0.8, from: [-3, 2.2, -16], to: [-2.5, 1.8, -17], look: [0, 1.2, -18], fov: [62, 56] },
+    { duration: 1.05, timeScale: 0.03, from: { pos: [-1.05, 1.5, 1.95], look: [0, 1.38, 0], fov: 36 }, to: { pos: [-0.7, 1.48, 1.5], fov: 30, roll: 0.04 }, events: opening('phaseJump3', 0.6) },
+    { duration: 0.5, timeScale: 0.03, from: { pos: [0.55, 0.75, -2.0], look: [0, 1.1, 0], lookRel: 'target', fov: 46 }, to: { pos: [0.45, 0.85, -1.4], fov: 38 }, ease: 'in', events: [{ at: 0.1, kind: 'sfx', id: 'phaserUp3', pitch: 0.9 }] },
+    { duration: 0.95, timeScale: 0.3, from: { pos: [2.4, 0.6, 0.8], look: [0, 1.1, -2], fov: 60, roll: -0.12 }, to: { pos: [2.9, 0.7, 1.2], fov: 70, roll: -0.04 }, events: [...blow(0, 'zapTwoTone', 0.75, 0.6), { at: 0.03, kind: 'sfx', id: 'impactMining_000', pitch: 0.9 }] },
+    { duration: 0.75, timeScale: 0.55, from: { pos: [1.3, 1.45, 2.4], look: [0, 1.3, -4], fov: 44 }, to: { pos: [1.1, 1.5, 2.0], fov: 40 }, ease: 'inOut' },
   ],
-});
+};
 
 // Shift must handle an occupied destination: walk back along the line until a
 // standing capsule fits, and displace anything that stood where you arrive.

@@ -110,6 +110,13 @@ export class Clash {
   }
 
   get active(): boolean { return this.run !== null; }
+  // Whether `e` stands in a clash, this player's or one seen from outside.
+  involves(e: Enemy): boolean {
+    const o = this.run?.opp;
+    if (o && (o.kind === 'master' ? o.enemy : o.remote) === e) return true;
+    for (const { w } of this.watched.values()) if (w.a === e || w.b === e) return true;
+    return false;
+  }
   get stage(): ClashView['stage'] | null { return this.run?.stage ?? null; }
   // The pick the Master has committed to this exchange, for the checks.
   get masterPick(): Pick | null { return this.run?.opp.kind === 'master' ? this.run.tell : null; }

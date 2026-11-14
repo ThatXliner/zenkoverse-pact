@@ -4,6 +4,7 @@ import { Avatar, type CharacterModel } from '../character/avatar';
 import type { CostumeId } from '../character/costume';
 import { RAPIER, GROUP_ENEMY, GROUP_WORLD, GROUP_PROP, groups } from '../physics/world';
 import { AURA, AuraField } from './field';
+import { BOSS_ULTIMATES } from './ultimates';
 
 // 'rival' is another player in an online room (src/net/remote.ts): no AI, its
 // body follows the network and its hits go to the server.
@@ -203,7 +204,12 @@ export class Enemy {
           if (dist > reach) move.copy(toP).normalize().multiplyScalar(speed);
           if (def.ai === 'ancient' && dist < 5) move.copy(toP).normalize().multiplyScalar(-speed * 0.7);
           if (dist <= reach + 0.3 && this.attackCd <= 0 && this.frozen <= 0 && g.encounters.claimAttack()) { this.state = 'windup'; this.t = 0; this.avatar.playUpper(def.ai === 'kuroda' ? 'Spell_Simple_Enter' : 'Punch_Jab', 1.1); }
-          if (def.ai !== 'thug' && this.castCd <= 0 && dist < 22 && this.frozen <= 0) { this.state = 'cast'; this.t = 0; this.avatar.playUpper('Spell_Simple_Shoot', 1); this.beginCast(); }
+          if (def.ai !== 'thug' && this.castCd <= 0 && dist < 22 && this.frozen <= 0) {
+            // A boss with a Maximum Output reaches for it in place of a cast when it is ready.
+            const ult = BOSS_ULTIMATES[def.ai];
+            if (ult && dist < ult.cutscene.reach && ult.ready(this) && g.encounters.bossUltimate(this)) { this.state = 'recover'; this.t = 0; this.castCd = 8; }
+            else { this.state = 'cast'; this.t = 0; this.avatar.playUpper('Spell_Simple_Shoot', 1); this.beginCast(); }
+          }
           break;
         }
         case 'windup':
@@ -296,15 +302,12 @@ export class Enemy {
       if (g.player.position.distanceTo(at) < 2.6) g.combat.hurtPlayer(this.dmg * 1.6, { from: at, kinetic: false });
       for (const e of g.encounters.enemies) if (e !== this && e.alive && e.position.distanceTo(at) < 2.6) e.hurt(20, { from: at, knock: 3 });
     } else if (this.def.ai === 'ancient') {
-      if (this.hp < this.maxHp * 0.7 && Math.random() < 0.5) g.encounters.bossUltimate(this);
-      else {
-        const c = this.center();
-        g.vfx.ring(this.position.clone().add(new THREE.Vector3(0, 0.1, 0)), 0x7dffb2, 0.5, 14, 0.9);
-        g.audio.play('impactBell_heavy_000', 0.8, 0.6);
-        const d = g.player.position.distanceTo(this.position);
-        if (d < 14) g.combat.hurtPlayer(this.dmg * (1 - d / 16), { from: c, kinetic: true });
-        for (const p of g.props.instances) if (p.mesh.position.distanceTo(this.position) < 14) g.props.push(p, p.mesh.position.clone().sub(this.position).normalize().multiplyScalar(p.def.mass * 5).setY(p.def.mass * 3));
-      }
+      const c = this.center();
+      g.vfx.ring(this.position.clone().add(new THREE.Vector3(0, 0.1, 0)), 0x7dffb2, 0.5, 14, 0.9);
+      g.audio.play('impactBell_heavy_000', 0.8, 0.6);
+      const d = g.player.position.distanceTo(this.position);
+      if (d < 14) g.combat.hurtPlayer(this.dmg * (1 - d / 16), { from: c, kinetic: true });
+      for (const p of g.props.instances) if (p.mesh.position.distanceTo(this.position) < 14) g.props.push(p, p.mesh.position.clone().sub(this.position).normalize().multiplyScalar(p.def.mass * 5).setY(p.def.mass * 3));
     }
   }
 }

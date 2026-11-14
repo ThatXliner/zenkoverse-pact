@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Game } from '../app/game';
 import { hud } from '../app/game';
 import { appState, setState, pause, resume, type PauseTab } from '../app/state';
-import { settings, setSetting, type Quality } from '../app/settings';
+import { settings, setSetting, type Quality, type CutscenePlay } from '../app/settings';
 import { CAMERA_MODES, CAMERA_LABEL, type CameraMode } from '../player/camera';
 import { keyLabel } from '../app/keymap';
 import { KEY_SLOTS, EXTRA_SLOTS, KIND_DEFS, slotDef, type AbilityKind, type KeySlot } from '../pacts/slots';
@@ -149,7 +149,7 @@ function Hud({ game }: { game: Game }) {
   return (
     <div ref={root} class={`hud ${cine ? 'letterbox' : ''}`} style={{ '--c': c } as never}>
       <div class={`damage ${flash ? 'hit' : ''}`} />
-      {blind > 0 && <div style={{ position: 'absolute', inset: 0, background: '#000', opacity: Math.min(1, blind / 1.5) }} />}
+      {blind > 0 && !cine && <div style={{ position: 'absolute', inset: 0, background: '#000', opacity: Math.min(1, blind / 1.5) }} />}
       {!cut && view !== 'top' && <div class={`reticle ${techUi.cooldowns.value.primary > 0 ? 'hot' : ''} ${third ? 'third' : ''}`} />}
       {!cut && view === 'top' && <Cursor hot={techUi.cooldowns.value.primary > 0} />}
       {!cut && (
@@ -173,7 +173,7 @@ function Hud({ game }: { game: Game }) {
       )}
       {!cut && <NavHud />}
       {!cut && <TopLeft game={game} />}
-      {game.net && <OnlineHud game={game} />}
+      {game.net && !cine && <OnlineHud game={game} />}
       {combatUi.wagerArmed.value && !cut && <div class="wager-arm">WAGER DECLARED · THE NEXT STRIKE CONNECTS</div>}
       <ClashLayer game={game} />
       {boss && !cut && <div class="boss" style={{ '--c': hex(boss.color) } as never}><span class="n">{boss.name}</span><div class="track"><i style={{ width: `${boss.frac * 100}%` }} /></div></div>}
@@ -181,12 +181,32 @@ function Hud({ game }: { game: Game }) {
       {tut && !cut && <div class="objective"><span class="step">Tutorial {tut.index} / {tut.total} · {tut.jp}</span><span class="t">{tut.title}</span><span class="b">{tut.body()}</span><span class="step">{keyLabel('pause')} pauses · Skip tutorial is in the pause menu</span></div>}
       {drill && !cut && <div class="drill-hud"><span class="big">{drill.score} / {drill.needed}</span><span class="s">{drill.jp} · {drill.tier} · {drill.left} left</span>{drill.cue && <span class="cue">{drill.cue}</span>}</div>}
       {pl && !cut && <div class="objective" style="top:auto;bottom:calc(var(--hud-pad) + 120px);right:var(--hud-pad);border-color:#9fdfff"><span class="step">Lore plaque</span><span class="t">{pl.title}</span><span class="b">{pl.body}</span></div>}
-      {!clashUi.value && <div class="toasts">{hud.toasts.value.map((t) => <div key={t.id} class={`toast ${t.tone}`}>{t.text}</div>)}</div>}
-      {ban && <div class="banner" key={ban.id}><div class="big jp">{ban.big}</div><div class="small">{ban.small}</div></div>}
-      {title && <div class="cut-title" key={title.id} style={{ '--c': hex(title.color) } as never}><div class="jp">{title.jp}</div><div class="en">{title.en}</div></div>}
+      {!cut && <div class="toasts">{hud.toasts.value.map((t) => <div key={t.id} class={`toast ${t.tone}`}>{t.text}</div>)}</div>}
+      {ban && !cine && <div class="banner" key={ban.id}><div class="big jp">{ban.big}</div><div class="small">{ban.small}</div></div>}
+      {title && <CutTitle key={title.id} title={title} />}
       {cine && <div class="skip">{keyLabel('jump').toUpperCase()} · SKIP</div>}
       <div style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none">
         {combatUi.numbers.value.map((n) => <span key={n.id} style={{ position: 'absolute', left: `${n.x}%`, top: `${n.y}%`, transform: 'translate(-50%,-50%)', color: n.color, fontFamily: 'var(--serif)', fontSize: n.big ? '34px' : '20px', fontWeight: 700, textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>{n.text}</span>)}
+      </div>
+    </div>
+  );
+}
+
+const CUTSCENE_LABEL: Record<CutscenePlay, string> = { always: 'Always', first: 'First time', never: 'Never' };
+
+// The Maximum Output name card, as a fighting game's ultimate: a slash of
+// the Output's colour cuts across the frame, speed lines rake it, the name
+// slams in huge and slanted with the kanji stamped behind it, and the whole
+// card shears away. The keyframes are in styles.css under "Cutscene title".
+function CutTitle({ title }: { title: NonNullable<typeof cutsceneUi.title.value> }) {
+  return (
+    <div class="cut-title" style={{ '--c': hex(title.color) } as never} aria-live="polite">
+      <div class="slash" />
+      <div class="lines" />
+      <div class="kanji jp">{title.jp}</div>
+      <div class="name">
+        <span class="sub">{title.sub}</span>
+        <span class="en">{title.en}</span>
       </div>
     </div>
   );
@@ -327,7 +347,7 @@ function Pause({ game, tab }: { game: Game; tab: PauseTab }) {
               <div class="row"><label>Camera</label><Seg value={s.camera} options={CAMERA_MODES} labels={CAMERA_LABEL} onChange={(v) => game.setCamera(v as CameraMode)} /><span /></div>
               <div class="row"><label>Invert Y</label><Seg value={s.invertY ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('invertY', v === 'on')} /><span /></div>
               <div class="row"><label>Mastery numbers</label><Seg value={s.showMastery ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('showMastery', v === 'on')} /><span /></div>
-              <div class="row"><label>Skip cutscenes</label><Seg value={s.skipCutscenes ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('skipCutscenes', v === 'on')} /><span /></div>
+              <div class="row"><label>Max Output cutscenes</label><Seg value={s.cutscenes} options={['always', 'first', 'never']} labels={CUTSCENE_LABEL} onChange={(v) => setSetting('cutscenes', v as CutscenePlay)} /><span /></div>
             </div>
           )}
           {tab === 'controls' && <Controls />}

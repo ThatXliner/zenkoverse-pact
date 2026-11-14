@@ -19,8 +19,8 @@ import { PROP_FLAG } from './protocol';
 // lands on the screen that dealt it; the old owner hears it and lets go.
 
 const SEND_MS = 1000 / 15;
-// A prop this screen simulates is moving when it is awake and faster than
-// this, or held (kinematic) or frozen (fixed).
+// A prop nobody owns that moves faster than this (m/s) on this screen was
+// moved by something here, so this screen takes it.
 const STIRRED = 0.25;
 
 interface Follow { pos: THREE.Vector3; quat: THREE.Quaternion; vel: THREE.Vector3; frozen: number; at: number }
@@ -193,7 +193,8 @@ export class PropSync implements PropAuthority {
       const p = props.byId(id);
       if (!p) { this.forget(id); continue; }
       const dynamic = p.body.bodyType() === RAPIER.RigidBodyType.Dynamic;
-      const resting = dynamic && (p.body.isSleeping() || (Math.hypot(p.body.linvel().x, p.body.linvel().y, p.body.linvel().z) < 0.02 && Math.hypot(p.body.angvel().x, p.body.angvel().y, p.body.angvel().z) < 0.02));
+      // Asleep, not just slow: a crate at the top of its arc is slow too.
+      const resting = dynamic && p.body.isSleeping();
       const t = p.body.translation(), q = p.body.rotation(), v = dynamic ? p.body.linvel() : { x: 0, y: 0, z: 0 };
       const flags = (resting ? PROP_FLAG.rest : 0) | (this.claiming.has(id) ? PROP_FLAG.claim : 0);
       out.push([id, r3(t.x), r3(t.y), r3(t.z), r3(q.x), r3(q.y), r3(q.z), r3(q.w), r3(v.x), r3(v.y), r3(v.z), flags, r3(Math.max(0, p.frozen))]);

@@ -59,7 +59,7 @@ export const PICK_WORDS: Record<Pick, { jp: string; en: string }> = {
 export const TELL_WORDS: Record<Pick, string> = {
   push: 'She leans in, palms out. Her field swells toward you.',
   hold: 'She settles back, arms crossed. Her field draws tight.',
-  feint: 'She twists away, one arm wide. Her far side flickers thin.',
+  feint: 'She darts in and out, one hand high. Her far side flickers thin.',
 };
 // The Master shows her pick this long after an exchange opens; later in the last.
 const TELL_AFTER = [0.3, 0.32, 0.45];

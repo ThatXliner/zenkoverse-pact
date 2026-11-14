@@ -2,7 +2,7 @@
 
 A first- and third-person sandbox set in one rainy night district of the Zenkoverse. You carry one Technique, train it, and write Pacts in the Workshop to shape it into Abilities. Every Pact is a sacrifice the universe reads back to you before you inscribe it.
 
-**Play it:** https://bryanhu.com/zenkoverse-pact/
+**Play it:** https://zenkoverse.bryanhu.com/
 
 ## What is in it
 
@@ -31,6 +31,10 @@ A first- and third-person sandbox set in one rainy night district of the Zenkove
 | Alt | Hold the full hand sign |
 | Tab | Pact Workshop |
 | Esc | Pause: menu, settings, codex, map |
+
+## Hosting
+
+The game is served from a self-hosted Mac at zenkoverse.bryanhu.com. `server/index.mjs` serves the build (and will host realtime multiplayer). `server/deploy.sh` runs there under launchd: it rebuilds whenever `main` moves, so merging to `main` deploys. The old GitHub Pages URL redirects to the new host.
 
 ## Run it locally
 

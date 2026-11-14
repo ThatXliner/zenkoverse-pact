@@ -15,6 +15,11 @@ import rules from '../src/net/rules.json' with { type: 'json' };
 const TICK_MS = 1000 / rules.tickHz;
 const AWAY_MS = 1500;
 const HITS_PER_SECOND = 40;
+// The server is public on a home machine: bound what one script can cost it.
+// A client sends about 20 states and a few casts and effects a second.
+const MESSAGES_PER_SECOND = 120;
+const MAX_CONNECTIONS = 128;
+const MAX_ROOMS = 32;
 
 const cleanRoom = (s) => (String(s ?? '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24) || rules.defaultRoom);
 const cleanName = (s) => (String(s ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 20) || 'Student');
@@ -48,6 +53,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
   function roomFor(code) {
     let room = rooms.get(code);
     if (!room) {
+      if (rooms.size >= MAX_ROOMS) return null;
       room = { code, players: new Map(), pending: new Map(), timer: null };
       room.timer = setInterval(() => tick(room), TICK_MS);
       rooms.set(code, room);
@@ -122,6 +128,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
   function join(ws, m) {
     const code = cleanRoom(m.room);
     const room = roomFor(code);
+    if (!room) { send(ws, { type: 'full', room: code, max: rules.maxPlayers }); return null; }
     const token = String(m.token ?? '').slice(0, 64);
     let p = token ? [...room.players.values()].find((x) => x.token === token) : null;
     if (p?.ws && p.ws !== ws) { const old = p.ws; p.ws = null; try { old.close(4000, 'replaced'); } catch { /* gone */ } }
@@ -236,10 +243,17 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
   }
 
   wss.on('connection', (ws) => {
+    if (wss.clients.size > MAX_CONNECTIONS) { ws.close(1013, 'server full'); return; }
     let at = null;
+    let budget = MESSAGES_PER_SECOND, budgetAt = Date.now();
     ws.alive = true;
     ws.on('pong', () => { ws.alive = true; });
     ws.on('message', (data) => later(() => {
+      const now = Date.now();
+      budget = Math.min(MESSAGES_PER_SECOND, budget + ((now - budgetAt) / 1000) * MESSAGES_PER_SECOND);
+      budgetAt = now;
+      if (budget < 1) { ws.close(1008, 'too many messages'); return; }
+      budget--;
       let m;
       try { m = JSON.parse(String(data)); } catch { return; }
       if (!m || typeof m.type !== 'string') return;

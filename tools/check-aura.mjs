@@ -176,6 +176,26 @@ check(await page.locator('.aura-meter .sub').textContent().then((t) => /Refineme
 console.log('\nthe drill raises refinement');
 await page.evaluate(() => { const g = window.game; g.refinement(0); g.teleport([6, 0, 3.2]); g.step(20); });
 check(/Reading the Field/.test(await page.locator('.prompt').textContent().catch(() => '')), 'the listening stone offers its drill');
+// The interact prompt clears both bottom corners, at the 1280 by 720 the
+// extra Ability row reaches past the middle at, on a phone held sideways,
+// and on a wide screen.
+for (const [w, h] of [[1280, 720], [844, 390], [960, 540], [2560, 1080]]) {
+  await page.setViewportSize({ width: w, height: h });
+  await page.waitForTimeout(450);
+  await step(2);
+  const hit = await page.evaluate(() => {
+    const box = (s) => document.querySelector(s)?.getBoundingClientRect();
+    const p = box('.prompt');
+    if (!p) return 'no prompt';
+    if (p.left < 0 || p.top < 0 || p.right > innerWidth || p.bottom > innerHeight) return 'off screen';
+    const over = ['.abilities', '.vitals'].filter((s) => { const b = box(s); return b && p.left < b.right && b.left < p.right && p.top < b.bottom && b.top < p.bottom; });
+    return over.length ? `overlaps ${over.join(' and ')}` : null;
+  });
+  check(hit === null, `at ${w}x${h} the interact prompt sits clear of the HUD corners${hit ? ` (${hit})` : ''}`);
+  if (w === 1280 || w === 844) await shot(`prompt-${w}x${h}`);
+}
+await page.setViewportSize({ width: 1280, height: 720 });
+await step(2);
 await press('KeyE');
 await step(5);
 check(await page.evaluate(() => window.game.state() === 'drill'), 'E begins it');

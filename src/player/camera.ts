@@ -103,6 +103,10 @@ export class CameraRig {
     this.skipRequested = false;
   }
 
+  // Ends the shot playing now with a short blend back to the view, for a
+  // shot whose length was not known when it began (an Aura Clash).
+  release(seconds: number): void { if (this.shot) this.shot.duration = Math.min(this.shot.duration, this.shotT + seconds); }
+
   get inShot(): boolean { return this.shot !== null; }
   get isFirst(): boolean { return this.blend < 0.5; }
   get isTop(): boolean { return this.mode === 'top'; }

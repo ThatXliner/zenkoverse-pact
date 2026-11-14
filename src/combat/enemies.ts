@@ -3,6 +3,7 @@ import type { Game } from '../app/game';
 import { Avatar, type CharacterModel } from '../character/avatar';
 import type { CostumeId } from '../character/costume';
 import { RAPIER, GROUP_ENEMY, GROUP_WORLD, GROUP_PROP, groups } from '../physics/world';
+import { AURA, AuraField } from './field';
 
 // 'rival' is another player in an online room (src/net/remote.ts): no AI, its
 // body follows the network and its hits go to the server.
@@ -29,10 +30,6 @@ export interface EnemyScale { hp: number; dmg: number }
 export const NO_SCALE: EnemyScale = { hp: 1, dmg: 1 };
 
 const STILL = new THREE.Vector3();
-// How far a boss's aura field reaches. Under a roof it closes in to fit the
-// room it fills: the hall is 28 by 16 m, and a field of the yard's reach
-// would cover all of it and pass out through its walls.
-const FIELD_RADIUS = { outdoors: 13, indoors: 7.5 };
 const CORPSE_SECONDS = 6;
 const CAM_RIGHT = new THREE.Vector3();
 
@@ -81,7 +78,13 @@ export class Enemy {
   frozen = 0;
   slow = 1;
   readonly def: EnemyDef;
-  aura = { active: false, radius: 0, collapsed: false };
+  // The Master's aura field (issue #4), null for everyone without one.
+  field: AuraField | null = null;
+  // Seconds this body is held in place: a clash (Infinity while it lasts),
+  // or the moment after losing one.
+  locked = 0;
+  // Seconds left of a broken guard after losing a clash: blows land harder.
+  guardBroken = 0;
   private attackCd = 1;
   private castCd = 4;
   damageTaken = 0;
@@ -111,6 +114,7 @@ export class Enemy {
     this.ctrl.setCharacterMass(90);
     (this.collider as RAPIER.Collider & { enemy?: Enemy }).enemy = this;
     if (showBar && !def.boss && def.ai !== 'dummy') this.bar = new HealthBar(game.renderer.scene, h + 0.35);
+    if (def.ai === 'ancient') this.field = new AuraField(AURA.master.recovers);
   }
 
   get height(): number { return this.def.height ?? 1.8; }
@@ -141,7 +145,7 @@ export class Enemy {
     this.state = 'dead';
     this.avatar.die();
     this.game.physics.world.removeCollider(this.collider, false);
-    this.aura.active = false;
+    this.field?.end('spent');
     this.bar?.dispose();
   }
 
@@ -151,6 +155,12 @@ export class Enemy {
     this.disposed = true;
     this.game.renderer.scene.remove(this.avatar.root);
     this.game.physics.world.removeRigidBody(this.body);
+  }
+
+  // Holds the body where it stands for `seconds`, dropping whatever it was doing.
+  hold(seconds: number): void {
+    this.locked = seconds;
+    if (this.alive && this.def.ai !== 'dummy' && this.def.ai !== 'rival') { this.state = 'chase'; this.t = 0; this.attackCd = Math.max(this.attackCd, 0.6); }
   }
 
   private face(target: THREE.Vector3, dt: number, rate = 8): void {
@@ -174,12 +184,15 @@ export class Enemy {
     this.attackCd -= dt;
     this.castCd -= dt;
     this.frozen = Math.max(0, this.frozen - dt);
+    this.locked = Math.max(0, this.locked - dt);
+    this.guardBroken = Math.max(0, this.guardBroken - dt);
     this.resonance = Math.max(0, this.resonance - dt * 0.5);
     this.slow = THREE.MathUtils.lerp(this.slow, 1, 1 - Math.exp(-1.5 * dt));
     const move = new THREE.Vector3();
-    const speed = def.speed * this.slow * (g.aura.pressureOn(this.position) ? 0.55 : 1) * (this.frozen > 0 ? 0 : 1);
+    const hindered = g.aura.hinder(this.position);
+    const speed = def.speed * this.slow * hindered * (this.frozen > 0 ? 0 : 1);
 
-    if (this.alive && def.ai !== 'dummy') {
+    if (this.alive && def.ai !== 'dummy' && this.locked <= 0) {
       switch (this.state) {
         case 'idle':
           if (dist < 26) this.state = 'chase';
@@ -195,7 +208,7 @@ export class Enemy {
         }
         case 'windup':
           this.face(p, dt, 12);
-          if (this.t > (def.ai === 'ancient' ? 0.5 : 0.38)) { this.state = 'strike'; this.t = 0; this.strike(); }
+          if (this.t > (def.ai === 'ancient' ? 0.5 : 0.38) / hindered) { this.state = 'strike'; this.t = 0; this.strike(); }
           break;
         case 'strike':
           if (this.t > 0.18) { this.state = 'recover'; this.t = 0; }
@@ -233,8 +246,15 @@ export class Enemy {
     if (this.resonance > 0) this.avatar.root.position.x += (Math.random() - 0.5) * this.resonance * 0.03;
     this.avatar.update(dt);
     if (this.bar) this.bar.update(this.position, this.alive ? this.hp / this.maxHp : 0, CAM_RIGHT.set(1, 0, 0).applyQuaternion(this.game.renderer.camera.quaternion));
-    if (this.aura.active) this.aura.radius = THREE.MathUtils.lerp(this.aura.radius, g.world.indoorsAt(this.position) > 0 ? FIELD_RADIUS.indoors : FIELD_RADIUS.outdoors, 1 - Math.exp(-3 * dt));
-    else this.aura.radius = THREE.MathUtils.lerp(this.aura.radius, 0, 1 - Math.exp(-3 * dt));
+    // Her field opens whenever her aura is full, and under a roof it closes in
+    // to fit the room it fills: the hall is 28 by 16 m, and a field of the
+    // yard's reach would cover all of it and pass out through its walls.
+    const f = this.field;
+    if (f) {
+      f.reach = g.world.indoorsAt(this.position) > 0 ? AURA.master.reach.indoors : AURA.master.reach.outdoors;
+      if (this.alive && f.ready && this.locked <= 0) f.expand(f.reach, AURA.master.density, Infinity);
+      f.update(dt);
+    }
   }
 
   private strike(): void {

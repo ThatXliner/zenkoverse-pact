@@ -10,14 +10,15 @@ import { buildArena, type Arena } from './arena';
 import { pickOffers, type Offer } from './offers';
 import { slotWords } from '../pacts/readback';
 import { keyLabel } from '../app/keymap';
-import { WAVES, WAVE_COUNT, SPAWN_GAP, HEAL_BETWEEN, EYE_AFTER, AURA_AFTER, SCORE, CLEAR_BONUS, WAGER_BONUS, VICTORY_BONUS, roster, scaleFor } from './waves';
+import { WAVES, WAVE_COUNT, SPAWN_GAP, HEAL_BETWEEN, EYE_AFTER, SCORE, CLEAR_BONUS, WAGER_BONUS, VICTORY_BONUS, roster, scaleFor } from './waves';
 
 // The rooftop trial: the classic arena loop (issue #34) on the hall's roof.
 // One run is a small state machine. `fight` spawns a wave and waits for it to
-// clear; `offer` holds the world still while the player takes an Eye, the
-// Aura, and a Pact; `over` is the end screen.
+// clear; `offer` holds the world still while the player takes an Eye and a
+// Pact; `over` is the end screen. Aura works on the roof as it does
+// everywhere, from the first wave.
 
-type OfferStep = { kind: 'eye' } | { kind: 'aura' } | { kind: 'pact'; offers: Offer[] };
+type OfferStep = { kind: 'eye' } | { kind: 'pact'; offers: Offer[] };
 
 type Phase =
   | { kind: 'idle' }
@@ -64,11 +65,9 @@ export class Rooftop {
   private taken: { pact: Pact; text: string }[] = [];
   private takenIds = new Set<string>();
   private eyeTaken: EyeId | null = null;
-  private auraUnlocked = false;
   private startedAt = 0;
   private wagers0 = { won: 0, lost: 0 };
   private winding = new WeakSet<Enemy>();
-  private auraNag = 0;
   private ending: boolean | null = null;
   private counted = new WeakSet<Enemy>();
 
@@ -79,7 +78,6 @@ export class Rooftop {
   }
 
   get active(): boolean { return this.phase.kind === 'fight' || this.phase.kind === 'offer'; }
-  get auraAllowed(): boolean { return !this.active || this.auraUnlocked; }
   // Seconds between any two enemy wind-ups on the roof: the crowd takes turns.
   get attackGap(): number { return this.phase.kind !== 'fight' ? 0 : this.phase.wave === 0 ? 1.5 : this.phase.wave < 3 ? 1.0 : this.phase.wave < 6 ? 0.8 : 0.6; }
   get stage(): string { return this.phase.kind; }
@@ -123,7 +121,6 @@ export class Rooftop {
     this.score = 0; this.kills = 0; this.cleared = 0;
     this.taken = []; this.takenIds.clear();
     this.eyeTaken = null;
-    this.auraUnlocked = false;
     this.startedAt = performance.now();
     this.wagers0 = { won: g.combat.wagersWon, lost: g.combat.wagersLost };
     rooftopUi.result.value = null;
@@ -162,7 +159,6 @@ export class Rooftop {
     if (this.ending !== null) { const victory = this.ending; this.ending = null; this.finish(victory); return; }
     const p = this.phase;
     if (p.kind !== 'fight' || dt <= 0) return;
-    if (g.input.hit('aura') && !this.auraUnlocked && (this.auraNag -= 1) <= 0) { toast('Aura Expansion unlocks after wave 4', 'info'); this.auraNag = 3; }
 
     p.spawnT -= dt;
     if (p.queue.length && p.spawnT <= 0) { this.spawnOne(p.wave, p.queue.shift()!); p.spawnT = WAVES[p.wave]!.gap ?? SPAWN_GAP; }
@@ -241,7 +237,6 @@ export class Rooftop {
     if (wave + 1 >= WAVE_COUNT) { this.finish(true); return; }
     const steps: OfferStep[] = [];
     if (wave + 1 === EYE_AFTER) steps.push({ kind: 'eye' });
-    if (wave + 1 === AURA_AFTER) steps.push({ kind: 'aura' });
     steps.push({ kind: 'pact', offers: pickOffers(g, this.takenIds) });
     this.phase = { kind: 'offer', wave, steps };
     this.publish();
@@ -270,14 +265,6 @@ export class Rooftop {
     if (rooftopUi.offer.value?.kind !== 'eye' || EYES[id].locked) return;
     this.game.combat.installEye(id);
     this.eyeTaken = id;
-    this.advance();
-  }
-
-  acceptAura(): void {
-    if (rooftopUi.offer.value?.kind !== 'aura') return;
-    this.auraUnlocked = true;
-    this.game.audio.play('phaserUp3', 0.5, 0.5);
-    banner('気', `Aura Expansion unlocked. Hold ${keyLabel('aura')}.`);
     this.advance();
   }
 

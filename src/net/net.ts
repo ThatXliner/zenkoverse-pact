@@ -7,6 +7,7 @@ import { PLAYER_SUIT } from '../character/avatar';
 import { FxWire } from './fxwire';
 import { RemotePlayer, seatSuit } from './remote';
 import { RULES, type ClientMsg, type PlayerInfo, type ServerMsg, type Vec3 } from './protocol';
+import type { Pick } from './clash';
 
 export type NetStatus = 'off' | 'connecting' | 'online' | 'reconnecting' | 'full';
 
@@ -287,6 +288,17 @@ export class Net {
       case 'pong':
         netUi.ping.value = Math.round(performance.now() - m.t);
         return;
+      case 'clash': {
+        g.aura.clash.serverStart(m.id, m.a, m.b);
+        if (m.a !== this.id && m.b !== this.id) {
+          const a = this.nameOf(m.a), b = this.nameOf(m.b);
+          if (a && b) this.feed(`${a} and ${b} clash`);
+        }
+        return;
+      }
+      case 'clash-step':
+        g.aura.clash.serverStep(m.id, m.a, m.b, m.ev);
+        return;
     }
   }
 
@@ -328,6 +340,10 @@ export class Net {
 
   setTechnique(id: string): void { this.send({ type: 'tech', tech: id }); }
 
+  // This player's field touches another's: the server decides whether a clash starts.
+  askClash(target: number): void { if (!this.downed) this.send({ type: 'clash', target }); }
+  clashPick(id: number, round: number, pick: Pick): void { this.send({ type: 'clash-pick', id, round, pick }); }
+
   // Every frame, paused or not: send this player's state on the send clock,
   // forward the effects it drew, and move everyone else.
   update(raw: number): void {
@@ -339,7 +355,7 @@ export class Net {
       if (now - this.lastSend >= SEND_MS - 2) {
         this.lastSend = now;
         const s = g.techniques.sign;
-        this.send({ type: 'state', s: { ct: now, p: v3(g.player.position), v: v3(g.player.velocity), yaw: Math.round(g.cam.yaw * 1000) / 1000, pitch: g.cam.isTop ? 0 : Math.round(g.cam.pitch * 1000) / 1000, g: g.player.grounded, sign: s.kind === 'signing' ? 1 : s.kind === 'primed' ? 2 : 0, cine: g.cutscenes.active } });
+        this.send({ type: 'state', s: { ct: now, p: v3(g.player.position), v: v3(g.player.velocity), yaw: Math.round(g.cam.yaw * 1000) / 1000, pitch: g.cam.isTop ? 0 : Math.round(g.cam.pitch * 1000) / 1000, g: g.player.grounded, sign: s.kind === 'signing' ? 1 : s.kind === 'primed' ? 2 : 0, cine: g.cutscenes.active, f: [Math.round(g.aura.field.radius * 100) / 100, Math.round(g.aura.field.density * 100) / 100] } });
       }
     } else this.fx.take();
     for (const r of this.remotes.values()) r.update(raw);

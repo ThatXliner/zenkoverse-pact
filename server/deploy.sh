@@ -1,13 +1,14 @@
 #!/bin/sh
 # Keeps this checkout on origin/main: rebuilds dist/ when main moves.
 # The serving process reads dist/ per request, so it restarts only when
-# server/ itself changes.
+# server/ or the files it imports from src/net (the shared numbers and the
+# clash referee) change.
 set -eu
 cd "$(dirname "$0")/.."
 while true; do
   git fetch -q origin main
   if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
-    server_changed=$(git diff --quiet HEAD origin/main -- server && echo no || echo yes)
+    server_changed=$(git diff --quiet HEAD origin/main -- server src/net/rules.json src/net/clash.js && echo no || echo yes)
     git reset -q --hard origin/main
     npm ci --no-audit --no-fund
     npm run build -- --outDir dist.next --emptyOutDir

@@ -60,6 +60,7 @@ function freeDestination(ctx: { game: import('../../app/game').Game }, from: THR
 export const shift: TechniqueKit = {
   id: 'shift', name: 'Shift', glyph: '転', color: COLOR, type: 'Spatial',
   blurb: 'Translate your body through whatever lies between. Momentum and orientation are preserved, so every use is geometry.',
+  breadth: 3,
   resource: { name: 'Focus', max: 100, regen: 14, startsFull: true },
   primitive: { name: 'Shift', short: 'a short hop forward', description: 'Translate a short, imprecise distance in roughly the direction you face.' },
   parameters: ['direction', 'range', 'target', 'trigger', 'duration', 'resource', 'body'],

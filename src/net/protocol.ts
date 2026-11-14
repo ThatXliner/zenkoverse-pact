@@ -3,11 +3,14 @@
 // the reference for both sides; the numbers both sides share live in
 // rules.json, which the server imports too.
 import rulesJson from './rules.json';
+import type { ClashEvent, ClashRules, Pick } from './clash';
 
 export const RULES = rulesJson as {
   maxPlayers: number; defaultRoom: string; tickHz: number; sendHz: number; interpMs: number; maxHp: number;
   respawnSeconds: number; spawnProtectSeconds: number; hitTimeoutMs: number; maxHitDamage: number; maxHitRange: number;
   reconnectGraceSeconds: number; spawns: [number, number, number][];
+  field: { maxRadius: number; clashSlack: number; clashCooldownMs: number };
+  clash: ClashRules & { graceMs: number };
 };
 
 export type Vec3 = [number, number, number];
@@ -26,6 +29,8 @@ export interface PlayerState {
   sign: 0 | 1 | 2;
   // In a Maximum Output cutscene: invulnerable, signing in place.
   cine: boolean;
+  // The aura field as drawn: radius in metres (0 when there is none) and density 0..1.
+  f?: [number, number];
 }
 
 // What everyone knows about a player in the room. The server owns hp, down,
@@ -59,6 +64,9 @@ export type ClientMsg =
   | { type: 'self'; amount: number }
   | { type: 'status'; target: number; frozen: number; slow: number }
   | { type: 'ping'; t: number }
+  // This player's open field touches the target's: the server starts a clash if both check out.
+  | { type: 'clash'; target: number }
+  | { type: 'clash-pick'; id: number; round: number; pick: Pick }
   | { type: 'bye' };
 
 export type ServerMsg =
@@ -75,4 +83,9 @@ export type ServerMsg =
   | { type: 'down'; id: number; by: number | null }
   | { type: 'respawn'; id: number; p: Vec3; hp: number }
   | { type: 'status'; by: number; frozen: number; slow: number }
-  | { type: 'pong'; t: number; s: number };
+  | { type: 'pong'; t: number; s: number }
+  // A clash between players a and b started, then each step of it, sent to the
+  // whole room. The server runs the referee in clash.js; picks and the winner
+  // are in a, b order.
+  | { type: 'clash'; id: number; a: number; b: number }
+  | { type: 'clash-step'; id: number; a: number; b: number; ev: ClashEvent };

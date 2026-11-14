@@ -92,6 +92,15 @@ export class Techniques {
     this.game.hands.stop();
   }
 
+  // Drops the cast in flight, for an Aura Clash that locks the player. The
+  // sign and the kits' own state stay.
+  interrupt(): void {
+    if (!this.cast_) return;
+    if (this.cast_.held) this.def.effects.release?.(this.cast_.ctx);
+    this.cast_ = null;
+    this.game.hands.stop();
+  }
+
   get casting(): boolean { return this.cast_ !== null; }
   get current(): Cast | null { return this.cast_; }
   get signing(): boolean { return this.sign.kind === 'signing'; }
@@ -216,7 +225,8 @@ export class Techniques {
     this.strain = Math.min(1, this.strain + cost.strain);
     const gestureSet = this.def.gestures[kind] ?? this.def.gestures.primary!;
     const gesture = pick(gestureSet, variant);
-    const speed = (1 + g.mastery.get(this.def.id, 'speed') * 0.7) * (variant === 'long' ? 1 : 1.15);
+    // Inside an open aura field the player senses and acts faster (issue #4).
+    const speed = (1 + g.mastery.get(this.def.id, 'speed') * 0.7) * (variant === 'long' ? 1 : 1.15) * g.aura.castSpeed;
     const held = restriction(pact ?? ({ clauses: [] } as unknown as Pact), 'duration') === 'held' || !!(!pact && kind === 'secondary' && this.def.effects.hold);
     g.hands.play(gesture, speed, () => undefined, (k) => g.cam.kick(k));
     g.avatar.playUpper(this.def.avatarClips[kind], speed * 1.1);

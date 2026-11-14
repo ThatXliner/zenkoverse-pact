@@ -285,7 +285,7 @@ if (run('roles')) {
   await api((g, roles) => {
     const game = g.game, V = game.player.position.constructor;
     g.teleport([0, 0, 7]);
-    roles.forEach((k, i) => { const e = game.encounters.spawn(k, new V((i - (roles.length - 1) / 2) * 2.6, 0, 4.4)); e.frozen = 1e6; e.aura.active = false; });
+    roles.forEach((k, i) => { const e = game.encounters.spawn(k, new V((i - (roles.length - 1) / 2) * 2.6, 0, 4.4)); e.frozen = 1e6; e.field = null; });
     g.camera('top');
   }, ROLES);
   await step(40);

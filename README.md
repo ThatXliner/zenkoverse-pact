@@ -13,14 +13,14 @@ A proof of concept of the Zenkoverse power system as a game: one cel-shaded dojo
 - **One compound**: a training hall with the Workshop, the dummies and the Master's mat; a courtyard with the sparring ring, the koi pond and the hoist for the crane drill; a storehouse roof joined to the hall roof by a plank bridge; a wall walk round to the gate, where the Kuroda Enforcer waits. The hall roof hosts the eight-wave rooftop trial.
 - **Three camera views**: top-down by default (you move with the screen and aim with the cursor), over the shoulder (the camera follows the mouse and you aim at the crosshair), and first person. V cycles them; Settings keeps the choice.
 - **Online rooms**: up to eight players in the compound, live, each with their own Technique and Pacts. Hit each other, go down, get back up, and watch the scoreboard.
-- **Aura Expansion** on F, with Aura Clash against the Ancient Echo Master's field.
+- **Aura Expansion** on F, anywhere: it spends your whole aura on a field around you, where your Techniques are sharper and others are slowed. F again retracts it, with nothing refunded. Two fields that touch become an **Aura Clash**: a short side-on cutscene of quick push, hold or feint exchanges against the Ancient Echo Master or another player. The loser's field collapses and their guard breaks; nobody is hurt by the clash. Refinement, trained at the listening stone in the yard, sets how dense your field is, up to a potential that a broader Technique and more Pacts lower.
 - **The look**: anime-leaning cel shading. Flat fills over one light ramp, hard shadows, ink lines from the depth buffer and an inverted hull on every character, stylized proportions, a late-afternoon sun. Characters and world are drawn the same way.
 
 ## Play online
 
 Open https://zenkoverse.bryanhu.com/, choose **Play Online**, pick a Technique, type a name and a room code, and press **Enter the room**. Everyone with the same room code fights in the same compound. The room code lands in the address bar; send that link (or use **Copy room link** in the Esc menu), and whoever opens it lands on the same screen, ready to join. The default room is `dojo`, open to anyone. A room holds eight players.
 
-Online, Esc and Tab do not stop the world: the room keeps going and you can be hit with a menu open. Health 0 puts you down for four seconds, then you get up at the spawn point farthest from everyone else, briefly protected. The scoreboard counts downs dealt and times downed. Maximum Output plays its cutscene for you alone; while it runs you cannot be hurt, and everyone else sees you glow. The single-player fights, drills and the rooftop trial stay in single-player. Your Pacts, mastery and key bindings come with you from this browser.
+Online, Esc and Tab do not stop the world: the room keeps going and you can be hit with a menu open. Health 0 puts you down for four seconds, then you get up at the spawn point farthest from everyone else, briefly protected. The scoreboard counts downs dealt and times downed. Maximum Output plays its cutscene for you alone; while it runs you cannot be hurt, and everyone else sees you glow. An Aura Clash between two players locks only those two: the server decides each exchange from both picks, everyone else keeps playing, and leaving mid-clash loses it. The single-player fights, drills and the rooftop trial stay in single-player. Your Pacts, mastery and key bindings come with you from this browser.
 
 ## Controls
 
@@ -34,7 +34,8 @@ Online, Esc and Tab do not stop the world: the room keeps going and you can be h
 | LMB / RMB | Primary / secondary Ability (hold where the Pact says held) |
 | Q | Maximum Output when the ring is full |
 | R | Declare a Wager |
-| F | Aura Expansion |
+| F | Aura Expansion: expand (spends all your aura), or retract (no refund). It cannot expand again until the aura has refilled |
+| W / S / A or D | In an Aura Clash: push / hold / feint. Push beats hold, hold beats feint, feint beats push |
 | E | Interact: plaques, the Architect, drills, challenges |
 | V | Camera view: top-down, over the shoulder, first person |
 | Alt | Perform the full hand sign |
@@ -108,7 +109,7 @@ It writes `captures/report.json` with every screenshot path, modal-fit failures,
 
 ### Checks
 
-Every `npm run check:*` script and `node tools/check-flow.mjs` drives the built game with real keys, clicks and the mouse: `check:controls` (the movement keys follow the camera's axes in all three views), `check:effects` (a restart leaves no effect behind, and the Master's field tints only a player inside it), `check:keybinds`, `check:locomotion`, `check:navigation`, `check:rooftop` (the whole trial), `check:sign`, `check:tints` (enemy suits and costumes read as cloth and apart from each other), `check:multiplayer` (two browsers in one room: movement, an Ability hitting exactly once, a down and respawn, a server restart, leaving; add `--latency 120` to run it with added delay), and `check-flow` (the Workshop, the dummies and the whole tutorial). `tools/perf-rooftop.mjs` measures frame times in every view at DPR 2, and `tools/perf-multiplayer.mjs` does the same in a full room of eight.
+Every `npm run check:*` script and `node tools/check-flow.mjs` drives the built game with real keys, clicks and the mouse: `check:controls` (the movement keys follow the camera's axes in all three views), `check:effects` (a restart leaves no effect behind, and the Master's field tints only a player inside it), `check:keybinds`, `check:locomotion`, `check:navigation`, `check:rooftop` (the whole trial), `check:sign`, `check:tints` (enemy suits and costumes read as cloth and apart from each other), `check:aura` (expansion spends the whole pool, retraction refunds nothing, no expansion before a full refill, the drill, refinement and potential, and a lost and a won clash against the Master with no health lost and the world still running), `check:multiplayer` (three browsers in one room: movement, an Ability hitting exactly once, a down and respawn, an Aura Clash that plays the same on every screen while a third player keeps walking, a forfeit by leaving, a server restart, leaving; add `--latency 120` to run it with added delay), and `check-flow` (the Workshop, the dummies and the whole tutorial). `tools/perf-rooftop.mjs` measures frame times in every view at DPR 2, with a field open and during a clash, and `tools/perf-multiplayer.mjs` does the same in a full room of eight.
 
 ## Layout
 
@@ -122,11 +123,11 @@ src/hands       first-person arms on the human skeleton: calibrated IK rig, pose
 src/pacts       Pact schema, validator, JSON Schema, Resolve, readback, the player's book
 src/mastery     mastery stats and gesture variant selection
 src/techniques  Technique kit contract, runtime, VFX pool, kits/<technique>.ts
-src/combat      player combat, enemies, encounters, aura
-src/net         online rooms: protocol, shared rules, socket, other players, effect mirroring
+src/combat      player combat, enemies, encounters, aura fields (rules, drawing) and the Aura Clash
+src/net         online rooms: protocol, shared rules, the clash referee both sides run, socket, other players, effect mirroring
 src/cutscene    data-driven cutscene player
 src/tutorial    step machine
-src/drills      drill runtime
+src/drills      drill runtime, the aura drill (Reading the Field)
 src/world       the compound, props, waypoint shrines
 src/workshop    Pact Workshop UI
 src/ui          App, HUD, sheets, styles

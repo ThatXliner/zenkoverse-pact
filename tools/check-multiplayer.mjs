@@ -7,9 +7,14 @@
 //   one Ability from A damages B exactly once, by the amount A sent, and both
 //   screens agree on B's health;
 //   A downs B; both see the down and the score, then the respawn;
+//   A and B open their fields with F and clash, picking with their keys;
+//   the server decides it, and A's, B's and a third player C's screens play
+//   the same steps and winner; C keeps walking the whole time; the loser's
+//   field collapses and nobody loses health; then C leaves mid-clash with A
+//   and A wins it by forfeit;
 //   the server restarts and both rejoin on their own (local server only);
 //   B leaves and disappears from A's screen.
-// It saves both screens at the hit and at the down for review.
+// It saves both screens at the hit, the down and the clash for review.
 // Usage: node tools/check-multiplayer.mjs [url] [--latency 120] [--out captures/multiplayer] [--port 4181]
 // Without a URL it serves dist/ through server/index.mjs (run `npm run build`
 // first); --latency delays every realtime message in each direction.
@@ -188,6 +193,76 @@ for (let i = 1; i <= 6; i++) {
 }
 b = await until(B, (v) => v.hp < before, 3000 * slack);
 check(b.hp < before, `Shockline from 6 m lands on B (${before} to ${b.hp.toFixed(1)})`);
+
+console.log('\nan Aura Clash between A and B, while C walks past');
+// C joins for this part only. A and B open their fields with F six metres
+// apart, so the fields touch and the server starts a clash. A pushes and B
+// holds every exchange: A should take it two to none on every screen.
+const C = await player('Chiyo', 'echo');
+const idC = (await C.net()).id;
+await until(A, (v) => remoteOf(v, idC)?.drawn);
+await A.api((g) => { g.camera('top'); g.teleport([-3, 0, 6]); });
+await B.api((g) => { g.camera('top'); g.teleport([3, 0, 6]); });
+await C.api((g) => { g.camera('top'); g.teleport([-1, 0, 11.5]); });
+await wait(1200 * slack);
+const auraOf = (p) => p.api((g) => g.aura());
+const hpA0 = (await A.net()).hp, hpB0 = (await B.net()).hp;
+await A.page.keyboard.press('KeyF');
+await B.page.keyboard.press('KeyF');
+const inClash = async (p) => { const t0 = Date.now(); while (Date.now() - t0 < 4000 * slack) { if ((await auraOf(p)).clash.stage !== null) return true; await wait(40); } return false; };
+check(await inClash(A) && await inClash(B), 'two open fields that touch start a clash on both screens');
+check((await auraOf(C)).clash.stage === null, 'C is not in it');
+// C walks east for as long as the two are locked.
+const c0 = (await C.net()).pos;
+await C.page.keyboard.down('KeyD');
+const picked = { A: 0, B: 0 };
+const t0 = Date.now();
+let cDown = true, shotC = false, shotAB = false, walked = 0;
+while (Date.now() - t0 < 12000 * slack) {
+  const [va, vb] = await Promise.all([auraOf(A), auraOf(B)]);
+  if (va.clash.stage === null && vb.clash.stage === null) break;
+  if (cDown && (va.clash.stage === null || va.clash.stage === 'over')) { await C.page.keyboard.up('KeyD'); cDown = false; walked = Date.now() - t0; }
+  if (!shotAB && va.clash.view?.stage === 'choose' && vb.clash.view?.stage === 'choose') { await Promise.all([shot(A, 'clash'), shot(B, 'clash')]); shotAB = true; }
+  if (va.clash.view?.stage === 'choose' && !va.clash.view.mine) { await A.page.keyboard.press('KeyW'); picked.A++; }
+  if (vb.clash.view?.stage === 'choose' && !vb.clash.view.mine) { await B.page.keyboard.press('KeyS'); picked.B++; }
+  if (!shotC && va.clash.view?.stage === 'reveal') { await shot(C, 'clash-watched'); shotC = true; }
+  await wait(30);
+}
+if (cDown) await C.page.keyboard.up('KeyD');
+const c1 = (await C.net()).pos;
+check(dist(c0, c1) > 2 && (await C.api((g) => g.game.input.enabled)), `C kept walking through the clash, ${dist(c0, c1).toFixed(1)} m in ${(walked / 1000).toFixed(1)} s, not frozen`);
+await wait(400 * slack);
+const logs = await Promise.all([A, B, C].map((p) => auraOf(p).then((v) => v.clash.log)));
+const ends = logs.map((l) => l.filter((x) => x.ev.kind === 'end'));
+const end = ends[0][0];
+const winnerId = end ? (end.ev.winner === 0 ? end.a : end.ev.winner === 1 ? end.b : null) : undefined;
+check(picked.A >= 2 && picked.B >= 2, `both picked with their keys (${picked.A} and ${picked.B} picks)`);
+check(winnerId === idA && end.ev.reason === 'rounds', `A takes it (${JSON.stringify(end?.ev)})`);
+check(JSON.stringify(logs[0]) === JSON.stringify(logs[1]), `A's and B's screens played the same ${logs[0].length} clash steps`);
+check(JSON.stringify(logs[2]) === JSON.stringify(logs[0]), "C's screen heard the same clash");
+const [fa, fb] = await Promise.all([auraOf(A), auraOf(B)]);
+check(fa.state === 'open' && fb.state === 'recovering' && fb.ended === 'collapsed', `A's field holds, B's collapsed (${fa.state}; ${fb.state}, ${fb.ended})`);
+check(fb.guardBroken > 0, "B's guard is broken");
+a = await A.net(); b = await B.net();
+check(a.hp === hpA0 && b.hp === hpB0, `nobody lost health in the clash (A ${hpA0} to ${a.hp}, B ${hpB0} to ${b.hp})`);
+check(Math.abs(remoteOf(a, idB).hp - b.hp) < 0.11, "A's screen agrees on B's health");
+
+console.log('\na player who leaves mid-clash loses it');
+await A.api((g) => { if (g.game.aura.field.open) g.game.aura.retract(); g.auraReady(); g.teleport([-3, 0, 6]); });
+await C.api((g) => { g.auraReady(); g.teleport([2, 0, 6]); });
+await B.api((g) => g.teleport([-3, 0, 14]));
+await wait(1000 * slack);
+await A.page.keyboard.press('KeyF');
+await C.page.keyboard.press('KeyF');
+check(await inClash(A), 'A and C clash');
+await C.ctx.close();
+const forfeit = async () => { const t1 = Date.now(); while (Date.now() - t1 < 4000 * slack) { const l = (await auraOf(A)).clash.log; const e = l.filter((x) => x.ev.kind === 'end' && (x.a === idC || x.b === idC)).at(-1); if (e) return e; await wait(50); } return null; };
+const left = await forfeit();
+check(left && left.ev.reason === 'forfeit' && (left.ev.winner === 0 ? left.a : left.b) === idA, `C's leaving hands A the clash (${JSON.stringify(left?.ev)})`);
+const lb = (await auraOf(B)).clash.log.filter((x) => x.ev.kind === 'end').at(-1);
+check(lb && lb.ev.reason === 'forfeit', 'B, watching, hears the forfeit');
+await wait(1200);
+check((await auraOf(A)).clash.stage === null && (await auraOf(A)).state === 'open', "A is released, field still open");
 
 if (restart) {
   console.log('\nthe server restarts');

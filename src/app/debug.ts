@@ -5,12 +5,14 @@ import type { CameraMode } from '../player/camera';
 import { appState } from './state';
 import { validatePact } from '../pacts/schema';
 import type { KeySlot } from '../pacts/slots';
+import type { DrillId } from './state';
 import type { Action } from './keymap';
 import { audit as auditOffers } from '../rooftop/offers';
 import type { TechniqueId } from '../techniques/kit';
 import type { PoseName } from '../hands/poses';
 import { MASTERY_CONFIG } from '../mastery/mastery';
 import { netUi } from '../net/net';
+import { clashUi } from '../combat/clash';
 
 export interface DebugApi {
   game: Game;
@@ -25,7 +27,7 @@ export interface DebugApi {
   handsView(yaw: number, pitch: number): void;
   hold(action: Action, held: boolean): void;
   encounter(id: 'sparring' | 'kuroda' | 'ancient' | 'dummy-room'): void;
-  drill(id: 'recoil-crane'): void;
+  drill(id: DrillId): void;
   workshop(open: boolean): void;
   tutorialStep(step: string): void;
   cutscene(id: string): void;
@@ -42,14 +44,27 @@ export interface DebugApi {
     begin(): void;
     clearWave(): void;
     climb(dir: 'up' | 'down'): void;
-    status(): { stage: string; wave: number; alive: number; hp: number; maxHp: number; auraAllowed: boolean; eye: string | null; app: string };
+    status(): { stage: string; wave: number; alive: number; hp: number; maxHp: number; eye: string | null; app: string };
     audit(technique: TechniqueId, rounds: number): string[];
     offers(): { name: string; slot: string; tags: string[]; text: string; valid: boolean; errors: string[] }[];
   };
   stats(): { fps: number; drawCalls: number; triangles: number; props: number; enemies: number };
+  // The player's aura as the checks read it, and the clash in progress.
+  aura(): AuraView;
+  // Sets trained refinement for the Technique in hand (the drill raises it in play).
+  refinement(v: number): void;
+  // Refills the pool at once, so a check need not wait out a recovery.
+  auraReady(): void;
   // The online room as the multiplayer check reads it: this player, the
   // others as drawn here, and the hits sent and health changes heard.
   net(): NetView | null;
+}
+
+export interface AuraView {
+  state: string; pool: number; left: number; radius: number; density: number; ended: string | null; guardBroken: number;
+  refinement: number; trained: number; potential: number; breadth: number; pacts: number;
+  clash: { stage: string | null; masterPick: string | null; view: unknown; log: unknown[] };
+  hp: number; master: { hp: number; field: string; radius: number; ended: string | null; locked: number; guardBroken: number } | null;
 }
 
 export interface NetView {
@@ -104,7 +119,7 @@ export function installDebug(game: Game): void {
       begin() { game.rooftop.begin(); },
       clearWave() { game.rooftop.clearWave(); },
       climb(dir) { if (dir === 'up') game.rooftop.climbUp(); else game.rooftop.climbDown(); },
-      status() { const r = game.rooftop; return { stage: r.stage, wave: r.wave, alive: r.alive, hp: game.combat.hp, maxHp: game.combat.maxHp, auraAllowed: r.auraAllowed, eye: game.combat.eye, app: appState.value.kind }; },
+      status() { const r = game.rooftop; return { stage: r.stage, wave: r.wave, alive: r.alive, hp: game.combat.hp, maxHp: game.combat.maxHp, eye: game.combat.eye, app: appState.value.kind }; },
       audit(technique, rounds) { const was = game.techniqueId; game.setTechnique(technique); const bad = auditOffers(game, rounds); game.setTechnique(was); return bad; },
       offers() {
         const shapes = game.techniques.def.shapes;
@@ -124,6 +139,22 @@ export function installDebug(game: Game): void {
         sent: [...n.log.sent], hpLog: [...n.log.hp],
       };
     },
+    aura() {
+      const a = game.aura, f = a.field, t = game.techniqueId;
+      const m = game.encounters.enemies.find((e) => e.field && !e.disposed);
+      return {
+        state: f.state, pool: f.pool, left: f.left, radius: f.radius, density: f.density, ended: f.ended, guardBroken: a.guardBroken,
+        refinement: a.refinement(t), trained: game.mastery.get(t, 'refinement'), potential: a.potential(t), breadth: a.breadth(t), pacts: a.pacts(t),
+        clash: { stage: a.clash.stage, masterPick: a.clash.masterPick, view: clashUi.value, log: a.clash.log.map((l) => ({ ...l })) },
+        hp: game.combat.hp,
+        master: m ? { hp: m.hp, field: m.field!.state, radius: m.field!.radius, ended: m.field!.ended, locked: m.locked, guardBroken: m.guardBroken } : null,
+      };
+    },
+    refinement(v) {
+      const t = game.techniqueId;
+      game.mastery.stats.value = { ...game.mastery.stats.value, [t]: { ...game.mastery.stats.value[t], refinement: v } };
+    },
+    auraReady() { if (!game.aura.field.open) game.aura.field.reset(); },
     stats() {
       const i = game.renderer.gl.info;
       return { fps: 0, drawCalls: i.render.calls, triangles: i.render.triangles, props: game.props.instances.length, enemies: game.encounters.enemies.length };

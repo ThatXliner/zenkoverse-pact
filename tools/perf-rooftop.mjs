@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // Frame times on the roof with a whole wave on screen (issue #34: 60 fps at
-// High). Plays the trial up to wave 7 (twelve enemies) and measures 180 frames
+// High). Plays the trial up to wave 7 (twelve enemies, with the player's aura field
+// open) and measures 180 frames
 // in all three camera views at 1440x900, device pixel ratio 2. A second pass
 // runs with the frame limiter off, so the number shows the headroom and not
-// only the 60 fps cap. The courtyard and the hall are measured the same way.
+// only the 60 fps cap. The courtyard and the hall are measured the same way, and an Aura Clash
+// against the Master in the hall.
 // Usage: node tools/perf-rooftop.mjs [url] [--url http://localhost:4173/] [--port 4173]
 import { chromium } from 'playwright';
 import { resolveTarget } from './lib/target.mjs';
@@ -20,7 +22,7 @@ const measure = (page, label) => page.evaluate(async (label) => {
   times.sort((a, b) => a - b);
   const s = g.stats();
   const med = times[90];
-  return `${label}: median ${med.toFixed(1)}ms p95 ${times[171].toFixed(1)}ms (${(1000 / med).toFixed(0)} fps) calls ${s.drawCalls} tris ${s.triangles} enemies ${g.rooftop.status().alive}`;
+  return `${label}: median ${med.toFixed(1)}ms p95 ${times[171].toFixed(1)}ms (${(1000 / med).toFixed(0)} fps) calls ${s.drawCalls} tris ${s.triangles} enemies ${g.rooftop.status().alive} field ${g.aura().state}${g.aura().clash.stage ? ` clash ${g.aura().clash.stage}` : ''}`;
 }, label);
 
 for (const uncapped of [false, true]) {
@@ -38,6 +40,12 @@ for (const uncapped of [false, true]) {
   console.log(await measure(page, 'hall, top         '));
   await page.evaluate(() => { const g = window.game; g.teleport('courtyard'); g.camera('third'); g.look(0, -0.2); });
   console.log(await measure(page, 'courtyard, 3P     '));
+  // An Aura Clash in the hall: both fields, the seam and the side shot.
+  await page.evaluate(() => { const g = window.game; g.camera('top'); g.auraReady(); g.encounter('ancient'); });
+  await page.waitForTimeout(1500);
+  await page.evaluate(async () => { const g = window.game; g.hold('aura', true); await new Promise((r) => setTimeout(r, 80)); g.hold('aura', false); });
+  console.log(await measure(page, 'hall, aura clash  '));
+  await page.evaluate(() => { const g = window.game; g.game.startRun({ skipTutorial: true }); g.god(true); });
   await page.evaluate(() => {
     const g = window.game;
     g.loop(false);
@@ -45,9 +53,11 @@ for (const uncapped of [false, true]) {
     for (let w = 1; w < 7; w++) {
       for (let i = 0; i < 800 && g.rooftop.status().app !== 'rooftop-offer'; i++) { g.rooftop.clearWave(); g.step(2); }
       const r = g.game.rooftop;
-      if (g.rooftop.offers().length) r.choose(0); else { r.chooseEye('horizon'); r.acceptAura(); if (g.rooftop.offers().length) r.choose(0); }
+      if (g.rooftop.offers().length) r.choose(0); else { r.chooseEye('horizon'); if (g.rooftop.offers().length) r.choose(0); }
     }
     for (let i = 0; i < 800 && g.rooftop.status().alive < 12; i++) g.step(2);
+    // The player's field open over the whole wave.
+    g.auraReady(); g.hold('aura', true); g.step(1); g.hold('aura', false); g.step(20);
     g.loop(true);
   });
   await page.evaluate(() => window.game.camera('top'));

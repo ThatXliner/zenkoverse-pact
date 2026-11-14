@@ -4,13 +4,13 @@
 //   entry: the title's Rooftop button, and the hall stair plus the board on the roof;
 //   eight waves to victory in the top-down and first-person views and to
 //   defeat in the over-the-shoulder and top-down views, with
-//   the 35% heal, the Eye offer after wave 3, the Aura unlock after wave 4,
+//   the 35% heal, the Eye offer after wave 3, Aura Expansion from wave 1,
 //   scaling wave sizes, and the end screen's score, waves, Pacts and Wagers;
 //   every Pact offer: valid in the schema, shown as a readback sentence, and
 //   never two with the same sacrifice;
 //   the rule that Pacts taken on the roof do not stay in the real book;
 //   the sheets fit the viewport at 1280x720 and 1920x1080.
-// Offers, the Eye and the Aura are taken with real clicks and keys. The
+// Offers and the Eye are taken with real clicks and keys. The
 // ?debug hooks only teleport, switch the camera, give god mode, clear a wave
 // and read state. Wave 1 is fought by a pilot that aims and punches.
 // Usage: node tools/check-rooftop.mjs [url] [--url http://localhost:4173/] [--out captures/rooftop] [--port 4173]
@@ -177,7 +177,9 @@ async function victoryRun(camera, viewport) {
   await page.evaluate((c) => { const g = window.game; g.technique('recoil'); g.rooftop.begin(); g.camera(c); }, camera);
   await page.evaluate(() => window.game.step(10));
   check((await status()).app === 'rooftop' && (await status()).wave === 1, `${tag}: the run opens at wave 1`);
-  const auraProbe = () => page.evaluate(() => { const g = window.game; g.hold('aura', true); g.step(20); const on = g.game.aura.active; g.hold('aura', false); g.step(4); return on; });
+  // Aura works on the roof from the first wave: F opens a field, F again retracts it.
+  const aura = await page.evaluate(() => { const g = window.game, f = g.game.aura.field; const tap = (n) => { g.hold('aura', true); g.step(1); g.hold('aura', false); g.step(n); }; tap(20); const on = f.open; tap(2); const back = f.state; g.auraReady(); return on && back === 'recovering'; });
+  check(aura, `${tag}: F opens an aura field on the roof at wave 1, and F again retracts it`);
 
   for (let w = 1; w <= 8; w++) {
     const size = WAVE_SIZES[w - 1];
@@ -213,13 +215,6 @@ async function victoryRun(camera, viewport) {
         await page.locator('.rt-offer.eye[data-eye="horizon"]').click();
         check((await status()).eye === 'horizon', `${tag}: the Horizon Eye is installed`);
       }
-      if (w === 4) {
-        check((await status()).auraAllowed === false, `${tag}: Aura Expansion is still locked while wave 4's offer is open`);
-        await fits(`${tag} Aura unlock`);
-        if (camera === 'top') await shot('aura-unlock');
-        await page.getByRole('button', { name: 'Continue' }).click();
-        check((await status()).auraAllowed === true, `${tag}: Aura Expansion unlocks after wave 4`);
-      }
       const cards = await readOffers(`${tag} wave ${w} offer`);
       if (w === 1) { await fits(`${tag} Pact offer`); if (camera === 'top') await shot('pact-offer'); }
       const pickIdx = (w + (camera === 'first' ? 1 : 0)) % 3;
@@ -232,10 +227,6 @@ async function victoryRun(camera, viewport) {
       check(st.app === 'rooftop' && st.wave === w + 1, `${tag}: wave ${w + 1} begins after the Pact`);
     } else {
       check(await stepUntil("g.rooftop.status().app === 'rooftop-end'", 60 * 6), `${tag}: clearing wave 8 ends the run in victory`);
-    }
-    if (w === 4) {
-      check(await auraProbe(), `${tag}: holding F opens the Aura field once it is unlocked`);
-      await page.evaluate(() => { const g = window.game; g.hold('aura', false); g.step(10); });
     }
   }
 

@@ -1,0 +1,57 @@
+/* Aura (issue #4): the meter under the vitals and the clash sheet. */
+.aura-meter { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: end; --a: #9fe3ff; }
+.aura-meter .lbl, .aura-meter .val { font-size: 13px; letter-spacing: 0.08em; color: var(--mist); text-shadow: 0 1px 6px rgba(0,0,0,0.7); font-variant-numeric: tabular-nums; }
+.aura-meter .lbl b { font-weight: 700; color: var(--a); margin-right: 2px; }
+.aura-meter .track { grid-column: 1 / -1; height: 3px; background: rgba(243,238,228,0.1); position: relative; }
+.aura-meter .track > i { position: absolute; inset: 0; right: auto; background: var(--a); transition: width 0.18s var(--ease); }
+.aura-meter .track > s { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--dim); display: none; }
+.aura-meter .sub { grid-column: 1 / -1; font-size: 11px; letter-spacing: 0.06em; color: var(--dim); text-shadow: 0 1px 6px rgba(0,0,0,0.7); }
+.aura-meter .sub b { color: var(--mist); font-weight: 500; font-variant-numeric: tabular-nums; }
+.aura-meter .broken { grid-column: 1 / -1; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #ff8a7a; }
+.aura-meter.ready .lbl { color: var(--paper); }
+.aura-meter.ready .track > i { box-shadow: 0 0 12px color-mix(in oklab, var(--a) 60%, transparent); }
+.aura-meter.open .track > i { background: #ffffff; }
+.aura-meter.recovering .track > i { background: rgba(159,227,255,0.45); }
+.aura-meter.recovering.collapsed .track > i { background: #ff6a5a; }
+.aura-meter.recovering.collapsed .lbl { color: #ff8a7a; }
+
+/* The clash: everything sits over the letterbox, out of the two fighters' way. */
+.clash-layer { position: absolute; inset: 0; pointer-events: none; z-index: 5; --me: var(--c, #ff7a2f); animation: fade 0.25s var(--ease); }
+.clash-layer .bars > i { position: absolute; left: 0; right: 0; height: 11vh; background: #000; animation: box 0.35s var(--ease); }
+.clash-layer .bars > i:first-child { top: 0; }
+.clash-layer .bars > i:last-child { bottom: 0; }
+.clash-layer header { position: absolute; top: 0; left: 0; right: 0; height: 11vh; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 var(--hud-pad); gap: 24px; }
+.clash-layer header .mid { display: grid; justify-items: center; gap: 2px; }
+.clash-layer header .mid .jp { font-size: clamp(24px, 3.4vh, 34px); line-height: 1; letter-spacing: 0.1em; }
+.clash-layer .side { display: flex; align-items: center; gap: 12px; font-family: var(--sans); font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase; min-width: 0; }
+.clash-layer .side .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clash-layer .side.them { justify-content: flex-end; color: var(--them); }
+.clash-layer .side.me { color: var(--paper); }
+.clash-layer .pips { display: inline-flex; gap: 5px; }
+.clash-layer .pips i { width: 11px; height: 11px; transform: rotate(45deg); border: 1px solid currentColor; }
+.clash-layer .pips i.on { background: currentColor; }
+.clash-layer .timer { position: absolute; left: 50%; bottom: calc(11vh + 152px); width: 300px; height: 2px; margin-left: -150px; background: rgba(243,238,228,0.14); }
+.clash-layer .timer > i { position: absolute; inset: 0; background: var(--paper); transform-origin: left center; }
+.clash-layer .timer > i.done { background: var(--dim); }
+.clash-layer .tell { position: absolute; left: 50%; bottom: calc(11vh + 164px); transform: translateX(-50%); margin: 0; font-family: var(--sans); font-size: 15px; letter-spacing: 0.06em; color: var(--mist); text-shadow: 0 1px 8px #000; white-space: nowrap; }
+.clash-layer .tell[data-tell]:not([data-tell='']) { color: var(--them); }
+.clash-layer .picks { position: absolute; left: 50%; bottom: calc(11vh + 18px); transform: translateX(-50%); display: flex; gap: 10px; pointer-events: auto; }
+.clash-layer .pick { width: 132px; display: grid; justify-items: center; gap: 2px; padding: 10px 8px 9px; background: var(--glass); border: 1px solid var(--line); transition: transform 0.18s var(--ease), border-color 0.18s, opacity 0.18s; }
+.clash-layer .pick kbd { font-family: var(--sans); font-size: 11px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 3px; color: var(--mist); }
+.clash-layer .pick .g { font-size: 34px; line-height: 1.1; }
+.clash-layer .pick .n { font-family: var(--sans); font-size: 13px; letter-spacing: 0.2em; text-transform: uppercase; }
+.clash-layer .pick .b { font-size: 11px; color: var(--dim); }
+.clash-layer .pick.on { border-color: var(--paper); background: rgba(243,238,228,0.16); transform: translateY(-6px); opacity: 1; }
+.clash-layer .pick:disabled:not(.on) { opacity: 0.45; cursor: default; }
+.clash-layer.intro .picks { opacity: 0.5; }
+.clash-layer.reveal .picks, .clash-layer.over .picks { opacity: 0.22; }
+.clash-layer .reveal { position: absolute; left: 50%; bottom: calc(11vh + 156px); transform: translateX(-50%); display: grid; grid-template-columns: auto auto auto; align-items: center; gap: 4px 18px; justify-items: center; animation: pop 0.22s var(--ease); }
+.clash-layer .reveal .r { display: grid; justify-items: center; font-family: var(--sans); font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--mist); }
+.clash-layer .reveal .r b { font-size: 44px; line-height: 1.05; font-weight: 700; color: var(--paper); }
+.clash-layer .reveal .r.them b { color: var(--them); }
+.clash-layer .reveal .vs { font-family: var(--serif); font-size: 30px; color: var(--dim); }
+.clash-layer .reveal .why { grid-column: 1 / -1; font-size: 13px; color: var(--mist); text-shadow: 0 1px 8px #000; }
+.clash-layer .reveal.took-me .r.them, .clash-layer .reveal.took-them .r.me { opacity: 0.45; }
+.clash-layer .result { position: absolute; left: 50%; top: 24vh; transform: translateX(-50%); margin: 0; font-family: var(--serif); font-size: 26px; letter-spacing: 0.06em; white-space: nowrap; text-shadow: 0 2px 14px #000; animation: pop 0.25s var(--ease); }
+.clash-layer .result.lost { color: #ff8a7a; }
+@keyframes pop { from { opacity: 0; transform: translateX(-50%) scale(1.12); } to { opacity: 1; transform: translateX(-50%) scale(1); } }

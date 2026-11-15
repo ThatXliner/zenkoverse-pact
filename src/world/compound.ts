@@ -35,7 +35,7 @@ export const SPAWN = {
 export const PALETTE = {
   paving: 0xcdbb9c, pavingLine: 0xb7a486, sand: 0xe6d3ad, grass: 0x8fae58, grassFar: 0x6a8f52, path: 0xc8ad86,
   plaster: 0xf3e9d8, plasterShade: 0xe3d5c0, plinth: 0x6b6f72, stone: 0xa3a7a8, stoneDark: 0x7c8284,
-  wood: 0x7a4b34, woodDark: 0x4e3024, woodLight: 0xc49a66, floor: 0xcfa875, deck: 0xb08658, deckLine: 0x8f6a44,
+  wood: 0x7a4b34, woodDark: 0x4e3024, woodLight: 0xc49a66, floor: 0xcfa875, deck: 0xa08a6c, deckLine: 0x7a6650,
   tile: 0x4b6080, tileEdge: 0x33425a, gateWood: 0x5a3a2a, iron: 0x2a2528, water: 0x3f86b6, waterLight: 0x8ad0ea,
   lantern: 0xffb36b, mark: 0xff9a3c, hill: 0x6f93a4, hillFar: 0x8fb0bf,
 } as const;
@@ -135,7 +135,7 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   paving.map!.repeat.set(12, 10);
   const floorMat = toon(0xffffff, { map: planks(PALETTE.floor, 0xbd9765, 0x9a7a4e, 8) });
   floorMat.map!.repeat.set(7, 4);
-  const deckMat = toon(0xffffff, { map: planks(PALETTE.deck, 0xa37a50, PALETTE.deckLine) });
+  const deckMat = toon(0xffffff, { map: planks(PALETTE.deck, 0x958065, PALETTE.deckLine) });
   deckMat.map!.repeat.set(7, 4);
   const plaster = toon(PALETTE.plaster);
   const plinth = toon(PALETTE.plinth);

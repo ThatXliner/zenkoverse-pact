@@ -8,6 +8,7 @@ import type { DrillDef } from '../drills/drills';
 import type { Game } from '../app/game';
 import type { Enemy } from '../combat/enemies';
 import type { GestureVariant } from '../mastery/mastery';
+import type { CueName } from '../audio/cues';
 
 export { TECHNIQUE_IDS } from '../pacts/schema';
 export type { TechniqueId };
@@ -55,7 +56,8 @@ export interface TechniqueKit {
     // to Vfx and end with it.
     reset?(game: Game): void;
   };
-  audio: Record<AbilityKind, { cast: string; pitch?: number; volume?: number }>;
+  // The cue under each kind's wind-up (src/audio/cues.ts).
+  audio: Record<AbilityKind, CueName>;
 }
 
 export interface AbilityContext {

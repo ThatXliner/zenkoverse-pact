@@ -23,9 +23,9 @@ const catalogue: Pact[] = [
 const cutscene: CutsceneDef = {
   id: 'max-shift', title: { jp: '長距離転移', en: 'Long Translation' }, color: COLOR, pull: 7, reach: 20, word: 'シュバッ',
   shots: [
-    { duration: 1.05, timeScale: 0.03, from: { pos: [-1.05, 1.5, 1.95], look: [0, 1.38, 0], fov: 36 }, to: { pos: [-0.7, 1.48, 1.5], fov: 30, roll: 0.04 }, events: opening('phaseJump3', 0.6) },
-    { duration: 0.5, timeScale: 0.03, from: { pos: [0.55, 0.75, -2.0], look: [0, 1.1, 0], lookRel: 'target', fov: 46 }, to: { pos: [0.45, 0.85, -1.4], fov: 38 }, ease: 'in', events: [{ at: 0.1, kind: 'sfx', id: 'phaserUp3', pitch: 0.9 }] , page: { lines: 'rush' } },
-    { duration: 0.95, timeScale: 0.3, from: { pos: [2.4, 0.6, 0.8], look: [0, 1.1, -2], fov: 60, roll: -0.12 }, to: { pos: [2.9, 0.7, 1.2], fov: 70, roll: -0.04 }, events: [...blow(0, 'zapTwoTone', 0.75, 0.6), { at: 0.03, kind: 'sfx', id: 'impactMining_000', pitch: 0.9 }] , page: { lines: 'rush' } },
+    { duration: 1.05, timeScale: 0.03, from: { pos: [-1.05, 1.5, 1.95], look: [0, 1.38, 0], fov: 36 }, to: { pos: [-0.7, 1.48, 1.5], fov: 30, roll: 0.04 }, events: opening('shift.max.charge') },
+    { duration: 0.5, timeScale: 0.03, from: { pos: [0.55, 0.75, -2.0], look: [0, 1.1, 0], lookRel: 'target', fov: 46 }, to: { pos: [0.45, 0.85, -1.4], fov: 38 }, ease: 'in', events: [{ at: 0.1, kind: 'sfx', id: 'shift.max.rush' }] , page: { lines: 'rush' } },
+    { duration: 0.95, timeScale: 0.3, from: { pos: [2.4, 0.6, 0.8], look: [0, 1.1, -2], fov: 60, roll: -0.12 }, to: { pos: [2.9, 0.7, 1.2], fov: 70, roll: -0.04 }, events: [...blow(0, 'shift.max.blow', 0.6)] , page: { lines: 'rush' } },
     { duration: 0.75, timeScale: 0.55, from: { pos: [1.3, 1.45, 2.4], look: [0, 1.3, -4], fov: 44 }, to: { pos: [1.1, 1.5, 2.0], fov: 40 }, ease: 'inOut' },
   ],
 };
@@ -103,7 +103,7 @@ export const shift: TechniqueKit = {
         shoveProps(ctx, propsInCone(g, g.player.eye(), flat, 2.6, 0.8), 3);
         g.vfx.ring(g.player.eye().addScaledVector(flat, 0.8), COLOR, 0.2, 1.8, 0.3, new THREE.Vector3(0, 1, 0).cross(flat).normalize());
         g.vfx.trail([from.clone().add(new THREE.Vector3(0, 1.2, 0)), dest.clone().add(new THREE.Vector3(0, 1.2, 0))], COLOR, 0.5, 0.25);
-        g.audio.play(hits.length ? 'zap1' : 'phaseJump1', 0.6, 1.3);
+        g.audio.play(hits.length ? 'shift.cut.hit' : 'shift.cut.whiff');
         return { hits: hits.length, hitStop: hits.length ? 0.05 : 0, cameraKick: { fov: 8, roll: 0.02 } };
       }
       if (ctx.shape === 'translate') {
@@ -126,7 +126,7 @@ export const shift: TechniqueKit = {
         g.player.displace(dest.clone().sub(from));
         g.vfx.ring(dest.clone().add(new THREE.Vector3(0, 1, 0)), COLOR, 1.6, 0.2, 0.3, flat);
         g.vfx.flash(dest.clone().add(new THREE.Vector3(0, 1.4, 0)), COLOR, 30, 0.3, 10);
-        g.audio.play('phaseJump3', 0.6, 1.1);
+        g.audio.play('shift.translate');
         g.mastery.gain('shift', 'range', 0.004);
         g.tutorial.notify('shifted');
         return { hits, cameraKick: { fov: 12, roll: 0.04 }, hitStop: hits ? 0.04 : 0 };
@@ -142,11 +142,11 @@ export const shift: TechniqueKit = {
         g.vfx.trail([from.clone().add(new THREE.Vector3(0, 1.2, 0)), dest.clone().add(new THREE.Vector3(0, 1.2, 0))], 0xffffff, 0.9, 0.5);
         g.player.displace(dest.clone().sub(from));
         g.vfx.flash(dest.clone().add(new THREE.Vector3(0, 1.4, 0)), COLOR, 90, 0.5, 20);
-        g.audio.play('zapTwoTone', 0.9, 0.7);
+        g.audio.play('shift.max.tail');
         return { hits, hitStop: 0.12, impactFrame: 3, cameraKick: { fov: 18, roll: 0.05 } };
       }
       return undefined;
     },
   },
-  audio: { primary: { cast: 'phaserUp3', volume: 0.3, pitch: 1.4 }, secondary: { cast: 'phaseJump1', volume: 0.3, pitch: 1.2 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 0.8 } },
+  audio: { primary: 'shift.cast', secondary: 'shift.translate.cast', max: 'shift.max.cast' },
 };

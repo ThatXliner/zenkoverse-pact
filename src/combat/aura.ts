@@ -96,7 +96,7 @@ export class Aura {
     if (this.field.open) { this.retract(); return; }
     if (this.field.ready) { this.expand(); return; }
     if ((this.nag -= 1) <= 0) { toast(`Aura recovering: ${Math.round(this.field.pool * 100)}%. It must refill before you expand again.`); this.nag = 2; }
-    this.game.audio.play('error_004', 0.25, 0.8);
+    this.game.audio.play('aura.denied');
   }
 
   expand(): boolean {
@@ -107,8 +107,7 @@ export class Aura {
     const feet = g.player.position.clone().add(new THREE.Vector3(0, 0.08, 0));
     g.vfx.ring(feet, this.colorOf(null), 0.4, f.reach * 1.15, 0.45);
     g.vfx.ring(feet.clone().add(new THREE.Vector3(0, 1, 0)), 0xffffff, 0.3, f.reach * 0.8, 0.3);
-    g.audio.play('phaserUp3', 0.55, 0.45);
-    g.audio.play('impactSoft_heavy_001', 0.5, 0.7);
+    g.audio.play('aura.expand');
     g.cam.kick({ fov: 6, pitch: 0.01 });
     g.avatar.perform(MOVES.field);
     g.tutorial.notify('aura');
@@ -121,7 +120,7 @@ export class Aura {
     if (!this.field.end('retracted')) return;
     const feet = g.player.position.clone().add(new THREE.Vector3(0, 0.08, 0));
     g.vfx.ring(feet, this.colorOf(null), this.field.radius, 0.3, 0.5);
-    g.audio.play('phaserDown1', 0.4, 0.6);
+    g.audio.play('aura.retract');
     toast('Field retracted. Your aura refills from empty.');
   }
 
@@ -133,7 +132,7 @@ export class Aura {
     const c = g.player.position.clone().add(new THREE.Vector3(0, 1, 0));
     g.vfx.burst(c, 22, 'shard', 7, this.colorOf(null));
     g.vfx.ring(g.player.position.clone().add(new THREE.Vector3(0, 0.08, 0)), 0xff6a5a, this.field.radius, 0.2, 0.35);
-    g.audio.play('impactGlass_heavy_000', 0.8, 0.8);
+    g.audio.play('aura.collapse');
     g.cam.shake(0.6);
     this.guardBroken = Math.max(this.guardBroken, guard);
   }

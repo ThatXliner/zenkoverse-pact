@@ -22,9 +22,9 @@ const catalogue: Pact[] = [
 const cutscene: CutsceneDef = {
   id: 'max-echo', title: { jp: '大聖堂共鳴', en: 'Cathedral Resonance' }, color: COLOR, pull: 4, reach: 14, word: 'ゴォォォン',
   shots: [
-    { duration: 1.05, timeScale: 0.03, from: { pos: [0.95, 1.4, 1.95], look: [0, 1.3, 0], fov: 38 }, to: { pos: [0.65, 1.38, 1.5], fov: 31, roll: 0.04 }, events: opening('phaserUp3', 0.4) },
-    { duration: 0.5, timeScale: 0.03, from: { rel: 'mid', pos: [0, 8, -0.8], look: [0, 0.4, 0], fov: 56 }, to: { pos: [0, 6, -0.6], fov: 50 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'impactBell_heavy_000', pitch: 0.3, volume: 0.4 }] , page: { look: 'wash' } },
-    { duration: 0.95, timeScale: 0.3, from: { pos: [-4.2, 0.45, 3.2], look: [0, 1.4, 0], lookRel: 'mid', fov: 70, roll: 0.1 }, to: { pos: [-5.2, 0.6, 4.2], fov: 80, roll: 0.04 }, events: [...blow(0, 'impactBell_heavy_000', 0.4, 1)] , page: { look: 'wash', lines: 'focus' } },
+    { duration: 1.05, timeScale: 0.03, from: { pos: [0.95, 1.4, 1.95], look: [0, 1.3, 0], fov: 38 }, to: { pos: [0.65, 1.38, 1.5], fov: 31, roll: 0.04 }, events: opening('echo.max.charge') },
+    { duration: 0.5, timeScale: 0.03, from: { rel: 'mid', pos: [0, 8, -0.8], look: [0, 0.4, 0], fov: 56 }, to: { pos: [0, 6, -0.6], fov: 50 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'echo.max.drop' }] , page: { look: 'wash' } },
+    { duration: 0.95, timeScale: 0.3, from: { pos: [-4.2, 0.45, 3.2], look: [0, 1.4, 0], lookRel: 'mid', fov: 70, roll: 0.1 }, to: { pos: [-5.2, 0.6, 4.2], fov: 80, roll: 0.04 }, events: [...blow(0, 'echo.max.blow', 1)] , page: { look: 'wash', lines: 'focus' } },
     { duration: 0.75, timeScale: 0.5, from: { rel: 'mid', pos: [3, 6, -5], look: [0, 0.5, 0], fov: 60 }, to: { pos: [3.5, 7.6, -6], fov: 62 }, ease: 'inOut' , page: { look: 'wash' } },
   ],
 };
@@ -37,7 +37,7 @@ function resonate(ctx: Parameters<TechniqueKit['effects']['cast']>[0], e: import
     e.resonance = 0;
     g.combat.hitEnemy(e, 60 * ctx.potency, { from: ctx.origin, knock: 6, lift: 3, kind: 'resonance', heavy: true });
     g.vfx.burst(e.center(), 14, 'spark', 6, COLOR);
-    g.audio.play('impactGlass_heavy_000', 0.8, 0.8);
+    g.audio.play('echo.shatter', { at: e.center() });
   } else g.combat.hitEnemy(e, 7 * ctx.potency, { from: ctx.origin, kind: 'resonance', stagger: false });
 }
 
@@ -87,7 +87,7 @@ export const echo: TechniqueKit = {
         if (allow.people) for (const e of g.techniques.enemiesInCone(ctx.origin, ctx.dir, range, 0.5)) { resonate(ctx, e, ctx.behaviors.includes('stack') ? 1.4 : 1); hits++; }
         if (allow.props) for (const p of propsInCone(g, ctx.origin, ctx.dir, range, 0.55)) { if (p.def.traits.includes('resonant')) { echo.traits.resonant!(p, ctx); hits++; } else g.props.push(p, ctx.dir.clone().multiplyScalar(p.def.mass * 1.5)); }
         for (let i = 1; i <= 4; i++) g.vfx.after(i * 0.04, () => g.vfx.ring(ctx.origin.clone().addScaledVector(ctx.dir, i * range / 4), COLOR, 0.4, 1.2 + i * 0.6, 0.3, ctx.dir));
-        g.audio.play('impactBell_heavy_000', 0.45, 1.3);
+        g.audio.play('echo.ring');
         g.mastery.gain('echo', 'precision', 0.003);
         return { hits, hitStop: hits ? 0.03 : 0, cameraKick: { fov: 4 } };
       }
@@ -100,7 +100,7 @@ export const echo: TechniqueKit = {
         for (const p of [...g.props.instances]) if (p.mesh.position.distanceTo(center) < radius) { if (p.def.breakable) breakProp(g, p, center); else g.props.push(p, new THREE.Vector3(0, p.def.mass * 4, 0)); }
         for (let i = 1; i <= 5; i++) g.vfx.after(i * 0.07, () => { g.vfx.ring(center.clone().add(new THREE.Vector3(0, 0.1 + i * 0.3, 0)), COLOR, 0.5, radius * (0.5 + i * 0.15), 0.6); g.cam.shake(0.25); });
         g.vfx.flash(center.clone().add(new THREE.Vector3(0, 1.5, 0)), COLOR, 120, 0.7, 28);
-        g.audio.play('impactBell_heavy_000', 1, 0.4);
+        g.audio.play('echo.max.tail');
         g.combat.hurtPlayer(g.combat.maxHp * 0.1, { self: true });
         return { hits, hitStop: 0.14, impactFrame: 3, rooted: 1.0, cameraKick: { fov: 14, pitch: 0.06 } };
       }
@@ -117,9 +117,9 @@ export const echo: TechniqueKit = {
     onStruck(game, amount) {
       if (!quiet) return amount;
       game.vfx.ring(game.player.eye(), COLOR, 1.4, 0.2, 0.25, game.cam.aimDirection());
-      game.audio.play('lowDown', 0.4, 1.4);
+      game.audio.play('echo.damped');
       return amount * 0.3;
     },
   },
-  audio: { primary: { cast: 'tick_001', volume: 0.5, pitch: 0.8 }, secondary: { cast: 'lowThreeTone', volume: 0.3, pitch: 0.8 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 0.5 } },
+  audio: { primary: 'echo.cast', secondary: 'echo.quiet', max: 'echo.max.cast' },
 };

@@ -23,9 +23,9 @@ const catalogue: Pact[] = [
 const cutscene: CutsceneDef = {
   id: 'max-rime', title: { jp: '十指氷河', en: 'Tenfold Glacier' }, color: COLOR, pull: 4, reach: 12, word: 'パキィィン',
   shots: [
-    { duration: 1.05, timeScale: 0.03, from: { pos: [0.9, 1.35, 1.9], look: [0, 1.25, 0], fov: 38 }, to: { pos: [0.62, 1.32, 1.45], fov: 31, roll: -0.05 }, events: opening('highUp', 0.5) },
-    { duration: 0.5, timeScale: 0.03, from: { pos: [-1.5, 0.18, 1.0], look: [0, 0.7, 0], fov: 60, roll: 0.16 }, to: { pos: [-1.7, 0.15, 1.3], fov: 56, roll: 0.12 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'impactSoft_heavy_001', pitch: 0.6, volume: 0.6 }] },
-    { duration: 0.95, timeScale: 0.3, from: { rel: 'mid', pos: [4.6, 4.2, -2.8], look: [0, 0.4, 0], fov: 58, roll: -0.06 }, to: { pos: [5.6, 5.2, -3.6], fov: 68 }, events: [...blow(0, 'impactGlass_heavy_000', 0.6, 0.8), { at: 0.03, kind: 'sfx', id: 'impactMining_000', pitch: 1.1 }] , page: { look: 'watercolor' } },
+    { duration: 1.05, timeScale: 0.03, from: { pos: [0.9, 1.35, 1.9], look: [0, 1.25, 0], fov: 38 }, to: { pos: [0.62, 1.32, 1.45], fov: 31, roll: -0.05 }, events: opening('rime.max.charge') },
+    { duration: 0.5, timeScale: 0.03, from: { pos: [-1.5, 0.18, 1.0], look: [0, 0.7, 0], fov: 60, roll: 0.16 }, to: { pos: [-1.7, 0.15, 1.3], fov: 56, roll: 0.12 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'rime.max.inhale' }] },
+    { duration: 0.95, timeScale: 0.3, from: { rel: 'mid', pos: [4.6, 4.2, -2.8], look: [0, 0.4, 0], fov: 58, roll: -0.06 }, to: { pos: [5.6, 5.2, -3.6], fov: 68 }, events: [...blow(0, 'rime.max.blow', 0.8)] , page: { look: 'watercolor' } },
     { duration: 0.75, timeScale: 0.4, from: { rel: 'target', pos: [1.5, 0.55, -1.7], look: [0, 1.0, 0], fov: 50 }, to: { pos: [1.7, 0.7, -2.1], fov: 46 }, ease: 'inOut' , page: { look: 'watercolor' } },
   ],
 };
@@ -87,11 +87,12 @@ function freezeArea(g: import('../../app/game').Game, center: THREE.Vector3, rad
   const pond = g.world.pond;
   if (Math.hypot(center.x - pond.center.x, center.z - pond.center.z) < pond.radius + radius * 0.5 && center.y < pond.surfaceY + 1) {
     freezePond(g, seconds + 4);
+    g.audio.play('rime.freeze', { at: center });
     // Online the floor is in everyone's world, so anyone can stand on it.
     g.net?.ice(seconds + 4);
   }
   g.vfx.burst(center.clone().add(new THREE.Vector3(0, 0.3, 0)), 12, 'shard', 5);
-  g.audio.play('impactGlass_medium_000', 0.7, 0.9);
+  g.audio.play('rime.stitch', { at: center });
   return hits;
 }
 
@@ -138,10 +139,10 @@ export const rime: TechniqueKit = {
         for (let i = 1; i <= 7; i++) {
           const at = start.clone().addScaledVector(flat, i * range / 7);
           at.y = start.y;
-          g.vfx.after(i * 0.055, () => { g.vfx.iceSpike(at, 0.8 + i * 0.25 * ctx.potency, 7); g.vfx.patch(at, 0.9, 'frost', 8); if (i % 2 === 0) g.audio.play('impactGlass_light_000', 0.4, 1.1 - i * 0.05); });
+          g.vfx.after(i * 0.055, () => { g.vfx.iceSpike(at, 0.8 + i * 0.25 * ctx.potency, 7); g.vfx.patch(at, 0.9, 'frost', 8); if (i % 2 === 0) g.audio.play('rime.spike', { at, pitch: 1.1 - i * 0.05 }); });
         }
         for (const p of propsInCone(g, ctx.origin, flat, range, 0.3)) { g.props.push(p, new THREE.Vector3(flat.x, 1.5, flat.z).multiplyScalar(p.def.mass * 3)); if (ctx.behaviors.includes('pin')) freezeProp(ctx, p, 5); }
-        g.audio.play('impactGlass_heavy_001', 0.6, 1);
+        g.audio.play('rime.ridge');
         g.mastery.gain('rime', 'control', 0.004);
         return { hits: hits.length, hitStop: hits.length ? 0.05 : 0, cameraKick: { fov: 6, pitch: 0.03 } };
       }
@@ -164,7 +165,7 @@ export const rime: TechniqueKit = {
         for (let ring = 2; ring <= 3; ring++) g.vfx.after((ring - 1) * 0.09, () => spread(ring));
         g.vfx.flash(center.clone().add(new THREE.Vector3(0, 1.5, 0)), COLOR, 100, 0.6, 24);
         g.vfx.ring(center.clone().add(new THREE.Vector3(0, 0.1, 0)), COLOR, 0.5, 16, 0.8);
-        g.audio.play('impactGlass_heavy_000', 1, 0.5);
+        g.audio.play('rime.max.tail');
         return { hits: 1, hitStop: 0.12, impactFrame: 3, rooted: 2.0, cameraKick: { fov: 14, pitch: 0.05 } };
       }
       return undefined;
@@ -173,5 +174,5 @@ export const rime: TechniqueKit = {
       if (game.techniques.resource < 1 && game.techniques.casting) game.combat.hurtPlayer(dt * 6, { self: true });
     },
   },
-  audio: { primary: { cast: 'impactGlass_light_000', volume: 0.4, pitch: 0.8 }, secondary: { cast: 'highUp', volume: 0.3, pitch: 1.3 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 1.1 } },
+  audio: { primary: 'rime.cast', secondary: 'rime.stitch.cast', max: 'rime.max.cast' },
 };

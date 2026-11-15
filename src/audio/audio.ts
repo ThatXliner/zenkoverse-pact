@@ -1,120 +1,422 @@
-import { MathUtils } from 'three';
-import type { Assets } from '../app/assets';
+import * as THREE from 'three';
+import { effect } from '@preact/signals';
+import type { Game } from '../app/game';
+import { appState } from '../app/state';
 import { settings } from '../app/settings';
+import { HALL, STORE } from '../world/compound';
+import { blinkUi } from '../techniques/kits/blink';
+import { CUES, isCue, type Cue, type CueName, type Layer } from './cues';
+import { SYNTHS, makeNoise, type Noise, type Voice } from './synth';
+import { Library } from './library';
+import { Ambience, put, type AmbienceView, type MusicMode } from './ambience';
+import { STEP_CUE, surfaceAt, type Surface } from './surfaces';
 
-// Web Audio mixer: decoded Kenney one-shots, a synthesized wind bed that
-// drops indoors, a low drone, and per-surface footsteps.
+// The mixer. Nothing exists until the first click or key (browsers refuse to
+// play before one, and the game should not try): then the context, the buses,
+// the room reverbs and the ambience start, and the recordings begin to load.
+//
+//   master ── music  (settings.music):  the score
+//          ── world  (settings.effects): cues, the ambience bed, both reverbs
+//          ── ui     (settings.effects): menus, toasts, the Workshop
+//
+// Cues placed in the world (`at`) go through a panner; the listener is the
+// player's head, facing where the camera faces, so a sound to your left is on
+// your left in every view. The bed and the score duck under big moments.
+
+export interface PlayOptions {
+  // Where in the world; omitted, the sound is the player's own (or the UI's).
+  at?: THREE.Vector3;
+  gain?: number;
+  pitch?: number;
+  // 0 to 1: how much of the cue's weight-scaled layers sound (hit weight).
+  weight?: number;
+  // Played for another player's cast, not sent on again.
+  remote?: boolean;
+}
+
+export interface SoundEvent {
+  t: number;
+  cue: string;
+  bus: 'sfx' | 'ui';
+  // `running` sounded; `suspended` or `none` was dropped (no gesture yet, or the tab is away).
+  ctx: 'none' | 'suspended' | 'running' | 'closed' | 'interrupted';
+  at: [number, number, number] | null;
+  gain: number;
+  layers: number;
+}
+
+export interface AudioView {
+  unlocked: boolean;
+  gestureAt: number | null;
+  state: string;
+  library: { loaded: number; total: number; failed: number };
+  volumes: { master: number; music: number; effects: number };
+  muffle: number;
+  ambience: AmbienceView | null;
+  log: SoundEvent[];
+}
+
+const LOG_MAX = 600;
+const GESTURES = ['pointerdown', 'mousedown', 'keydown', 'touchend'] as const;
+
 export class Audio {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
-  private sfxBus!: GainNode;
   private musicBus!: GainNode;
-  private buffers = new Map<string, AudioBuffer>();
-  private windGain!: GainNode;
-  private windFilter!: BiquadFilterNode;
-  private pending: Promise<void> | null = null;
-  private stepN = 0;
+  private worldBus!: GainNode;
+  private uiBus!: GainNode;
+  private duckBed!: GainNode;
+  private duckMusic!: GainNode;
+  private muffleFilter!: BiquadFilterNode;
+  private dry!: GainNode;
+  private send!: GainNode;
+  private hallVerb!: GainNode;
+  private yardVerb!: GainNode;
+  private noise!: Record<Noise, AudioBuffer>;
+  private ambience: Ambience | null = null;
+  private readonly library = new Library(import.meta.env.BASE_URL);
+  private last = new Map<string, number>();
+  private steps = new WeakMap<object, number>();
+  private heartAt = 0;
+  private muffle = 0;
+  private room = 0;
+  private gestureAt: number | null = null;
+  private hum: { gain: GainNode; tone: ConstantSourceNode; filter: BiquadFilterNode; level: number; stop: () => void } | null = null;
+  // A cue a kit plays is offered here first; online, the room's wire sends it on.
+  mirror: ((cue: CueName, at: THREE.Vector3 | null, gain: number, pitch: number) => void) | null = null;
+  readonly log: SoundEvent[] = [];
 
-  constructor(private assets: Assets) {}
+  constructor(private game: Game) {
+    const onGesture = (): void => {
+      this.gestureAt ??= performance.now();
+      this.unlock();
+      if (this.ctx?.state === 'running') for (const e of GESTURES) window.removeEventListener(e, onGesture, true);
+    };
+    for (const e of GESTURES) window.addEventListener(e, onGesture, true);
+    document.addEventListener('visibilitychange', () => {
+      if (!this.ctx) return;
+      if (document.hidden) void this.ctx.suspend(); else void this.ctx.resume();
+    });
+  }
 
-  resumeContext(): void {
-    if (this.ctx) { void this.ctx.resume(); return; }
-    const ctx = new AudioContext();
+  // Only ever called from inside a user gesture (the listeners above, or a button's handler).
+  unlock(): void {
+    if (this.ctx) { if (this.ctx.state !== 'running' && !document.hidden) void this.ctx.resume(); return; }
+    const ctx = new AudioContext({ latencyHint: 'interactive' });
     this.ctx = ctx;
+    this.noise = makeNoise(ctx);
     this.master = ctx.createGain();
-    this.master.connect(ctx.destination);
-    this.sfxBus = ctx.createGain();
+    // A gentle limiter on the master, so a Maximum Output on top of a fight never clips.
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -10; limiter.knee.value = 8; limiter.ratio.value = 6; limiter.attack.value = 0.003; limiter.release.value = 0.25;
+    this.master.connect(limiter).connect(ctx.destination);
+
     this.musicBus = ctx.createGain();
-    this.sfxBus.connect(this.master);
-    this.musicBus.connect(this.master);
-    this.pending = (async () => {
-      for (const [name, buf] of this.assets.audio) {
-        try { this.buffers.set(name, await ctx.decodeAudioData(buf.slice(0))); } catch { /* skip undecodable */ }
-      }
-    })();
-    this.startWind();
-    this.startDrone();
-  }
+    this.duckMusic = ctx.createGain();
+    this.duckMusic.connect(this.musicBus).connect(this.master);
 
-  // Evening wind: brown noise through a low-pass whose cutoff breathes.
-  private startWind(): void {
-    const ctx = this.ctx!;
-    const len = ctx.sampleRate * 4;
-    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
-    for (let c = 0; c < 2; c++) {
-      const d = buf.getChannelData(c);
-      let last = 0;
-      for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; last = last * 0.985 + w * 0.015; d[i] = last * 3.2; }
+    this.worldBus = ctx.createGain();
+    this.muffleFilter = ctx.createBiquadFilter();
+    this.muffleFilter.type = 'lowpass';
+    this.muffleFilter.frequency.value = 20000;
+    this.muffleFilter.connect(this.worldBus).connect(this.master);
+    this.uiBus = ctx.createGain();
+    this.uiBus.connect(this.master);
+
+    this.dry = ctx.createGain();
+    this.dry.connect(this.muffleFilter);
+    this.duckBed = ctx.createGain();
+    this.duckBed.connect(this.muffleFilter);
+
+    // Two rooms: the hall (long, wooden) and the walled yard (short slap off the walls).
+    this.send = ctx.createGain();
+    this.hallVerb = ctx.createGain();
+    this.yardVerb = ctx.createGain();
+    this.hallVerb.gain.value = 0;
+    this.yardVerb.gain.value = 0.35;
+    for (const [out, secs, decay, pre] of [[this.hallVerb, 1.9, 2.6, 0.012], [this.yardVerb, 0.9, 4.5, 0.035]] as const) {
+      const c = ctx.createConvolver();
+      c.buffer = impulse(ctx, secs, decay, pre);
+      this.send.connect(c).connect(out).connect(this.muffleFilter);
     }
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    src.loop = true;
-    this.windFilter = ctx.createBiquadFilter();
-    this.windFilter.type = 'lowpass';
-    this.windFilter.frequency.value = 600;
-    const lfo = ctx.createOscillator();
-    lfo.frequency.value = 0.09;
-    const lg = ctx.createGain();
-    lg.gain.value = 260;
-    lfo.connect(lg).connect(this.windFilter.frequency);
-    lfo.start();
-    this.windGain = ctx.createGain();
-    this.windGain.gain.value = 0.12;
-    src.connect(this.windFilter).connect(this.windGain).connect(this.musicBus);
-    src.start();
+
+    this.ambience = new Ambience(ctx, this.duckBed, this.duckMusic, (k) => this.noise[k], this.library);
+    this.library.load(ctx);
+    this.applyVolumes();
+    effect(() => { void settings.value; this.applyVolumes(); });
+    void ctx.resume();
   }
 
-  private startDrone(): void {
-    const ctx = this.ctx!;
-    const g = ctx.createGain();
-    g.gain.value = 0.045;
-    g.connect(this.musicBus);
-    for (const [f, type] of [[55, 'sine'], [82.4, 'triangle'], [110.5, 'sine']] as const) {
-      const o = ctx.createOscillator();
-      o.type = type;
-      o.frequency.value = f;
-      const lfo = ctx.createOscillator();
-      lfo.frequency.value = 0.07 + Math.random() * 0.05;
-      const lg = ctx.createGain();
-      lg.gain.value = 0.6;
-      lfo.connect(lg).connect(o.detune);
-      const og = ctx.createGain();
-      og.gain.value = f > 100 ? 0.3 : 1;
-      o.connect(og).connect(g);
-      o.start(); lfo.start();
+  get unlocked(): boolean { return this.ctx !== null; }
+
+  play(name: CueName, opts: PlayOptions = {}): void {
+    const cue: Cue = CUES[name];
+    const ctx = this.ctx;
+    const now = performance.now();
+    const gain = opts.gain ?? 1;
+    const running = ctx?.state === 'running';
+    // A repeat inside the cue's `every` is the same sound: dropped, and not logged.
+    if (running && cue.every) {
+      if (now - (this.last.get(name) ?? -Infinity) < cue.every * 1000) return;
+      this.last.set(name, now);
     }
+    this.record({ t: now, cue: name, bus: cue.bus, ctx: ctx ? ctx.state as SoundEvent['ctx'] : 'none', at: opts.at ? [round(opts.at.x), round(opts.at.y), round(opts.at.z)] : null, gain: round(gain), layers: cue.layers.length });
+    if (cue.net && !opts.remote) this.mirror?.(name, opts.at ?? null, gain, opts.pitch ?? 1);
+    if (!ctx || !running) return;
+    const t = ctx.currentTime + 0.005;
+    const out = ctx.createGain();
+    out.gain.value = gain;
+    let tail: AudioNode = out;
+    if (opts.at) tail = tail.connect(this.panner(opts.at));
+    if (cue.bus === 'ui') tail.connect(this.uiBus);
+    else {
+      tail.connect(this.dry);
+      if (cue.wet) { const s = ctx.createGain(); s.gain.value = cue.wet; tail.connect(s).connect(this.send); }
+    }
+    const pitch = opts.pitch ?? 1, weight = opts.weight ?? 1;
+    let longest = 0;
+    for (const layer of cue.layers) longest = Math.max(longest, this.layer(ctx, out, t, layer, pitch, weight));
+    // Let the graph go once the last layer and its reverb have died.
+    window.setTimeout(() => out.disconnect(), (longest + 3) * 1000);
+    if (cue.duck) this.duck(cue.duck);
   }
 
-  play(name: string, volume = 0.6, rate = 1, pan = 0): void {
+  // A blow on a body: the tier and the weight inside it scale with the damage.
+  hit(amount: number, at?: THREE.Vector3): void {
+    const name: CueName = amount >= 80 ? 'hit.crushing' : amount >= 40 ? 'hit.heavy' : amount >= 15 ? 'hit.medium' : 'hit.light';
+    const weight = THREE.MathUtils.clamp(amount / 100, 0.1, 1);
+    this.play(name, { at, weight, pitch: 1.08 - weight * 0.16 });
+  }
+
+  // The player's own step, on what the controller says is underfoot.
+  footstep(tag: string, speed: number): void {
+    const s = surfaceAt(this.game.player.position, tag);
+    this.play(STEP_CUE[s], { gain: THREE.MathUtils.clamp(0.55 + speed * 0.06, 0.6, 1.1), pitch: 0.96 + Math.random() * 0.08 });
+  }
+
+  land(v: number): void {
+    const s = surfaceAt(this.game.player.position, this.game.player.surface);
+    if (s === 'water') { this.play('land.water'); return; }
+    this.play('land', { weight: THREE.MathUtils.clamp(v / 12, 0.1, 1), gain: THREE.MathUtils.clamp(v / 8, 0.35, 1.2) });
+    this.play(STEP_CUE[s], { gain: 0.7 });
+  }
+
+  // Pulls the bed and the score down by `amount` and lets them back over a second.
+  duck(amount: number): void {
     const ctx = this.ctx;
     if (!ctx) return;
-    const b = this.buffers.get(name);
-    if (!b) return;
-    const s = ctx.createBufferSource();
-    s.buffer = b;
-    s.playbackRate.value = rate * (0.97 + Math.random() * 0.06);
-    const g = ctx.createGain();
-    g.gain.value = volume;
-    const p = ctx.createStereoPanner();
-    p.pan.value = pan;
-    s.connect(g).connect(p).connect(this.sfxBus);
-    s.start();
+    const t = ctx.currentTime;
+    for (const g of [this.duckBed.gain, this.duckMusic.gain]) {
+      const floor = Math.max(0.15, 1 - amount * 0.7);
+      g.cancelScheduledValues(t);
+      g.setValueAtTime(Math.min(g.value, 1), t);
+      g.linearRampToValueAtTime(floor, t + 0.03);
+      g.setTargetAtTime(1, t + 0.25 + amount * 0.6, 0.45);
+    }
   }
 
-  footstep(surface: string, speed: number): void {
-    const set = surface === 'wood' ? ['footstep_wood_000', 'footstep_wood_001', 'footstep_wood_002'] : surface === 'metal' ? ['footstep_snow_000', 'footstep_snow_001'] : ['footstep_concrete_000', 'footstep_concrete_001', 'footstep_concrete_002', 'footstep_concrete_003'];
-    this.stepN++;
-    this.play(set[this.stepN % set.length]!, 0.18 + Math.min(0.2, speed * 0.03), 0.95 + Math.random() * 0.1, this.stepN % 2 ? 0.15 : -0.15);
-    if (Math.random() < 0.5) this.play('footstep_snow_000', 0.05, 1.6);
+  // Every frame: the listener follows the player, the rooms and the score follow the scene,
+  // the other bodies in the compound step where they walk.
+  update(raw: number): void {
+    const ctx = this.ctx, g = this.game;
+    if (!ctx || ctx.state !== 'running' || !this.ambience) return;
+    const t = ctx.currentTime;
+    const st = appState.value.kind;
+    const inWorld = st !== 'title' && st !== 'boot';
+    const cam = g.renderer.camera;
+    const L = ctx.listener;
+    const fwd = new THREE.Vector3();
+    let pos: THREE.Vector3;
+    if (inWorld) {
+      pos = g.player.position.clone().add(new THREE.Vector3(0, 1.6, 0));
+      fwd.set(-Math.sin(g.cam.yaw), 0, -Math.cos(g.cam.yaw));
+    } else { pos = cam.position.clone(); cam.getWorldDirection(fwd); }
+    // Written straight to the params, never scheduled: an automation event a frame piles up.
+    if (L.positionX) {
+      put(L.positionX, pos.x); put(L.positionY, pos.y); put(L.positionZ, pos.z);
+      put(L.forwardX, fwd.x); put(L.forwardY, fwd.y); put(L.forwardZ, fwd.z);
+    } else { L.setPosition(pos.x, pos.y, pos.z); L.setOrientation(fwd.x, fwd.y, fwd.z, 0, 1, 0); }
+
+    const indoors = inWorld ? g.world.indoorsAt(g.player.position) : 0;
+    this.room += (indoors - this.room) * Math.min(1, raw * 3);
+    put(this.hallVerb.gain, this.room * 0.9);
+    put(this.yardVerb.gain, (1 - this.room) * 0.35);
+
+    const enemies = g.encounters.enemies.some((e) => e.alive && e.def.ai !== 'dummy');
+    const clash = g.aura.clash.active;
+    const mode: MusicMode = !inWorld ? 'title' : clash ? 'clash' : enemies || st === 'rooftop' ? 'fight' : 'calm';
+    this.ambience.update(raw, indoors, mode, mode === 'clash' ? 1 : mode === 'fight' ? 0.75 : 0, g.cutscenes.active ? 1 : 0);
+
+    // The aura field hums while it is open; the voice exists only then.
+    const f = g.aura.field;
+    const open = inWorld && f.open;
+    if (open && !this.hum) this.hum = this.makeHum(ctx);
+    const hum = this.hum;
+    if (hum) {
+      hum.level += ((open ? 0.05 + f.density * 0.06 : 0) - hum.level) * Math.min(1, raw * (open ? 6 : 3));
+      put(hum.gain.gain, hum.level);
+      put(hum.filter.frequency, 260 + f.density * 900 + Math.sin(t * 2.1) * 60);
+      put(hum.tone.offset, 92 + f.density * 18);
+      if (!open && hum.level < 0.002) { hum.stop(); this.hum = null; }
+    }
+
+    // Blind (Blink's Maximum Output) or low on health: the world closes in.
+    const hpFrac = g.combat.hp / g.combat.maxHp;
+    const low = inWorld && hpFrac > 0 && hpFrac < 0.3;
+    const want = blinkUi.blind.value > 0 ? 1 : low ? 0.35 : 0;
+    this.muffle += (want - this.muffle) * Math.min(1, raw * (want > this.muffle ? 12 : 2));
+    put(this.muffleFilter.frequency, 20000 * Math.pow(500 / 20000, this.muffle));
+    if (low && worldRunning() && t >= this.heartAt) { this.play('heartbeat', { gain: 0.6 + (0.3 - hpFrac) * 2 }); this.heartAt = t + 0.6 + hpFrac * 1.6; }
+
+    // The others' footsteps: the same cadence the player's controller uses.
+    if (inWorld && worldRunning()) for (const e of g.targets()) {
+      if (!e.alive || !e.grounded || e.disposed) continue;
+      const speed = Math.hypot(e.velocity.x, e.velocity.z);
+      if (speed < 0.6) { this.steps.set(e, 0.25); continue; }
+      const prev = this.steps.get(e) ?? 0.25, next = prev + raw * speed * 0.62;
+      this.steps.set(e, next);
+      if (Math.floor(prev) !== Math.floor(next)) this.play(STEP_CUE[this.bodySurface(e.position)], { at: e.position, gain: 0.8 });
+    }
   }
 
-  land(v: number): void { this.play('impactSoft_medium_000', Math.min(0.7, v * 0.08), 0.8); }
-
-  update(indoors: number): void {
-    if (!this.ctx) return;
+  view(): AudioView {
     const s = settings.value;
-    this.master.gain.value = s.volume;
-    this.musicBus.gain.value = s.music;
-    this.windGain.gain.value = MathUtils.lerp(0.12, 0.04, indoors);
+    return {
+      unlocked: this.unlocked, gestureAt: this.gestureAt, state: this.ctx?.state ?? 'none',
+      library: { loaded: this.library.loaded, total: this.library.total, failed: this.library.failed },
+      volumes: { master: s.volume, music: s.music, effects: s.effects }, muffle: this.muffle,
+      ambience: this.ambience?.view() ?? null, log: this.log.map((e) => ({ ...e })),
+    };
   }
+
+  // Renders one cue offline, dry and unplaced, and measures it: how a check
+  // hears a cue it cannot listen to (silent means a layer is missing).
+  async render(name: CueName): Promise<{ peak: number; rms: number; seconds: number; missing: string[] }> {
+    const cue: Cue = CUES[name];
+    const rate = 24000, off = new OfflineAudioContext(1, rate * 6, rate);
+    const out = off.createGain();
+    out.connect(off.destination);
+    const missing = cue.layers.flatMap((l) => ('s' in l ? l.s.filter((n) => !this.library.has(n)) : []));
+    let seconds = 0;
+    for (const layer of cue.layers) seconds = Math.max(seconds, this.layer(off as unknown as AudioContext, out, 0, layer, 1, 1));
+    const d = (await off.startRendering()).getChannelData(0);
+    const n = Math.min(d.length, Math.max(1, Math.ceil(seconds * rate)));
+    let peak = 0, sum = 0;
+    for (let i = 0; i < n; i++) { const x = Math.abs(d[i]!); peak = Math.max(peak, x); sum += x * x; }
+    return { peak: Math.round(peak * 1000) / 1000, rms: Math.round(Math.sqrt(sum / n) * 10000) / 10000, seconds: round(seconds), missing };
+  }
+
+  // A cue another player's wire sent: played at their body unless it names a place.
+  replay(name: unknown, at: THREE.Vector3 | null, gain: unknown, pitch: unknown, body: THREE.Vector3): void {
+    if (!isCue(name)) return;
+    const n = (x: unknown, d: number) => (typeof x === 'number' && Number.isFinite(x) ? THREE.MathUtils.clamp(x, 0, 4) : d);
+    this.play(name, { at: at ?? body, gain: n(gain, 1), pitch: n(pitch, 1) || 1, remote: true });
+  }
+
+  // A low chord on one root (so it retunes at once), through a resonant low-pass.
+  private makeHum(ctx: AudioContext): NonNullable<Audio['hum']> {
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass'; filter.frequency.value = 400; filter.Q.value = 3;
+    filter.connect(gain).connect(this.dry);
+    const tone = ctx.createConstantSource();
+    tone.offset.value = 98;
+    const oscs = ([[1, 0], [1.5, 4], [2, -6]] as const).map(([ratio, det]) => {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth'; o.detune.value = det; o.frequency.value = 0;
+      const m = ctx.createGain(); m.gain.value = ratio;
+      tone.connect(m).connect(o.frequency);
+      const og = ctx.createGain(); og.gain.value = 0.3 / ratio;
+      o.connect(og).connect(filter);
+      o.start();
+      return o;
+    });
+    tone.start();
+    return { gain, tone, filter, level: 0, stop: () => { for (const o of oscs) o.stop(); tone.stop(); gain.disconnect(); } };
+  }
+
+  private bodySurface(p: THREE.Vector3): Surface {
+    const inside = (b: { x0: number; x1: number; z0: number; z1: number }) => p.x > b.x0 && p.x < b.x1 && p.z > b.z0 && p.z < b.z1 && p.y < 1.5;
+    return surfaceAt(p, inside(HALL) || inside(STORE) ? 'wood' : 'stone');
+  }
+
+  private applyVolumes(): void {
+    if (!this.ctx) return;
+    const s = settings.value, t = this.ctx.currentTime;
+    // Faders are heard logarithmically: a squared slider feels even.
+    this.master.gain.setTargetAtTime(s.volume * s.volume, t, 0.03);
+    this.musicBus.gain.setTargetAtTime(s.music * s.music, t, 0.03);
+    this.worldBus.gain.setTargetAtTime(s.effects * s.effects, t, 0.03);
+    this.uiBus.gain.setTargetAtTime(s.effects * s.effects, t, 0.03);
+  }
+
+  private panner(at: THREE.Vector3): PannerNode {
+    const p = this.ctx!.createPanner();
+    p.panningModel = 'equalpower';
+    p.distanceModel = 'inverse';
+    p.refDistance = 3;
+    p.rolloffFactor = 1.1;
+    p.maxDistance = 80;
+    p.positionX.value = at.x; p.positionY.value = at.y; p.positionZ.value = at.z;
+    return p;
+  }
+
+  private layer(ctx: AudioContext, out: AudioNode, t0: number, layer: Layer, pitch: number, weight: number): number {
+    const t = t0 + (layer.at ?? 0);
+    const scale = layer.w ? 1 - layer.w + layer.w * weight : 1;
+    const gain = (layer.gain ?? 1) * scale;
+    if (gain <= 0.001) return 0;
+    if ('syn' in layer) {
+      const v: Voice = { ctx, out, t, gain, pitch: pitch * (layer.pitch ?? 1), noise: (k) => this.noise[k] };
+      return (layer.at ?? 0) + SYNTHS[layer.syn](v, layer.p ?? {});
+    }
+    const ready = layer.s.filter((n) => this.library.has(n));
+    const buf = this.library.get(ready[Math.floor(Math.random() * ready.length)] ?? '');
+    if (!buf) return 0;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = pitch * (layer.pitch ?? 1) * (1 + (Math.random() * 2 - 1) * (layer.vary ?? 0.03));
+    const g = ctx.createGain();
+    g.gain.value = gain;
+    let node: AudioNode = src;
+    if (layer.lp) { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = layer.lp; node = node.connect(f); }
+    node.connect(g).connect(out);
+    src.start(t);
+    return (layer.at ?? 0) + buf.duration / src.playbackRate.value;
+  }
+
+  private record(e: SoundEvent): void {
+    this.log.push(e);
+    if (this.log.length > LOG_MAX) this.log.splice(0, this.log.length - LOG_MAX);
+  }
+}
+
+function worldRunning(): boolean {
+  const k = appState.value.kind;
+  return k !== 'paused' && k !== 'workshop' && k !== 'title' && k !== 'boot';
+}
+
+const round = (x: number): number => Math.round(x * 100) / 100;
+
+// A room's impulse response: a few early reflections, then a noise tail that
+// darkens as it dies (high frequencies die first in a real room).
+function impulse(ctx: AudioContext, seconds: number, decay: number, pre: number): AudioBuffer {
+  const rate = ctx.sampleRate, len = Math.floor(rate * seconds);
+  const b = ctx.createBuffer(2, len, rate);
+  for (let c = 0; c < 2; c++) {
+    const d = b.getChannelData(c);
+    let lp = 0;
+    for (let i = 0; i < len; i++) {
+      const x = i / len;
+      const tone = 0.15 + 0.85 * (1 - x);
+      lp += ((Math.random() * 2 - 1) - lp) * tone;
+      d[i] = i < pre * rate ? 0 : lp * Math.pow(1 - x, decay);
+    }
+    for (let k = 0; k < 6; k++) {
+      const at = Math.floor((pre + 0.008 + k * 0.011 + Math.random() * 0.006) * rate);
+      if (at < len) d[at] = (d[at] ?? 0) + (Math.random() < 0.5 ? -1 : 1) * (0.5 - k * 0.06);
+    }
+  }
+  return b;
 }

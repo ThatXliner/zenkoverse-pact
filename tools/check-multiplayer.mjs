@@ -172,6 +172,9 @@ check(heard[0] && sent[0] && Math.abs(heard[0].amount - Math.round(sent[0].amoun
 check(heard[0]?.by === idA, 'the server credits A');
 check(Math.abs(b.hp - (hpBefore - (heard[0]?.amount ?? 0))) < 0.11, `B's own health reads ${b.hp.toFixed(1)}`);
 check(Math.abs(remoteOf(a, idB).hp - b.hp) < 0.11, `A's screen agrees on B's health (${remoteOf(a, idB).hp.toFixed(1)})`);
+// The cast's sound came over the effects wire and played on B's screen where A stands.
+const heardCues = await B.api((g) => g.audio().log.filter((e) => e.cue.startsWith('recoil.') && e.at));
+check(heardCues.some((e) => e.cue === 'recoil.cast' && Math.hypot(e.at[0] + 3, e.at[2] - 5.4) < 1.5), `B heard A's cast placed at A (${heardCues.map((e) => `${e.cue} at ${e.at.map((x) => x.toFixed(1)).join(',')}`).join('; ') || 'nothing'})`);
 
 console.log('\nA downs B, then B respawns');
 let casts = 0;

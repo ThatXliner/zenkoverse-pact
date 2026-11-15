@@ -102,19 +102,21 @@ export const COSTUMES: Record<CostumeId, Piece[]> = {
     { bone: 'spine_03', shape: { kind: 'box', size: [1.25, 0.07, 0.07] }, color: 0x5a3b26, at: [0, 0.17, 0.13] },
     { bone: 'spine_03', shape: { kind: 'box', size: [0.07, 0.5, 0.07] }, color: 0x5a3b26, at: [0, 0.2, 0.17] },
   ],
-  // The Kuroda Enforcer: a long open black jacket with an orange hem and
-  // twin fuel tanks on its back, shoulder plates, a black obi, a half mask,
-  // and hair swept back in spikes.
+  // The Kuroda Enforcer: a long open black jacket flaring to an orange hem,
+  // its collar turned up, twin fuel tanks on its back, broad shoulder
+  // plates, a black obi, a half mask, and hair swept back in long spikes.
+  // The flare, the collar and the plates are his outline from above.
   kuroda: [
-    { bone: 'spine_03', shape: { kind: 'skirt', top: 0.21, bottom: 0.26, h: 0.72, depth: 0.78, arc: 4.4 }, color: 0x24222b, at: [0, -0.19, 0.03] },
-    { bone: 'spine_03', shape: { kind: 'skirt', top: 0.262, bottom: 0.265, h: 0.05, depth: 0.79, arc: 4.4 }, color: 0xff6a1a, at: [0, -0.53, 0.03] },
+    { bone: 'spine_03', shape: { kind: 'skirt', top: 0.21, bottom: 0.4, h: 0.72, depth: 0.82, arc: 4.4 }, color: 0x24222b, at: [0, -0.19, 0.03] },
+    { bone: 'spine_03', shape: { kind: 'skirt', top: 0.39, bottom: 0.405, h: 0.05, depth: 0.83, arc: 4.4 }, color: 0xff6a1a, at: [0, -0.53, 0.03] },
+    { bone: 'spine_03', shape: { kind: 'skirt', top: 0.2, bottom: 0.13, h: 0.16, depth: 0.85, arc: 3.6 }, color: 0x24222b, at: [0, 0.22, 0.03] },
     ...[-1, 1].map((s): Piece => ({ bone: 'spine_03', shape: { kind: 'skirt', top: 0.075, bottom: 0.075, h: 0.42 }, color: 0x3a3f48, at: [s * 0.085, -0.06, 0.27] })),
     ...[-1, 1].map((s): Piece => ({ bone: 'spine_03', shape: { kind: 'ball', r: [0.075, 0.05, 0.075] }, color: 0x3a3f48, at: [s * 0.085, 0.15, 0.27] })),
     { bone: 'spine_03', shape: { kind: 'band', r: [0.2, 0.09], h: 0.06 }, color: 0xff6a1a, at: [0, -0.02, 0.27] },
-    ...both({ bone: 'upperarm', frame: 'bone', shape: { kind: 'box', size: [0.22, 0.05, 0.22] }, color: 0x24222b, at: [0, 0.03, 0] }),
+    ...both({ bone: 'upperarm', frame: 'bone', shape: { kind: 'box', size: [0.3, 0.05, 0.26] }, color: 0x24222b, at: [0, 0.03, 0] }),
     { bone: 'spine_01', shape: { kind: 'band', r: [0.18, 0.155], h: 0.14 }, color: INKY, at: [0, -0.04, 0.01] },
     { bone: 'Head', shape: { kind: 'ball', r: [0.075, 0.04, 0.045] }, color: INKY, at: [0.02, 0.015, -0.14] },
-    ...[-0.6, -0.2, 0.2, 0.6].map((x): Piece => ({ bone: 'Head', shape: { kind: 'cone', r: 0.045, h: 0.28 }, color: 0x1a1216, at: [0.02 + x * 0.12, 0.27 - Math.abs(x) * 0.06, 0.13], rot: [-1.2, 0, -x * 0.5] })),
+    ...[-0.6, -0.2, 0.2, 0.6].map((x): Piece => ({ bone: 'Head', shape: { kind: 'cone', r: 0.05, h: 0.36 }, color: 0x1a1216, at: [0.02 + x * 0.12, 0.27 - Math.abs(x) * 0.06, 0.13], rot: [-1.2, 0, -x * 0.5] })),
   ],
   // The Master: a white robe to the ankles under a jade obi, wide bell
   // sleeves with jade cuffs, and a high collar.

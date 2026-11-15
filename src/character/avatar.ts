@@ -311,7 +311,7 @@ export class Avatar {
       this.rotateAbout(fore, right, hold * 0.6);
     }
     // The rear arm swept back behind her, the lead hand up as a lure.
-    this.rotateAbout('upperarm_l', right, -feint * 1.1);
+    this.rotateAbout('upperarm_l', right, -feint * 0.6);
     this.rotateAbout('upperarm_l', fwd, feint * 0.35);
     this.rotateAbout('upperarm_r', right, feint * 1.1);
     this.rotateAbout('lowerarm_r', right, feint * 0.6);

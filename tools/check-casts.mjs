@@ -184,17 +184,59 @@ for (const tech of TECHS) {
   await api((g) => { g.teleport('courtyard'); g.camera('third'); g.look(Math.PI, -0.12); g.hold('forward', true); });
   await step(60);
   await holdView();
-  const feet = async (n) => { const gaps = []; for (let i = 0; i < n; i++) { await step(1); const s = await sample(); gaps.push(s.world.foot_l[1] - s.world.foot_r[1]); } return gaps; };
+  // Over a full second each: the feet's height apart, which swings once a
+  // stride, with the cast landing twice in the second window.
+  const feet = async (n, castAt = []) => { const gaps = []; for (let i = 0; i < n; i++) { if (castAt.includes(i)) await api((g) => { g.game.techniques.resource = g.game.techniques.def.resource.max; g.cast('primary'); }); await step(1); const s = await sample(); gaps.push(s.world.foot_l[1] - s.world.foot_r[1]); } return gaps; };
   const swing = (g) => Math.max(...g) - Math.min(...g);
-  const plain = swing(await feet(30));
+  const plain = swing(await feet(60));
   await setActivation(0);
-  await api((g) => { g.game.techniques.resource = g.game.techniques.def.resource.max; g.cast('primary'); });
-  const cast = swing(await feet(30));
+  const cast = swing(await feet(60, [0, 36]));
   const s = await sample();
   await api((g) => { g.hold('forward', false); });
   const line = `the feet keep their stride under a cast at a run: height swing ${cast.toFixed(2)} m against ${plain.toFixed(2)} m without`;
-  if (reportOnly) console.log(`  ${line}`); else check(cast > plain * 0.7, line);
+  if (reportOnly) console.log(`  ${line}`); else check(cast > plain * 0.8, line);
   if (shots && !reportOnly) await crop(join(out, 'run-cast.png'), s.center, s.bodyPx);
+}
+
+// Enemies and bosses: each wind-up and cast moves the hands as far as the
+// player's casts must, read against the body just before it starts.
+for (const [encounter, at, moves] of [['kuroda', [0, 0.3, 9], ['kuroda:windup', 'kuroda:cast', 'thug:windup']], ['ancient', [-4, 0.3, -9], ['ancient:windup', 'ancient:cast']]]) {
+  console.log(`enemies: ${encounter}`);
+  await api((g) => { g.technique('recoil'); g.game.startRun({ skipTutorial: true }); g.loop(false); });
+  await step(12);
+  await api((g, id, p) => { g.teleport(p); g.camera('top'); g.look(0, 0); g.god(true); g.encounter(id); }, encounter, at);
+  const seen = {};
+  for (let f = 0; f < 1500 && !moves.every((m) => m in seen); f++) {
+    const shoot = await api((g) => {
+      const G = g.game, V = G.player.position.constructor;
+      const rel = (e) => { const p = e.avatar.boneWorld('pelvis', new V()); return ['hand_l', 'hand_r'].map((n) => e.avatar.boneWorld(n, new V()).sub(p)); };
+      const done = [];
+      let shoot = null;
+      for (const e of G.encounters.enemies) {
+        if (!e.alive) continue;
+        const t = e.__track;
+        if (t) {
+          t.peak = Math.max(t.peak, ...rel(e).map((v, i) => v.distanceTo(t.rest[i])));
+          if (--t.left === 52) shoot = { key: t.key, at: e.position.toArray() };
+          if (t.left <= 0) { done.push([t.key, t.peak]); e.__track = null; e.__rest = rel(e); }
+        } else if (e.state === 'windup' || e.state === 'cast') e.__track = { key: `${e.def.ai}:${e.state}`, rest: e.__rest ?? rel(e), peak: 0, left: 70 };
+        else e.__rest = rel(e);
+      }
+      g.step(1);
+      window.__done = done;
+      return shoot;
+    });
+    for (const [k, v] of await api(() => window.__done)) seen[k] = Math.max(seen[k] ?? 0, v);
+    if (shoot && shots && !reportOnly && !shoot.shot) {
+      const c = await api((g, p) => { const cam = g.game.renderer.camera, V = cam.position.constructor; const q = new V(p[0], p[1] + 0.9, p[2]).project(cam); return [(q.x * 0.5 + 0.5) * innerWidth, (-q.y * 0.5 + 0.5) * innerHeight]; }, shoot.at);
+      await crop(join(out, `enemy-${shoot.key.replace(':', '-')}.png`), c, 160);
+    }
+  }
+  for (const m of moves) {
+    const line = `${m}: the hands travel ${(seen[m] ?? 0).toFixed(2)} m`;
+    if (reportOnly) console.log(`  ${line}`); else check((seen[m] ?? 0) >= BAR.travel, line);
+  }
+  await api((g) => g.game.encounters.finish?.(false));
 }
 
 const pageErrors = await api((g) => g.errors);

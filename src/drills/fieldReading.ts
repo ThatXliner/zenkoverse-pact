@@ -17,7 +17,6 @@ const STAND: [number, number, number] = [6, 0, 3.2];
 const STONE = new THREE.Vector3(6, 0, -0.4);
 const RADIUS = 3.1;
 const COLOR = 0x9fe3ff;
-const KEYS: Record<Pick, string> = { push: 'W', hold: 'S', feint: 'A or D' };
 const WORDS: Record<Pick, string> = { push: 'It swells toward you', hold: 'It draws tight', feint: 'Its far side flickers' };
 // The tell shows this long after an item starts.
 const LEAD = 0.35;
@@ -51,11 +50,18 @@ export function fieldReading(game: Game): DrillDef {
 
   return {
     id: 'field-reading', technique: null, title: 'Reading the Field', jp: '気読み',
-    brief: 'Read the stone\'s field and answer with what beats it: W push, S hold, A or D feint. Push beats hold, hold beats feint, feint beats push.',
+    brief: 'Watch the stone\'s field. Each change warns of a move; answer with the move that beats it.',
+    howTo: [
+      'The stone\'s field warns you before it moves. Answer before the warning fades.',
+      'Swells toward you: a push is coming. Feint with A or D.',
+      'Draws in tight: a hold is coming. Push with W.',
+      'Far side flickers: a feint is coming. Hold with S.',
+      'An Aura Clash is read the same way.',
+    ],
     position: STAND,
     cue: () => {
-      if (!current || current.t < LEAD) return 'Push beats hold · hold beats feint · feint beats push';
-      return `${WORDS[current.tell]}. Answer: ${KEYS.push} push · ${KEYS.hold} hold · ${KEYS.feint} feint`;
+      if (!current || current.t < LEAD) return 'Watch the field';
+      return `${WORDS[current.tell]}!`;
     },
     tiers: [
       { name: 'First Breath', count: 5, interval: 2.3, window: 1.4, pass: 4, gains: { refinement: 0.25 } },

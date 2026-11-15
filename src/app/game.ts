@@ -41,7 +41,7 @@ export const hud = {
   prompt: signal<{ text: string } | null>(null),
   toasts: signal<{ id: number; text: string; tone: 'info' | 'good' | 'bad' }[]>([]),
   banner: signal<{ big: string; small: string; id: number } | null>(null),
-  plaque: signal<{ title: string; body: string } | null>(null),
+  plaque: signal<{ title: string; body: string; kicker?: string } | null>(null),
   hurt: signal(0),
   fps: signal(0),
   camera: signal<CameraMode>('top'),
@@ -67,6 +67,11 @@ function clearMessages(): void {
 // The Architect's desk in the hall, where the Workshop can also be opened by hand.
 const ARCHITECT_DESK = new THREE.Vector3(-10, 0.3, -16.4);
 const CUTAWAY_OPACITY = 0.1;
+const ARCHITECT = {
+  title: 'The Pact Architect',
+  kicker: 'Workshop desk',
+  body: 'A Pact is a restriction you write onto a Technique: a condition, a cost, a limit you choose to live with. The tighter the Pact, the more the Technique gives back. I keep the Workshop here, where you draft them, see what each one costs and buys, and inscribe the ones you want. Press E again to open it, or Tab from anywhere.',
+};
 
 export class Game {
   readonly renderer: Renderer;
@@ -103,6 +108,9 @@ export class Game {
   private fpsN = 0;
   private raycaster = new THREE.Raycaster();
   private cutaway = new Map<THREE.Mesh, number>();
+  // Where the body faces, which can differ from the aim (`cam.yaw`).
+  bodyYaw = 0;
+  private aimHold = 0;
   ready = false;
 
   constructor(readonly canvas: HTMLCanvasElement) {
@@ -334,6 +342,7 @@ export class Game {
     this.cam.baseFov = s.fov;
     const look = this.input.consumeLook();
     if (this.input.hit('camera') && !this.cam.inShot) { this.setCamera(this.cam.cycleMode(), true); this.audio.play('toggle_001', 0.3); this.tutorial.notify('camera'); }
+    if (this.input.wheel && !this.cam.inShot) { const to = this.cam.zoom(-this.input.wheel); if (to) { this.setCamera(to, true); this.tutorial.notify('camera'); } }
     if (this.cam.isTop) {
       if (!this.cam.inShot) this.aimAtCursor();
     } else if (this.input.enabled && !this.cam.inShot) this.cam.look(look.x, look.y, s.sensitivity, s.invertY);
@@ -350,7 +359,13 @@ export class Game {
     const axis = this.input.axis();
     this.avatar.root.position.copy(this.player.position);
     const moving = this.player.planarSpeed.value > 0.5;
-    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.cam.yaw);
+    // Outside first person the body runs the way it goes, like a twin-stick
+    // or GTA hero, and turns back to the aim to sign, cast, and a beat after.
+    this.aimHold = this.techniques.casting || this.techniques.sign.kind !== 'idle' || this.cam.inShot || this.cam.isFirst ? 0.6 : Math.max(0, this.aimHold - raw);
+    const v = this.player.velocity;
+    if (this.aimHold > 0) this.bodyYaw = this.cam.yaw;
+    else if (moving && this.player.grounded) this.bodyYaw = Math.atan2(-v.x, -v.z);
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.bodyYaw);
     this.avatar.root.quaternion.slerp(q, 1 - Math.exp(-(moving ? 14 : 8) * raw));
     if (!this.net?.downed) this.avatar.setLocomotion(this.player.velocity, this.player.grounded, raw);
     this.avatar.setAimPitch(this.cam.isTop ? 0 : this.cam.pitch);
@@ -429,7 +444,11 @@ export class Game {
     for (const p of this.world.plaques) {
       if (p.position.distanceTo(this.player.position) < 2.2) { best = { text: p.found ? `Reread: ${p.title}` : `Read plaque: ${p.title}`, act: () => { p.found = true; hud.plaque.value = { title: p.title, body: p.body }; this.audio.play('glass_002', 0.4); setTimeout(() => { hud.plaque.value = null; }, 7000); } }; break; }
     }
-    if (!best && ARCHITECT_DESK.distanceTo(this.player.position) < 3.0) best = { text: 'Speak with the Pact Architect', act: () => this.openWorkshop() };
+    // The Architect explains first; after that, the desk opens the Workshop.
+    if (!best && ARCHITECT_DESK.distanceTo(this.player.position) < 3.0) best = hud.plaque.value?.title === ARCHITECT.title
+      ? { text: 'Open the Pact Workshop', act: () => { hud.plaque.value = null; this.openWorkshop(); } }
+      : { text: 'Speak with the Pact Architect', act: () => { hud.plaque.value = ARCHITECT; this.audio.play('glass_002', 0.4); } };
+    else if (hud.plaque.value?.title === ARCHITECT.title && ARCHITECT_DESK.distanceTo(this.player.position) > 4.5) hud.plaque.value = null;
     // The fights, the rooftop trial and the drills are single-player.
     if (!this.net) {
       const enc = this.encounters.interactable(this.player.position);

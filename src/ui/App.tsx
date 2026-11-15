@@ -178,9 +178,14 @@ function Hud({ game }: { game: Game }) {
       <ClashLayer game={game} />
       {boss && !cut && <div class="boss" style={{ '--c': hex(boss.color) } as never}><span class="n">{boss.name}</span><div class="track"><i style={{ width: `${boss.frac * 100}%` }} /></div></div>}
       {prompt && !cut && <div class="prompt"><kbd>{keyLabel('interact')}</kbd><span>{prompt.text}</span></div>}
-      {tut && !cut && <div class="objective"><span class="step">Tutorial {tut.index} / {tut.total} · {tut.jp}</span><span class="t">{tut.title}</span><span class="b">{tut.body()}</span><span class="step">{keyLabel('pause')} pauses · Skip tutorial is in the pause menu</span></div>}
-      {drill && !cut && <div class="drill-hud"><span class="big">{drill.score} / {drill.needed}</span><span class="s">{drill.jp} · {drill.tier} · {drill.left} left</span>{drill.cue && <span class="cue">{drill.cue}</span>}</div>}
-      {pl && !cut && <div class="objective" style="top:auto;bottom:calc(var(--hud-pad) + 120px);right:var(--hud-pad);border-color:#9fdfff"><span class="step">Lore plaque</span><span class="t">{pl.title}</span><span class="b">{pl.body}</span></div>}
+      {tut && !cut && !drill && <div class="objective"><span class="step">Tutorial {tut.index} / {tut.total} · {tut.jp}</span><span class="t">{tut.title}</span><span class="b">{tut.body()}</span><span class="step">{keyLabel('pause')} pauses · Skip tutorial is in the pause menu</span></div>}
+      {drill && !cut && <div class="drill-hud">
+        <span class="s">{drill.jp} · {drill.title} · {drill.tier}</span>
+        <span class="big">{drill.score} / {drill.needed}<small>{drill.starting ? `starts in ${drill.starting}` : `${drill.left} left`}</small></span>
+        {(drill.cue || drill.starting > 0) && <span class="cue">{drill.starting ? 'Get ready' : drill.cue}</span>}
+        <ul>{drill.howTo.map((l) => <li>{l}</li>)}</ul>
+      </div>}
+      {pl && !cut && <div class="objective" style="top:auto;bottom:calc(var(--hud-pad) + 120px);right:var(--hud-pad);border-color:#9fdfff"><span class="step">{pl.kicker ?? 'Lore plaque'}</span><span class="t">{pl.title}</span><span class="b">{pl.body}</span></div>}
       {!cut && <div class="toasts">{hud.toasts.value.map((t) => <div key={t.id} class={`toast ${t.tone}`}>{t.text}</div>)}</div>}
       {ban && !cine && <div class="banner" key={ban.id}><div class="big jp">{ban.big}</div><div class="small">{ban.small}</div></div>}
       {title && <CutTitle key={title.id} title={title} />}

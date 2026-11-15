@@ -159,6 +159,8 @@ export class Rooftop {
     if (this.ending !== null) { const victory = this.ending; this.ending = null; this.finish(victory); return; }
     const p = this.phase;
     if (p.kind !== 'fight' || dt <= 0) return;
+    // Whatever carried the player off the roof mid-trial, the fight is up there.
+    if (g.player.position.y < this.arena.deckY - 2) { g.player.teleport(this.arena.start.clone()); toast('Back on the roof: the trial is up here', 'bad'); }
 
     p.spawnT -= dt;
     if (p.queue.length && p.spawnT <= 0) { this.spawnOne(p.wave, p.queue.shift()!); p.spawnT = WAVES[p.wave]!.gap ?? SPAWN_GAP; }

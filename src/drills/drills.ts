@@ -27,6 +27,8 @@ export interface DrillDef {
   title: string;
   jp: string;
   brief: string;
+  // The rules as short lines for the drill panel, shown for the whole drill.
+  howTo?: string[];
   // A line under the score while the drill runs, if the drill has one.
   cue?: () => string;
   position: [number, number, number];
@@ -38,8 +40,9 @@ export interface DrillDef {
   end?(game: Game): void;
 }
 
-export const drillUi = { active: signal<{ title: string; jp: string; tier: string; score: number; needed: number; left: number; best: number; cue: string } | null>(null) };
+export const drillUi = { active: signal<{ title: string; jp: string; tier: string; score: number; needed: number; left: number; best: number; cue: string; howTo: string[]; starting: number } | null>(null) };
 const KEY = 'zenko.drills.v1';
+const START_DELAY = 3.5;
 
 export class Drills {
   private defs = new Map<DrillId, DrillDef>();
@@ -75,10 +78,10 @@ export class Drills {
     if (!def || this.current) return;
     const tier = Math.min(this.progress[id] ?? 0, def.tiers.length - 1);
     const st = appState.value;
-    this.current = { def, tier, score: 0, spawned: 0, timer: 1.2, live: [], resume: st.kind === 'tutorial' ? 'tutorial' : 'explore' };
+    // A few seconds before the first item, to read the panel.
+    this.current = { def, tier, score: 0, spawned: 0, timer: START_DELAY, live: [], resume: st.kind === 'tutorial' ? 'tutorial' : 'explore' };
     setState({ kind: 'drill', id });
     banner(def.jp, def.title);
-    toast(def.brief);
     this.refresh();
   }
 
@@ -86,7 +89,7 @@ export class Drills {
     const c = this.current;
     if (!c) { drillUi.active.value = null; return; }
     const t = c.def.tiers[c.tier]!;
-    drillUi.active.value = { title: c.def.title, jp: c.def.jp, tier: t.name, score: c.score, needed: t.pass, left: t.count - c.spawned + c.live.length, best: this.progress[c.def.id] ?? 0, cue: c.def.cue?.() ?? '' };
+    drillUi.active.value = { title: c.def.title, jp: c.def.jp, tier: t.name, score: c.score, needed: t.pass, left: t.count - c.spawned + c.live.length, best: this.progress[c.def.id] ?? 0, cue: c.def.cue?.() ?? '', howTo: c.def.howTo ?? [c.def.brief], starting: c.spawned === 0 ? Math.ceil(c.timer) : 0 };
   }
 
   // Kits call this when a Technique acts on a prop, so the drill can score it.

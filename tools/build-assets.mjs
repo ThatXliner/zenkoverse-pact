@@ -1,24 +1,59 @@
 #!/usr/bin/env node
 // Builds public/assets from raw CC0 downloads and writes CREDITS.md and the
-// asset manifest. Usage: node tools/build-assets.mjs <raw-download-dir> [--only human,props]
+// asset manifest. Usage: node tools/build-assets.mjs <raw-download-dir> [--only human,props,audio]
 // The raw dir holds: kaykit-city/, kenney/<pack>/, quaternius/.
 // With --only, just those sections rebuild and the rest of public/assets stays;
 // the manifest is always regenerated from what is on disk.
+//
+// public/assets is never touched until the build has succeeded: the script
+// refuses a raw dir that lacks what the chosen sections read, builds into a
+// staging folder beside it (a copy of the current assets under --only), and
+// swaps that in only at the end. A failed or mistyped run leaves it as it was.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, rmSync, readFileSync, mkdtempSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, readFileSync, mkdtempSync, existsSync, statSync, cpSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { buildHuman } from './human.mjs';
 import { writeManifest } from './manifest.mjs';
 
-const [raw, ...flags] = process.argv.slice(2);
-if (!raw) throw new Error('usage: build-assets.mjs <raw-download-dir> [--only a,b]');
-const onlyFlag = flags.indexOf('--only');
-const only = onlyFlag >= 0 ? new Set(flags[onlyFlag + 1].split(',')) : null;
+const USAGE = 'usage: node tools/build-assets.mjs <raw-download-dir> [--only human,props,audio]';
+const SECTIONS = ['human', 'props', 'audio'];
+// What each section reads from the raw dir.
+const NEEDS = {
+  human: ['quaternius/Universal Base Characters[Standard]', 'quaternius/Universal Animation Library[Standard]'],
+  props: ['kenney/city-kit-suburban', 'kenney/food-kit', 'kenney/furniture-kit', 'kaykit-city'],
+  audio: ['kenney/impact-sounds/Audio', 'kenney/interface-sounds/Audio', 'kenney/digital-audio/Audio', 'kenney/rpg-audio/Audio'],
+};
+const fail = (msg) => { console.error(`build-assets: ${msg}\n${USAGE}`); process.exit(1); };
+
+const argv = process.argv.slice(2);
+if (argv.includes('--help') || argv.includes('-h')) { console.log(USAGE); process.exit(0); }
+let rawArg = null, only = null;
+for (let i = 0; i < argv.length; i++) {
+  const a = argv[i];
+  if (a === '--only') {
+    const v = argv[++i];
+    if (!v || v.startsWith('-')) fail('--only needs a list of sections');
+    only = new Set(v.split(','));
+    for (const n of only) if (!SECTIONS.includes(n)) fail(`unknown section "${n}" (sections: ${SECTIONS.join(', ')})`);
+  } else if (a.startsWith('-')) fail(`unknown option ${a}`);
+  else if (rawArg) fail(`unexpected argument ${a}`);
+  else rawArg = a;
+}
+if (!rawArg) fail('no raw download directory given');
+const raw = resolve(rawArg);
+if (!existsSync(raw) || !statSync(raw).isDirectory()) fail(`raw download directory ${raw} does not exist`);
+const missing = SECTIONS.filter((n) => !only || only.has(n)).flatMap((n) => NEEDS[n]).filter((d) => !existsSync(join(raw, d)));
+if (missing.length) fail(`${raw} is missing ${missing.join(', ')}`);
+
 const root = new URL('..', import.meta.url).pathname;
-const out = join(root, 'public/assets');
-if (!only) rmSync(out, { recursive: true, force: true });
+const live = join(root, 'public/assets');
+// Built here, beside public/ on the same disk, so the final swap is a rename.
+const out = join(root, `.assets-staging-${process.pid}`);
+rmSync(out, { recursive: true, force: true });
+if (only && existsSync(live)) cpSync(live, out, { recursive: true });
 for (const d of ['characters', 'props', 'audio']) mkdirSync(join(out, d), { recursive: true });
+process.on('exit', (code) => { if (code !== 0) rmSync(out, { recursive: true, force: true }); });
 
 const gltf = (...args) => execFileSync('npx', ['gltf-transform', ...args], { cwd: root, stdio: ['ignore', 'ignore', 'inherit'] });
 
@@ -123,9 +158,14 @@ for (const [name, s] of Object.entries(sections)) {
   await s.build();
 }
 
-const manifest = writeManifest(root);
+// Everything built: the staging folder becomes public/assets.
+const manifest = writeManifest(root, out);
+const old = join(root, `.assets-old-${process.pid}`);
+if (existsSync(live)) renameSync(live, old);
+renameSync(out, live);
+rmSync(old, { recursive: true, force: true });
 
-export const CREDITS_FOOT = ['Typography is loaded from Google Fonts under the SIL Open Font License: Shippori Mincho B1, Zen Kaku Gothic New, and Inter.', '', 'The compound itself (walls, hall, roofs, stair, bridge, ring, pond, lanterns, trees and hills), the cel-shading materials, the ink line effect, the sky, the ice, aura and shock-ring effects, the generated clothing shells, the hand poses and gestures, all UI, and every synthesized sound (the ambience beds, the music, and the whooshes, risers, booms and shimmers layered into the Techniques, src/audio) are original to this repository.'];
+export const CREDITS_FOOT = ['Typography is loaded from Google Fonts under the SIL Open Font License: Shippori Mincho B1, Zen Kaku Gothic New, Inter, and Yuji Syuku (the brush lettering).', '', 'The compound itself (walls, hall, roofs, stair, bridge, ring, pond, lanterns, trees and hills), the cel-shading materials, the ink line effect, the sky, the ice, aura and shock-ring effects, the generated clothing shells, the hand poses and gestures, all UI, and every synthesized sound (the ambience beds, the music, and the whooshes, risers, booms and shimmers layered into the Techniques, src/audio) are original to this repository.'];
 const lines = ['# Credits', '', 'Every third-party asset in `public/assets/` is listed here with its source and license. `tools/build-assets.mjs` compresses them from the raw downloads (meshopt for geometry) and writes this file.', '', '| Asset | Author | License | Source | Used for |', '| --- | --- | --- | --- | --- |'];
 for (const s of Object.values(sections)) for (const c of s.credits) lines.push(`| ${c.title} | ${c.author} | ${c.license} | ${c.url} | ${c.use} |`);
 const packTitle = { 'impact-sounds': 'Impact Sounds', 'interface-sounds': 'Interface Sounds', 'digital-audio': 'Digital Audio', 'rpg-audio': 'RPG Audio' };

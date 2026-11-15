@@ -6,8 +6,10 @@
 import { readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
-export function writeManifest(root) {
-  const out = join(root, 'public/assets');
+// `dir` is the assets folder to list (build-assets passes its staging folder);
+// the URLs are relative to it either way.
+export function writeManifest(root, dir = join(root, 'public/assets')) {
+  const out = dir;
   const walk = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)])).filter((f) => !f.endsWith('manifest.json') && !f.endsWith('.DS_Store'));
   const all = walk(out).sort().map((f) => ({ url: 'assets/' + relative(out, f), bytes: statSync(f).size }));
   const isAudio = (f) => f.url.startsWith('assets/audio/');

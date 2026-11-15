@@ -254,7 +254,7 @@ export function stakeOf(w: WagerTerms, c: WagerContext, by?: string): Stake {
         : loss < 0.8 && cheap
           ? `a ${p}% call, but ${cheap.note}, so little is at stake`
           : raw === most && most < uncertainty * loss
-            ? `a ${p}% call with ${on} on the line; doubt this ${odds > 0.5 ? 'small' : 'one-sided'} stakes no more than ${round1(most).toFixed(1)}`
+            ? `a ${p}% call with ${on} on the line; a call this ${odds > 0.5 ? 'likely' : 'unlikely'} stakes no more than ${round1(most).toFixed(1)}`
             : raw === fair && fair < uncertainty * loss
               ? `a ${p}% call with ${on} on the line; a likely call stakes only what its misses cost`
               : `a ${p}% call with ${on} on the line${cheap ? `; ${cheap.note}` : ''}`;

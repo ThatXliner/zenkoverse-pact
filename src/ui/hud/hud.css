@@ -172,7 +172,7 @@ body.top-view .hud { cursor: none; }
 
 /* The open Wager: a slip of paper under the player, gold while it is open
    and when it pays, red when the forfeit lands. */
-.wager-call { position: absolute; left: 50%; top: 58%; translate: -50% 0; max-width: min(calc(100vw - 32px), 560px); display: flex; align-items: center; gap: 9px; padding: 5px 12px 6px 8px; background: var(--paper); color: var(--paper-ink); border: 2px solid var(--ink-line); box-shadow: 3px 3px 0 var(--ink-line); font-size: 13px; line-height: 1.3; animation: cap-in 0.25s var(--ease) both; }
+.wager-call { position: absolute; left: 50%; top: 58%; translate: -50% 0; z-index: 4; max-width: min(calc(100vw - 32px), 560px); display: flex; align-items: center; gap: 9px; padding: 5px 12px 6px 8px; background: var(--paper); color: var(--paper-ink); border: 2px solid var(--ink-line); box-shadow: 3px 3px 0 var(--ink-line); font-size: 13px; line-height: 1.3; animation: cap-in 0.25s var(--ease) both; }
 .wager-call b { flex: none; display: grid; place-items: center; min-width: 26px; height: 26px; padding: 0 4px; white-space: nowrap; font-size: 16px; font-weight: 400; color: var(--paper); background: #c9962a; border: 1.5px solid var(--ink-line); }
 .wager-call > span { min-width: 0; }
 .wager-call em { display: block; font-style: normal; font-size: 11.5px; color: var(--paper-mute); }
@@ -212,9 +212,10 @@ body.top-view .hud { cursor: none; }
    captions keep the whole left side above the corner. */
 @media (max-height: 520px) and (min-width: 601px) {
   .vitals { left: 50%; transform: translateX(-50%); width: min(200px, 26vw); }
+  /* The vitals take the space under the player, so the open call sits in the clear right side. */
+  .wager-call { top: 38%; left: auto; right: var(--hud-pad, 16px); translate: none; max-width: min(36vw, 320px); }
 }
 @media (max-height: 520px) {
-  .wager-call { top: 52%; }
   .boss { top: calc(var(--hud-pad) + 60px); }
   .boss .n { font-size: 16px; }
   .cap { padding: 6px 11px 7px 15px; }

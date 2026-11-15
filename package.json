@@ -25,6 +25,7 @@
     "check:rooftop": "node tools/check-rooftop.mjs",
     "check:sign": "node tools/check-sign.mjs",
     "check:tints": "node tools/check-tints.mjs",
+    "check:wagers": "node tools/check-wagers.mjs",
     "manifest": "node tools/manifest.mjs"
   },
   "dependencies": {

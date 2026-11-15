@@ -60,7 +60,7 @@ export const POSES = {
   quietSpread: { pos: [0.24, -0.16, -0.44], rot: [1.05, -0.4, 0.25], fingers: open, spread: 0.5 },
   guard: { pos: [0.19, -0.13, -0.40], rot: [-0.35, -0.65, -0.7], fingers: fist, spread: 0 },
   raiseHigh: { pos: [0.22, 0.0, -0.45], rot: [1.1, -0.4, 0.2], fingers: open, spread: 0.45 },
-  crossChest: { pos: [-0.06, -0.14, -0.30], rot: [-0.5, -0.9, -0.9], fingers: fist, spread: 0 },
+  crossChest: { pos: [-0.04, -0.24, -0.32], rot: [-0.5, -0.9, -0.9], fingers: fist, spread: 0 },
   flat: { pos: [0.18, -0.24, -0.46], rot: [-0.25, -0.3, 0.2], fingers: open, spread: 0.2 },
   landCatch: { pos: [0.22, -0.36, -0.42], rot: [-0.45, -0.3, 0.3], fingers: open, spread: 0.3 },
   // The full hand sign. `sealGather` is the anticipation: both hands sink and

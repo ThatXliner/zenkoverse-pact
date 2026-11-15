@@ -172,7 +172,6 @@ body.top-view .hud { cursor: none; }
 .wager-call b { flex: none; display: grid; place-items: center; min-width: 26px; height: 26px; padding: 0 4px; white-space: nowrap; font-size: 16px; font-weight: 400; color: var(--paper); background: #c9962a; border: 1.5px solid var(--ink-line); }
 .wager-call em { display: block; font-style: normal; font-size: 11.5px; color: var(--paper-mute); }
 .wager-call.declared b { animation: pulse 0.9s ease-in-out infinite; }
-.wager-call.lost b { background: #c4402f; }
 /* A named Pact, called out over its caster: lettered in ink like a shouted
    technique name, slammed in, held, gone in a second and a half. It sits
    above the head and never takes input. */

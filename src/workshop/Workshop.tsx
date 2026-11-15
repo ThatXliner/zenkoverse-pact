@@ -327,7 +327,7 @@ function WagerPanel({ c, stake, onChange, onRemove }: { c: Extract<Clause, { kin
   return <>
     <PanelHead title="Wager" hint="every cast declares it; you write what a right call pays and a wrong one costs" onRemove={onRemove} />
     <div class="chips" data-row><span class="chips-l">Each cast declares that</span>{DECLARATIONS.map((d) => (
-      <button key={d} class={`chip ${c.declare === d ? 'on' : ''}`} aria-pressed={c.declare === d} onClick={() => set({ declare: d })}>{DECLARE[d].words} <small>· you do {Math.round(stake({ ...c, declare: d }).odds * 100)}%</small></button>
+      <button key={d} class={`chip ${c.declare === d ? 'on' : ''}`} aria-pressed={c.declare === d} onClick={() => set({ declare: d })}>{DECLARE[d].words} <small>· true {Math.round(stake({ ...c, declare: d }).odds * 100)}% of the time</small></button>
     ))}</div>
     <div class="wg-cols">
       <div class="wg-col">

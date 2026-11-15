@@ -13,15 +13,13 @@ import type { Enemy } from '../combat/enemies';
 // the forfeit lands at once with its own banner. One call is open at a
 // time; a cast of the Pact while one is open is an ordinary cast.
 
-export interface WagerCall { id: number; state: 'declared' | 'won' | 'lost'; pact: string; call: string; win: string; lose: string; left: number | null }
+export interface WagerCall { id: number; pact: string; call: string; win: string; lose: string; left: number | null }
 export const wagerUi = signal<WagerCall | null>(null);
 
 const GOLD = 0xffd34d;
 const RED = 0xff5a4a;
 // A declared cast that never reaches its impact (interrupted, sealed) lapses after this.
 const LAPSE = 3;
-// How long the settled call stays up.
-const SHOW = 2.2;
 
 interface Open { pact: Pact; w: WagerTerms; stake: Stake; ctx: object; fired: boolean; t: number; marked: Enemy[] }
 
@@ -29,7 +27,6 @@ export class Wagers {
   // The damage multiplier on blows the declared cast deals as it lands.
   boost = 1;
   private open: Open | null = null;
-  private shown = 0;
   private id = 0;
 
   constructor(private game: Game) {}
@@ -43,7 +40,7 @@ export class Wagers {
     const stake = this.game.book.estimate(pact).wager!;
     this.open = { pact, w, stake, ctx, fired: false, t: 0, marked: [] };
     this.game.audio.play('wager.arm');
-    this.show('declared');
+    this.show();
     return true;
   }
 
@@ -60,7 +57,7 @@ export class Wagers {
     const hits = (r as { hits?: number } | undefined)?.hits ?? 0;
     if (o.w.declare === 'hit') this.settle(hits > 0);
     else if (o.w.declare === 'multi') this.settle(hits >= 2);
-    else this.show('declared');
+    else this.show();
     return r;
   }
 
@@ -79,10 +76,9 @@ export class Wagers {
         else if (o.t > KILL_WINDOW) this.settle(false);
       } else if (o.w.declare === 'untouched') {
         if (o.t >= UNTOUCHED_FOR) this.settle(true);
-        else this.show('declared');
+        else this.show();
       }
     }
-    if (this.shown > 0 && (this.shown -= dt) <= 0 && !this.open) wagerUi.value = null;
   }
 
   clear(): void { this.open = null; this.boost = 1; wagerUi.value = null; }
@@ -106,8 +102,8 @@ export class Wagers {
       this.forfeit(o);
       banner('外れ', `${o.pact.name}: called wrong. ${FORFEIT[o.w.forfeit].short}`);
     }
-    this.show(won ? 'won' : 'lost', o);
-    this.shown = SHOW;
+    // The banner and the ring say how it fell; the open-call slip goes.
+    wagerUi.value = null;
     g.tutorial.notify(won ? 'wager-won' : 'wager-lost');
   }
 
@@ -130,15 +126,14 @@ export class Wagers {
     }
   }
 
-  private show(state: WagerCall['state'], o: Open | null = this.open): void {
+  // The open call's slip. It re-renders only when the "untouched" count ticks down.
+  private show(): void {
+    const o = this.open;
     if (!o) return;
-    if (state === 'declared' && wagerUi.value?.state === 'declared' && o.w.declare !== 'untouched') return;
     const left = o.fired && o.w.declare === 'untouched' ? Math.max(0, Math.ceil(UNTOUCHED_FOR - o.t)) : null;
-    if (state === 'declared' && wagerUi.value?.left === left && wagerUi.value.state === 'declared') return;
-    wagerUi.value = {
-      id: state === 'declared' && wagerUi.value?.state === 'declared' ? wagerUi.value.id : ++this.id,
-      state, pact: o.pact.name, call: DECLARE[o.w.declare].words,
-      win: REWARD[o.w.reward].short(o.stake.amount), lose: FORFEIT[o.w.forfeit].short, left,
-    };
+    const cur = wagerUi.value;
+    if (cur && cur.left === left) return;
+    wagerUi.value = { id: cur?.id ?? ++this.id, pact: o.pact.name, call: DECLARE[o.w.declare].words, win: REWARD[o.w.reward].short(o.stake.amount), lose: FORFEIT[o.w.forfeit].short, left };
   }
+
 }

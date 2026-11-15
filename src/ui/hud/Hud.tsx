@@ -241,16 +241,14 @@ function Bet({ label }: { label: SlotLabel }) {
   return label.wager ? <i class="bet jp" title={`Each cast wagers that ${label.wager}`}>賭</i> : null;
 }
 
-// The open Wager, over the player: what the cast called and both ends of
-// the bet, then how it fell. The banner says it big; this says it plainly.
+// The open Wager, under the player: what the cast called and both ends of
+// the bet. How it fell is the banner's, with a gold or red ring.
 function WagerTag({ call }: { call: WagerCall }) {
   const left = call.left !== null ? ` · ${call.left} s` : '';
   return (
-    <div class={`wager-call ${call.state}`}>
-      <b class="jp">{call.state === 'won' ? '的中' : call.state === 'lost' ? '外れ' : '賭'}</b>
-      {call.state === 'declared'
-        ? <span>{call.pact} calls: {call.call}{left}<em>right: {call.win} · wrong: {call.lose}</em></span>
-        : <span>{call.pact}: {call.state === 'won' ? `called right · ${call.win}` : `called wrong · ${call.lose}`}</span>}
+    <div class="wager-call declared">
+      <b class="jp">賭</b>
+      <span>{call.pact} calls: {call.call}{left}<em>right: {call.win} · wrong: {call.lose}</em></span>
     </div>
   );
 }

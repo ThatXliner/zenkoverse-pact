@@ -404,13 +404,14 @@ for (let i = 0; i < 4 && (await stepId()) === 'wager'; i++) {
   await aimAtDummy();
   await page.keyboard.press('Digit1');
   saw.declared ||= await page.waitForSelector('.wager-call.declared', { timeout: 1500 }).then(() => true, () => false);
-  const end = await page.waitForSelector('.wager-call.won, .wager-call.lost', { timeout: 3000 }).then((el) => el.getAttribute('class'), () => '');
+  const end = await page.waitForFunction(() => /的中|外れ/.test(document.querySelector('.banner .big')?.textContent ?? '') && document.querySelector('.banner .big').textContent, null, { timeout: 3000 }).then((h) => h.jsonValue(), () => '');
   saw.settled ||= end;
   if (i === 0) await shot('14a-wager-call');
-  await page.waitForTimeout(/lost/.test(end) ? 5600 : 900);
+  await page.waitForTimeout(/外れ/.test(end) ? 5600 : 900);
 }
 check(saw.declared, 'casting the Pact declares its Wager over the player');
-check(/won|lost/.test(saw.settled), `the call settles visibly: ${saw.settled}`);
+check(/的中|外れ/.test(saw.settled), `the call settles visibly: ${saw.settled}`);
+check((await page.locator('.wager-call').count()) === 0, 'the open-call slip goes once the call settles');
 await untilStep('max', 4000);
 await shot('14-tutorial-max');
 await page.keyboard.press('KeyQ');

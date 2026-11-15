@@ -5,7 +5,8 @@
 // With --only, just those sections rebuild and the rest of public/assets stays;
 // the manifest is always regenerated from what is on disk.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, readFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildHuman } from './human.mjs';
 import { writeManifest } from './manifest.mjs';
@@ -94,11 +95,24 @@ const sections = {
     build() {
       rmSync(join(out, 'audio'), { recursive: true, force: true });
       mkdirSync(join(out, 'audio'), { recursive: true });
+      const tmp = mkdtempSync(join(tmpdir(), 'zenko-audio-'));
       // Mono (the game places every sound itself), Opus at 40 kb/s, any
       // leading silence trimmed so a hit lands on its frame.
+      const files = [];
       for (const [pack, names] of Object.entries(audio)) for (const n of names) {
-        execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', join(raw, 'kenney', pack, 'Audio', `${n}.ogg`), '-ac', '1', '-af', 'silenceremove=start_periods=1:start_threshold=-60dB', '-c:a', 'libopus', '-b:a', '40k', '-vbr', 'on', join(out, 'audio', `${n}.ogg`)]);
+        const f = join(tmp, `${n}.ogg`);
+        execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', join(raw, 'kenney', pack, 'Audio', `${n}.ogg`), '-ac', '1', '-af', 'silenceremove=start_periods=1:start_threshold=-60dB', '-c:a', 'libopus', '-b:a', '40k', '-vbr', 'on', f]);
+        files.push({ name: n, bytes: readFileSync(f) });
       }
+      // One file, one request: a little-endian header length, a JSON index
+      // of [name, offset, length], then the Ogg files back to back.
+      let offset = 0;
+      const index = files.map((f) => { const e = [f.name, offset, f.bytes.length]; offset += f.bytes.length; return e; });
+      const head = Buffer.from(JSON.stringify(index));
+      const len = Buffer.alloc(4);
+      len.writeUInt32LE(head.length);
+      writeFileSync(join(out, 'audio', 'sounds.pack'), Buffer.concat([len, head, ...files.map((f) => f.bytes)]));
+      rmSync(tmp, { recursive: true, force: true });
     },
   },
 };
@@ -115,8 +129,8 @@ export const CREDITS_FOOT = ['Typography is loaded from Google Fonts under the S
 const lines = ['# Credits', '', 'Every third-party asset in `public/assets/` is listed here with its source and license. `tools/build-assets.mjs` compresses them from the raw downloads (meshopt for geometry) and writes this file.', '', '| Asset | Author | License | Source | Used for |', '| --- | --- | --- | --- | --- |'];
 for (const s of Object.values(sections)) for (const c of s.credits) lines.push(`| ${c.title} | ${c.author} | ${c.license} | ${c.url} | ${c.use} |`);
 const packTitle = { 'impact-sounds': 'Impact Sounds', 'interface-sounds': 'Interface Sounds', 'digital-audio': 'Digital Audio', 'rpg-audio': 'RPG Audio' };
-lines.push('', 'Every file in `public/assets/audio/`, by the Kenney pack (CC0 1.0) it comes from. Each is transcoded to mono Opus under its original name:', '');
+lines.push('', 'Every recording in `public/assets/audio/sounds.pack`, by the Kenney pack (CC0 1.0) it comes from. Each is transcoded to mono Opus and kept under its original name:', '');
 for (const [pack, names] of Object.entries(audio)) lines.push(`- ${packTitle[pack]} (https://kenney.nl/assets/${pack}): ${names.join(', ')}.`);
 lines.push('', ...CREDITS_FOOT, '');
 writeFileSync(join(root, 'CREDITS.md'), lines.join('\n'));
-console.log(`assets: ${manifest.files.length} files, ${(manifest.total / 1e6).toFixed(1)} MB at boot; ${manifest.audio.length} sounds, ${(manifest.audioTotal / 1e6).toFixed(2)} MB after the first click`);
+console.log(`assets: ${manifest.files.length} files, ${(manifest.total / 1e6).toFixed(1)} MB at boot; ${(manifest.audioTotal / 1e6).toFixed(2)} MB of sound after the first click`);

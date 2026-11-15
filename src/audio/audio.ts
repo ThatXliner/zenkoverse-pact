@@ -8,7 +8,7 @@ import { blinkUi } from '../techniques/kits/blink';
 import { CUES, isCue, type Cue, type CueName, type Layer } from './cues';
 import { SYNTHS, makeNoise, type Noise, type Voice } from './synth';
 import { Library } from './library';
-import { Ambience, type AmbienceView, type MusicMode } from './ambience';
+import { Ambience, put, type AmbienceView, type MusicMode } from './ambience';
 import { STEP_CUE, surfaceAt, type Surface } from './surfaces';
 
 // The mixer. Nothing exists until the first click or key (browsers refuse to
@@ -79,8 +79,9 @@ export class Audio {
   private steps = new WeakMap<object, number>();
   private heartAt = 0;
   private muffle = 0;
+  private room = 0;
   private gestureAt: number | null = null;
-  private hum!: { gain: GainNode; tone: ConstantSourceNode; filter: BiquadFilterNode };
+  private hum: { gain: GainNode; tone: ConstantSourceNode; filter: BiquadFilterNode; level: number; stop: () => void } | null = null;
   // A cue a kit plays is offered here first; online, the room's wire sends it on.
   mirror: ((cue: CueName, at: THREE.Vector3 | null, gain: number, pitch: number) => void) | null = null;
   readonly log: SoundEvent[] = [];
@@ -139,28 +140,6 @@ export class Audio {
       this.send.connect(c).connect(out).connect(this.muffleFilter);
     }
 
-    // The open aura field: a low chord that hums while it holds and climbs with its density.
-    const humGain = ctx.createGain();
-    humGain.gain.value = 0;
-    const humFilter = ctx.createBiquadFilter();
-    humFilter.type = 'lowpass'; humFilter.frequency.value = 400; humFilter.Q.value = 3;
-    humFilter.connect(humGain).connect(this.dry);
-    // One root everything follows, so the chord can be retuned at once.
-    const tone = ctx.createConstantSource();
-    tone.offset.value = 98;
-    tone.start();
-    for (const [ratio, det] of [[1, 0], [1.5, 4], [2, -6]] as const) {
-      const o = ctx.createOscillator();
-      o.type = 'sawtooth'; o.detune.value = det;
-      const m = ctx.createGain(); m.gain.value = ratio;
-      tone.connect(m).connect(o.frequency);
-      const og = ctx.createGain(); og.gain.value = 0.3 / ratio;
-      o.frequency.value = 0;
-      o.connect(og).connect(humFilter);
-      o.start();
-    }
-    this.hum = { gain: humGain, tone, filter: humFilter };
-
     this.ambience = new Ambience(ctx, this.duckBed, this.duckMusic, (k) => this.noise[k], this.library);
     this.library.load(ctx);
     this.applyVolumes();
@@ -175,14 +154,15 @@ export class Audio {
     const ctx = this.ctx;
     const now = performance.now();
     const gain = opts.gain ?? 1;
-    this.record({ t: now, cue: name, bus: cue.bus, ctx: ctx ? ctx.state as SoundEvent['ctx'] : 'none', at: opts.at ? [round(opts.at.x), round(opts.at.y), round(opts.at.z)] : null, gain: round(gain), layers: cue.layers.length });
-    if (cue.net && !opts.remote) this.mirror?.(name, opts.at ?? null, gain, opts.pitch ?? 1);
-    if (!ctx || ctx.state !== 'running') return;
-    if (cue.every) {
-      const prev = this.last.get(name) ?? -Infinity;
-      if (now - prev < cue.every * 1000) return;
+    const running = ctx?.state === 'running';
+    // A repeat inside the cue's `every` is the same sound: dropped, and not logged.
+    if (running && cue.every) {
+      if (now - (this.last.get(name) ?? -Infinity) < cue.every * 1000) return;
       this.last.set(name, now);
     }
+    this.record({ t: now, cue: name, bus: cue.bus, ctx: ctx ? ctx.state as SoundEvent['ctx'] : 'none', at: opts.at ? [round(opts.at.x), round(opts.at.y), round(opts.at.z)] : null, gain: round(gain), layers: cue.layers.length });
+    if (cue.net && !opts.remote) this.mirror?.(name, opts.at ?? null, gain, opts.pitch ?? 1);
+    if (!ctx || !running) return;
     const t = ctx.currentTime + 0.005;
     const out = ctx.createGain();
     out.gain.value = gain;
@@ -251,34 +231,41 @@ export class Audio {
       pos = g.player.position.clone().add(new THREE.Vector3(0, 1.6, 0));
       fwd.set(-Math.sin(g.cam.yaw), 0, -Math.cos(g.cam.yaw));
     } else { pos = cam.position.clone(); cam.getWorldDirection(fwd); }
+    // Written straight to the params, never scheduled: an automation event a frame piles up.
     if (L.positionX) {
-      L.positionX.setTargetAtTime(pos.x, t, 0.02); L.positionY.setTargetAtTime(pos.y, t, 0.02); L.positionZ.setTargetAtTime(pos.z, t, 0.02);
-      L.forwardX.setTargetAtTime(fwd.x, t, 0.02); L.forwardY.setTargetAtTime(fwd.y, t, 0.02); L.forwardZ.setTargetAtTime(fwd.z, t, 0.02);
-      L.upX.value = 0; L.upY.value = 1; L.upZ.value = 0;
+      put(L.positionX, pos.x); put(L.positionY, pos.y); put(L.positionZ, pos.z);
+      put(L.forwardX, fwd.x); put(L.forwardY, fwd.y); put(L.forwardZ, fwd.z);
     } else { L.setPosition(pos.x, pos.y, pos.z); L.setOrientation(fwd.x, fwd.y, fwd.z, 0, 1, 0); }
 
     const indoors = inWorld ? g.world.indoorsAt(g.player.position) : 0;
-    this.hallVerb.gain.setTargetAtTime(indoors * 0.9, t, 0.2);
-    this.yardVerb.gain.setTargetAtTime((1 - indoors) * 0.35, t, 0.2);
+    this.room += (indoors - this.room) * Math.min(1, raw * 3);
+    put(this.hallVerb.gain, this.room * 0.9);
+    put(this.yardVerb.gain, (1 - this.room) * 0.35);
 
     const enemies = g.encounters.enemies.some((e) => e.alive && e.def.ai !== 'dummy');
     const clash = g.aura.clash.active;
     const mode: MusicMode = !inWorld ? 'title' : clash ? 'clash' : enemies || st === 'rooftop' ? 'fight' : 'calm';
     this.ambience.update(raw, indoors, mode, mode === 'clash' ? 1 : mode === 'fight' ? 0.75 : 0, g.cutscenes.active ? 1 : 0);
 
-    // The aura field hums while it is open.
+    // The aura field hums while it is open; the voice exists only then.
     const f = g.aura.field;
     const open = inWorld && f.open;
-    this.hum.gain.gain.setTargetAtTime(open ? 0.05 + f.density * 0.06 : 0, t, open ? 0.15 : 0.3);
-    this.hum.filter.frequency.setTargetAtTime(open ? 260 + f.density * 900 + Math.sin(t * 2.1) * 60 : 200, t, 0.1);
-    this.hum.tone.offset.setTargetAtTime(open ? 92 + f.density * 18 : 92, t, 0.3);
+    if (open && !this.hum) this.hum = this.makeHum(ctx);
+    const hum = this.hum;
+    if (hum) {
+      hum.level += ((open ? 0.05 + f.density * 0.06 : 0) - hum.level) * Math.min(1, raw * (open ? 6 : 3));
+      put(hum.gain.gain, hum.level);
+      put(hum.filter.frequency, 260 + f.density * 900 + Math.sin(t * 2.1) * 60);
+      put(hum.tone.offset, 92 + f.density * 18);
+      if (!open && hum.level < 0.002) { hum.stop(); this.hum = null; }
+    }
 
     // Blind (Blink's Maximum Output) or low on health: the world closes in.
     const hpFrac = g.combat.hp / g.combat.maxHp;
     const low = inWorld && hpFrac > 0 && hpFrac < 0.3;
     const want = blinkUi.blind.value > 0 ? 1 : low ? 0.35 : 0;
     this.muffle += (want - this.muffle) * Math.min(1, raw * (want > this.muffle ? 12 : 2));
-    this.muffleFilter.frequency.setTargetAtTime(20000 * Math.pow(500 / 20000, this.muffle), t, 0.05);
+    put(this.muffleFilter.frequency, 20000 * Math.pow(500 / 20000, this.muffle));
     if (low && worldRunning() && t >= this.heartAt) { this.play('heartbeat', { gain: 0.6 + (0.3 - hpFrac) * 2 }); this.heartAt = t + 0.6 + hpFrac * 1.6; }
 
     // The others' footsteps: the same cadence the player's controller uses.
@@ -324,6 +311,29 @@ export class Audio {
     if (!isCue(name)) return;
     const n = (x: unknown, d: number) => (typeof x === 'number' && Number.isFinite(x) ? THREE.MathUtils.clamp(x, 0, 4) : d);
     this.play(name, { at: at ?? body, gain: n(gain, 1), pitch: n(pitch, 1) || 1, remote: true });
+  }
+
+  // A low chord on one root (so it retunes at once), through a resonant low-pass.
+  private makeHum(ctx: AudioContext): NonNullable<Audio['hum']> {
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass'; filter.frequency.value = 400; filter.Q.value = 3;
+    filter.connect(gain).connect(this.dry);
+    const tone = ctx.createConstantSource();
+    tone.offset.value = 98;
+    const oscs = ([[1, 0], [1.5, 4], [2, -6]] as const).map(([ratio, det]) => {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth'; o.detune.value = det; o.frequency.value = 0;
+      const m = ctx.createGain(); m.gain.value = ratio;
+      tone.connect(m).connect(o.frequency);
+      const og = ctx.createGain(); og.gain.value = 0.3 / ratio;
+      o.connect(og).connect(filter);
+      o.start();
+      return o;
+    });
+    tone.start();
+    return { gain, tone, filter, level: 0, stop: () => { for (const o of oscs) o.stop(); tone.stop(); gain.disconnect(); } };
   }
 
   private bodySurface(p: THREE.Vector3): Surface {

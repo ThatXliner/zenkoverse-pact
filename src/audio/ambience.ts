@@ -23,6 +23,11 @@ export interface AmbienceView {
   events: { birds: number; bells: number; creaks: number; koto: number; taiko: number };
 }
 
+// Writes a per-frame level only when it has moved.
+export function put(p: AudioParam, v: number): void {
+  if (Math.abs(p.value - v) > Math.abs(v) * 0.002 + 1e-5) p.value = v;
+}
+
 // D In scale (D Eb G A Bb), across two octaves.
 const KOTO = [293.66, 311.13, 392.0, 440.0, 466.16, 587.33, 622.25, 783.99];
 
@@ -50,6 +55,8 @@ export class Ambience {
   private nextTaiko = 0;
   private taikoStep = 0;
   private fight = 0;
+  private hush = 0;
+  private drone_ = 0;
   mode: MusicMode = 'title';
   readonly counts = { birds: 0, bells: 0, creaks: 0, koto: 0, taiko: 0 };
 
@@ -155,23 +162,25 @@ export class Ambience {
   }
 
   // `hush` (0 to 1) holds the bed and the drone down while a cutscene plays.
+  // Every level here is smoothed in JS and written straight to its param
+  // (`put`), never scheduled: an automation event a frame piles up.
   update(dt: number, indoors: number, mode: MusicMode, fight: number, hush = 0): void {
     const ctx = this.ctx, now = ctx.currentTime;
+    const k = (rate: number) => Math.min(1, dt * rate);
     this.mode = mode;
-    this.indoors += (indoors - this.indoors) * Math.min(1, dt * 3);
-    const i = this.indoors;
-    const smooth = 0.15;
-    this.outsideFilter.frequency.setTargetAtTime(18000 * Math.pow(650 / 18000, i), now, smooth);
-    const quiet = 1 - hush * 0.75;
-    this.outside.gain.setTargetAtTime((1 - i * 0.62) * quiet, now, smooth);
-    this.room.gain.setTargetAtTime(i * 0.11 * quiet, now, smooth);
+    this.indoors += (indoors - this.indoors) * k(3);
+    this.hush += (hush - this.hush) * k(4);
+    const i = this.indoors, quiet = 1 - this.hush * 0.75;
+    put(this.outsideFilter.frequency, 18000 * Math.pow(650 / 18000, i));
+    put(this.outside.gain, (1 - i * 0.62) * quiet);
+    put(this.room.gain, i * 0.11 * quiet);
 
     // Gusts: every few seconds the wind rises for a while and the leaves answer.
     if (now >= this.nextGust) { this.gustTarget = this.gustTarget > 0.2 ? 0 : 0.4 + Math.random() * 0.6; this.nextGust = now + (this.gustTarget > 0 ? 2.5 + Math.random() * 3 : 5 + Math.random() * 9); }
-    this.gust += (this.gustTarget - this.gust) * Math.min(1, dt * 0.6);
-    this.wind.gain.setTargetAtTime(0.09 + this.gust * 0.11, now, 0.3);
-    this.windFilter.Q.value = 0.6 + this.gust * 0.5;
-    this.leaves.gain.setTargetAtTime(this.gust * this.gust * 0.05, now, 0.3);
+    this.gust += (this.gustTarget - this.gust) * k(0.6);
+    put(this.wind.gain, 0.09 + this.gust * 0.11);
+    put(this.windFilter.Q, 0.6 + this.gust * 0.5);
+    put(this.leaves.gain, this.gust * this.gust * 0.05);
 
     // The occasional things: a bird (not in a fight), the distant bell, a bubble, a board.
     if (now >= this.nextBird) { if (fight < 0.3) this.bird(now); this.nextBird = now + 6 + Math.random() * 14; }
@@ -180,10 +189,11 @@ export class Ambience {
     if (now >= this.nextCreak) { if (i > 0.5) this.creak(now); this.nextCreak = now + 5 + Math.random() * 10; }
 
     // The score: a drone always (lower in a fight, under the drums), koto when calm, taiko when not.
-    this.fight += (fight - this.fight) * Math.min(1, dt * 0.8);
+    this.fight += (fight - this.fight) * k(0.8);
     const f = this.fight;
-    this.drone.gain.setTargetAtTime((mode === 'title' ? 0.9 : 0.7 - f * 0.3) * quiet, now, 0.5);
-    this.taikoBus.gain.setTargetAtTime(f, now, 0.6);
+    this.drone_ += ((mode === 'title' ? 0.9 : 0.7 - f * 0.3) * quiet - this.drone_) * k(2);
+    put(this.drone.gain, this.drone_);
+    put(this.taikoBus.gain, f);
     if (now >= this.nextKoto) { if (f < 0.4) this.koto(now, mode); this.nextKoto = now + (mode === 'title' ? 5 : 9) + Math.random() * 10; }
     // Taiko: scheduled a little ahead on the audio clock so frame jitter never shows.
     if (f > 0.02) {

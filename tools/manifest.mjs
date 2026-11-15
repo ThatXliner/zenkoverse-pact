@@ -20,5 +20,5 @@ export function writeManifest(root) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const m = writeManifest(new URL('..', import.meta.url).pathname);
-  console.log(`assets: ${m.files.length} files, ${(m.total / 1e6).toFixed(2)} MB at boot; ${m.audio.length} sounds, ${(m.audioTotal / 1e6).toFixed(2)} MB after the first click`);
+  console.log(`assets: ${m.files.length} files, ${(m.total / 1e6).toFixed(2)} MB at boot; ${(m.audioTotal / 1e6).toFixed(2)} MB of sound after the first click`);
 }

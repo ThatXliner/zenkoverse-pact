@@ -8,7 +8,8 @@ import type { SynthName, SynthParams } from './synth';
 // Techniques follow one grammar: a cast cue under the wind-up (air, cloth, a
 // rise), an impact cue on the frame it lands (the recording, a crack on the
 // front edge, a boom underneath), and for a Maximum Output a charge under the
-// sign, an inhale on the cut before the blow, and the blow itself.
+// sign, an inhale (or rush) on the cut before the blow, the blow, and a tail
+// the kit plays where its effect lands, the part other players hear.
 
 export type Bus = 'sfx' | 'ui';
 
@@ -52,7 +53,7 @@ export const CUES = {
   'step.grass': sfx([S(v('footstep_grass_', 5), 0.6, { vary: 0.08 })], { wet: 0.05 }),
   'step.gravel': sfx([S(GRAVEL, 0.33, { vary: 0.1 }), S(v('footstep_snow_', 3), 0.14, { pitch: 1.3, vary: 0.1 })], { wet: 0.1 }),
   'step.water': sfx([Y('splash', { size: 0.7, bubbles: 2 }, { gain: 0.8 }), S(v('footstep_concrete_', 5), 0.12, { lp: 900 })], { wet: 0.15 }),
-  'step.wet': sfx([S(v('footstep_concrete_', 5), 0.38, { vary: 0.08 }), Y('splash', { size: 0.4, bubbles: 1 }, { gain: 0.22 })], { wet: 0.15 }),
+  'step.wet': sfx([S(v('footstep_concrete_', 5), 0.28, { vary: 0.08 }), Y('splash', { size: 0.4, bubbles: 1 }, { gain: 0.22 })], { wet: 0.15 }),
   'step.ice': sfx([S(v('footstep_concrete_', 5), 0.3, { pitch: 1.25, vary: 0.08 }), S(GLASS_L, 0.1, { pitch: 1.6, vary: 0.15 }), Y('tinkle', { count: 2, spread: 0.05 }, { gain: 0.5 })], { wet: 0.2 }),
   'step.tile': sfx([S(v('footstep_concrete_', 5), 0.27, { pitch: 1.15, vary: 0.1 }), S(v('impactGeneric_light_', 3), 0.08, { pitch: 1.4 })], { wet: 0.1 }),
   'jump': sfx([S(CLOTH, 0.22, { pitch: 1.2, vary: 0.1 }), Y('whoosh', { dur: 0.22, f0: 300, f1: 1400 }, { gain: 0.2 })]),

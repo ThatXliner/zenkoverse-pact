@@ -95,6 +95,9 @@ export class Avatar {
   private weights: Partial<Record<Locomotion, number>> = { idle: 1 };
   private clipSpeed: Record<string, number>;
   readonly bones = new Map<string, THREE.Bone>();
+  // From the body's frame at the point between the eyes (metres; +X right,
+  // +Y up, -Z forward) to the head bone's: an installed Eye is marked there.
+  readonly eyeFrame = new THREE.Matrix4();
   private aimPitch = 0;
   private hipYaw = 0;
   private layered: { bone: THREE.Bone; clip: THREE.Quaternion; pos: THREE.Vector3 }[] = [];
@@ -180,7 +183,17 @@ export class Avatar {
     // file binds to, before any clip has posed them.
     this.root.updateMatrixWorld(true);
     const eye = (gltf.userData as { eye?: [number, number, number] }).eye ?? [0, 1.7, 0.07];
-    this.gesture = new BodyGesture(this.bones, this.model.localToWorld(new THREE.Vector3(...eye)), target / 1.78);
+    const eyeWorld = this.model.localToWorld(new THREE.Vector3(...eye));
+    this.gesture = new BodyGesture(this.bones, eyeWorld, target / 1.78);
+    const head = this.bones.get('Head');
+    // The body faces -Z here, so the world's axes are the body's. The eye
+    // is measured on the head as authored; the bone's own scale (the large
+    // head) then carries the mark out to where the eye is drawn.
+    if (head) {
+      const p = new THREE.Vector3(), q = new THREE.Quaternion(), k = new THREE.Vector3();
+      head.matrixWorld.decompose(p, q, k);
+      this.eyeFrame.compose(p, q, k.divideScalar(HEAD_SCALE)).invert().multiply(new THREE.Matrix4().makeTranslation(eyeWorld.x, eyeWorld.y, eyeWorld.z));
+    }
     // The file's clip speeds come from the library's own skeleton; this body's
     // legs are another length, so each cycle's ground speed is measured on it.
     const gaitClips = GAIT.map((l) => gltf.animations.find((c) => c.name === LOCO_CLIP[l])).filter((c): c is THREE.AnimationClip => !!c);

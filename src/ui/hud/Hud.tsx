@@ -15,6 +15,7 @@ import { AuraMeter, ClashLayer } from '../Aura';
 import { NavHud } from '../nav/NavHud';
 import { OnlineHud } from '../Online';
 import { Captions } from './Captions';
+import { VaultSlot } from '../../eyes/EyeHud';
 import './hud.css';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
@@ -111,6 +112,7 @@ function Abilities({ game }: { game: Game }) {
       <SignRing sign={techUi.sign.value} />
       <div class="xs" role="group" aria-label="Extra Abilities">
         {EXTRA_SLOTS.map((s) => <Extra key={s} slot={s} label={slots[s]} glyph={glyphs[slots[s].kind ?? 'primary']} cd={cooldownOf(s, slots[s].kind, cd)} />)}
+        <VaultSlot />
       </div>
       <div class="mains">
         {MAIN_SLOTS.map((s) => { const r = cooldownOf(s, slots[s].kind, cd); return <Ability key={s} slot={s} label={slots[s]} glyph={glyphs[slots[s].kind!]} cd={r.cd} ready={r.ready} />; })}

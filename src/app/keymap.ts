@@ -8,7 +8,7 @@ import { KEY_SLOTS, slotDef, type KeySlot } from '../pacts/slots';
 
 export type Action =
   | 'forward' | 'back' | 'left' | 'right' | 'sprint' | 'jump' | 'dash'
-  | 'wager' | 'aura' | 'fullsign' | 'interact' | 'camera' | 'map' | 'workshop' | 'skip' | 'pause'
+  | 'wager' | 'aura' | 'fullsign' | 'vault' | 'interact' | 'camera' | 'map' | 'workshop' | 'skip' | 'pause'
   | KeySlot;
 export type Code = string;
 export type Group = 'move' | 'ability' | 'combat' | 'interface';
@@ -30,6 +30,7 @@ export const ACTIONS: readonly ActionDef[] = [
   { id: 'wager', label: 'Declare a Wager', group: 'combat', defaults: ['KeyR'] },
   { id: 'aura', label: 'Aura Expansion', group: 'combat', defaults: ['KeyF'] },
   { id: 'fullsign', label: 'Full hand sign', group: 'combat', defaults: ['AltLeft'] },
+  { id: 'vault', label: 'Vault Eye: its Technique', group: 'combat', defaults: ['KeyG'] },
   { id: 'interact', label: 'Interact', group: 'interface', defaults: ['KeyE'] },
   { id: 'camera', label: 'Camera view', group: 'interface', defaults: ['KeyV'] },
   { id: 'map', label: 'Map', group: 'interface', defaults: ['KeyM'] },

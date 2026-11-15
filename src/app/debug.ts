@@ -19,6 +19,8 @@ import { BOSS_ULTIMATES } from '../combat/ultimates';
 import { cutsceneTiming, type CutsceneLog } from '../cutscene/cutscene';
 import type { AudioView } from '../audio/audio';
 import { CUES, isCue } from '../audio/cues';
+import type { EyeId } from '../eyes/registry';
+import { eyeUi } from '../eyes/ui';
 
 export interface DebugApi {
   game: Game;
@@ -51,6 +53,11 @@ export interface DebugApi {
   // at the current Activation.
   sign(): { kind: 'idle' | 'signing' | 'primed'; duration: number; progress: number; left: number; window: number; boost: number };
   errors: string[];
+  // Installs an Eye (null empties the socket). The installation's scene
+  // plays only when `scene` is set. `vault` is the Technique a Vault holds.
+  eye(id: EyeId | null, opts?: { vault?: TechniqueId; scene?: boolean }): void;
+  // Casts the Vault Eye's Technique, as its key does.
+  castVault(): boolean;
   rooftop: {
     begin(): void;
     clearWave(): void;
@@ -130,6 +137,12 @@ export function installDebug(game: Game): void {
     camera(mode) { game.cam.snap(mode); game.setCamera(mode); },
     look(yaw, pitch) { game.cam.yaw = yaw; game.cam.pitch = pitch; },
     cast(slot) { game.techniques.cast(slot, true); },
+    eye(id, opts = {}) {
+      if (!id) { game.combat.eyes.remove(); return; }
+      game.combat.installEye(id, opts.vault ?? (id === 'vault' ? (game.techniqueId === 'rime' ? 'shift' : 'rime') : null));
+      if (!opts.scene) eyeUi.installing.value = null;
+    },
+    castVault() { return game.combat.eyes.castVault(); },
     pose(name) { game.hands.debugPose = name; },
     handsView(yaw, pitch) { game.hands.inspect = yaw === 0 && pitch === 0 ? null : { yaw, pitch }; },
     hold(action, held) { game.input.inject(action, held); },

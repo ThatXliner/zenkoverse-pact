@@ -1,7 +1,10 @@
 import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 import type { Game } from '../app/game';
 import { appState } from '../app/state';
-import { combatUi, EYES, type EyeId } from '../combat/combat';
+import { EYES, EYE_IDS, EYE_SIDE } from '../eyes/registry';
+import { eyeUi } from '../eyes/ui';
+import { KITS } from '../techniques/techniques';
+import type { TechniqueId } from '../techniques/kit';
 import { slotWords } from '../pacts/readback';
 import { keyLabel } from '../app/keymap';
 import { slotDef } from '../pacts/slots';
@@ -11,14 +14,6 @@ import { WAVE_COUNT, HEAL_BETWEEN, EYE_AFTER } from './waves';
 import './rooftop.css';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
-
-// What each Eye does in the trial. The codex text is the lore; this is the rule.
-const EYE_RULE: Partial<Record<EyeId, string>> = {
-  horizon: 'In the trial: every wind-up is ringed on the floor before it lands, and blows land for less.',
-  empty: 'In the trial: everything you hit takes more from you.',
-  thread: 'In the trial: part of every hit travels to the nearest other enemy.',
-};
-const EYE_ORDER: EyeId[] = ['horizon', 'empty', 'thread', 'covenant'];
 
 export function RooftopLayer({ game }: { game: Game }) {
   const st = appState.value;
@@ -31,7 +26,7 @@ export function RooftopLayer({ game }: { game: Game }) {
 
 function RunStrip() {
   const run = rooftopUi.run.value;
-  const eye = combatUi.eye.value;
+  const eye = eyeUi.id.value;
   if (!run) return null;
   return (
     <div class="rt-strip" aria-live="polite">
@@ -56,7 +51,7 @@ function useDigits(count: number, pick: (i: number) => void) {
 function OfferScreen({ game }: { game: Game }) {
   const step = rooftopUi.offer.value;
   if (!step) return null;
-  if (step.kind === 'eye') return <EyeStep game={game} />;
+  if (step.kind === 'eye') return <EyeStep game={game} vault={step.vault} />;
   return <PactStep game={game} offers={step.offers} />;
 }
 
@@ -109,27 +104,35 @@ function PactStep({ game, offers }: { game: Game; offers: Offer[] }) {
   );
 }
 
-function EyeStep({ game }: { game: Game }) {
+function EyeStep({ game, vault }: { game: Game; vault: TechniqueId }) {
   const first = useRef<HTMLButtonElement>(null);
   useEffect(() => { first.current?.focus(); }, []);
-  const open = EYE_ORDER.filter((id) => !EYES[id].locked);
+  const open = EYE_IDS.filter((id) => !EYES[id].locked);
+  const carried = eyeUi.id.value;
   useDigits(open.length, (i) => game.rooftop.chooseEye(open[i]!));
+  const held = KITS[vault];
   return (
     <Shell
       kicker={`Wave ${EYE_AFTER} cleared · an Eye is on offer`} title="Take an Eye" jp="眼"
-      note="An Eye is a finite physical artifact. Installing one permanently replaces a natural eye. You may take only one."
-      foot={<span class="rt-hint"><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> or click to install</span>}
+      note={carried
+        ? `You carry the ${EYES[carried].name}. Another would take its place in the same socket, and the ${EYES[carried].name} would come out.`
+        : `An Eye is a finite physical artifact. Installing one takes the place of your ${EYE_SIDE} eye, for good. You may carry one.`}
+      foot={<>
+        <span class="rt-hint">{open.map((_, i) => <kbd key={i}>{i + 1}</kbd>)} or click to install</span>
+        {carried && <button class="btn" onClick={() => game.rooftop.chooseEye(carried)}>Keep the {EYES[carried].name}</button>}
+      </>}
     >
-      <div class="rt-cards four">
-        {EYE_ORDER.map((id) => {
+      <div class="rt-cards five">
+        {EYE_IDS.map((id) => {
           const e = EYES[id];
           const i = open.indexOf(id);
+          const mine = carried === id && (id !== 'vault' || game.combat.eyes.vault === vault);
           return (
-            <button key={id} ref={i === 0 ? first : undefined} class={`rt-offer eye ${e.locked ? 'locked' : ''}`} disabled={!!e.locked} style={{ '--c': hex(e.color) } as never} data-eye={id} onClick={() => game.rooftop.chooseEye(id)}>
+            <button key={id} ref={i === 0 ? first : undefined} class={`rt-offer eye ${e.locked ? 'locked' : ''} ${mine ? 'carried' : ''}`} disabled={!!e.locked} style={{ '--c': hex(e.color) } as never} data-eye={id} onClick={() => game.rooftop.chooseEye(id)}>
               <span class="rt-top"><span class="rt-key jp">{e.jp}</span>{!e.locked && <kbd>{i + 1}</kbd>}</span>
               <h3 class="jp">{e.name}</h3>
-              <p class="rt-read">{e.text}</p>
-              <span class="rt-foot"><i>{e.locked ? 'It cannot be installed alone.' : EYE_RULE[id]}</i></span>
+              <p class="rt-read">{e.text}{id === 'vault' && <> It holds <b style={{ color: hex(held.color) }}>{held.name}</b>.</>}</p>
+              <span class="rt-foot">{mine && <b>Yours</b>}<i>{e.rule}</i></span>
             </button>
           );
         })}

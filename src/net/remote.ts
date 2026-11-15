@@ -4,6 +4,8 @@ import { Enemy, ENEMY_DEFS, NO_SCALE } from '../combat/enemies';
 import type { CharacterModel } from '../character/avatar';
 import { RULES, type PlayerInfo, type PlayerState } from './protocol';
 import { KITS } from '../techniques/techniques';
+import { EyeMark } from '../eyes/mark';
+import { eyeFromCode } from '../eyes/registry';
 
 // Each seat in a room has a suit colour and a look, the same on every screen.
 export const SEAT_SUITS = [0x2a4a9e, 0xb3263a, 0x1f8a80, 0xd98a1c, 0x6a3fa0, 0x3f8f3a, 0x3a3d48, 0xc0407e];
@@ -41,6 +43,8 @@ export class RemotePlayer extends Enemy {
   private lastFrozen = 0;
   private signShown: PlayerState['sign'] = 0;
   private sample: PlayerState | null = null;
+  // Their installed Eye, marked on the body; what it shows them is theirs alone.
+  private eyeMark: EyeMark;
   // Hits this client sent that the server has not confirmed yet. The name
   // plate subtracts them, so the attacker sees the bar drop on the blow
   // instead of a round trip later.
@@ -54,6 +58,7 @@ export class RemotePlayer extends Enemy {
     this.info = info;
     this.hp = info.hp;
     this.avatar.root.visible = false;
+    this.eyeMark = new EyeMark(this.avatar);
     if (info.down) this.die();
   }
 
@@ -177,6 +182,7 @@ export class RemotePlayer extends Enemy {
     this.cine = s.cine;
     this.fieldRadius = this.alive ? s.f?.[0] ?? 0 : 0;
     this.fieldDensity = s.f?.[1] ?? 0;
+    this.eyeMark.set(eyeFromCode(s.e));
     this.position.set(s.p[0], s.p[1], s.p[2]);
     this.velocity.set(s.v[0], s.v[1], s.v[2]);
     this.yaw = s.yaw;

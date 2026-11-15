@@ -29,6 +29,17 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
   rival: { name: 'Rival', model: 'parted', hp: 100, speed: 0, dmg: 0, ai: 'rival', height: 1.78 },
 };
 
+// How a body's blow works: it winds up once within `close` metres of its
+// target, and `windup` seconds later the blow lands on whatever stands
+// within `reach` metres and in front of it (`cone`, the dot with its facing).
+// The Master's palm reaches far; every other AI swings at arm's length.
+export interface Blow { close: number; reach: number; windup: number; cone: number }
+const ARM: Blow = { close: 1.7, reach: 2.2, windup: 0.38, cone: 0.3 };
+const PALM: Blow = { close: 7, reach: 8, windup: 0.5, cone: 0.3 };
+export const blowOf = (ai: EnemyAi): Blow => (ai === 'ancient' ? PALM : ARM);
+// Seconds from the start of a cast to its effect landing.
+export const CAST_SECONDS = 1.1;
+
 export interface EnemyScale { hp: number; dmg: number }
 export const NO_SCALE: EnemyScale = { hp: 1, dmg: 1 };
 
@@ -76,6 +87,7 @@ export class Enemy {
   hp: number;
   readonly maxHp: number;
   state: State = 'idle';
+  // Seconds in the current state.
   private t = 0;
   alive = true;
   grounded = true;
@@ -90,8 +102,10 @@ export class Enemy {
   locked = 0;
   // Seconds left of a broken guard after losing a clash: blows land harder.
   guardBroken = 0;
-  private attackCd = 1;
-  private castCd = 4;
+  // Seconds until this body may start its next blow and its next cast. The
+  // Horizon Eye reads them to see what a body can do next (src/eyes/horizon.ts).
+  attackCd = 1;
+  castCd = 4;
   damageTaken = 0;
   fuelPatch: THREE.Mesh | null = null;
   readonly key: string;
@@ -123,6 +137,7 @@ export class Enemy {
   }
 
   get height(): number { return this.def.height ?? 1.8; }
+  get stateTime(): number { return this.t; }
   get isBoss(): boolean { return !!this.def.boss; }
   center(): THREE.Vector3 { return this.position.clone().add(new THREE.Vector3(0, this.height * 0.55, 0)); }
 
@@ -164,6 +179,12 @@ export class Enemy {
     this.disposed = true;
     this.game.renderer.scene.remove(this.avatar.root);
     this.game.physics.world.removeRigidBody(this.body);
+  }
+
+  // Drops whatever the body was doing for a moment, as a blow does.
+  stagger(): void {
+    if (!this.alive || this.def.ai === 'dummy' || this.def.ai === 'rival' || this.state === 'knocked') return;
+    this.state = 'stagger'; this.t = 0; this.avatar.playOneShot('Hit_Chest');
   }
 
   // Holds the body where it stands for `seconds`, dropping whatever it was doing.
@@ -208,7 +229,7 @@ export class Enemy {
           break;
         case 'chase': {
           this.face(p, dt);
-          const reach = def.ai === 'ancient' ? 7 : 1.7;
+          const reach = blowOf(def.ai).close;
           if (dist > reach) move.copy(toP).normalize().multiplyScalar(speed);
           if (def.ai === 'ancient' && dist < 5) move.copy(toP).normalize().multiplyScalar(-speed * 0.7);
           if (dist <= reach + 0.3 && this.attackCd <= 0 && this.frozen <= 0 && g.encounters.claimAttack()) { this.state = 'windup'; this.t = 0; this.avatar.perform(def.ai === 'ancient' ? MOVES.palm : MOVES.jab); g.audio.play('enemy.swing', { at: this.center(), pitch: def.ai === 'ancient' ? 0.8 : 1 }); }
@@ -222,7 +243,7 @@ export class Enemy {
         }
         case 'windup':
           this.face(p, dt, 12);
-          if (this.t > (def.ai === 'ancient' ? 0.5 : 0.38) / hindered) { this.state = 'strike'; this.t = 0; this.strike(); }
+          if (this.t > blowOf(def.ai).windup / hindered) { this.state = 'strike'; this.t = 0; this.strike(); }
           break;
         case 'strike':
           if (this.t > 0.18) { this.state = 'recover'; this.t = 0; }
@@ -238,7 +259,7 @@ export class Enemy {
           break;
         case 'cast':
           this.face(p, dt, 4);
-          if (this.t > 1.1) { this.resolveCast(); this.state = 'recover'; this.t = 0; this.castCd = def.ai === 'kuroda' ? 5 : 6.5; }
+          if (this.t > CAST_SECONDS) { this.resolveCast(); this.state = 'recover'; this.t = 0; this.castCd = def.ai === 'kuroda' ? 5 : 6.5; }
           break;
       }
     }
@@ -284,8 +305,8 @@ export class Enemy {
     const toP = g.player.position.clone().sub(this.position).setY(0);
     const d = toP.length();
     const fwd = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
-    const reach = this.def.ai === 'ancient' ? 8 : 2.2;
-    if (d < reach && toP.normalize().dot(fwd) > 0.3) {
+    const blow = blowOf(this.def.ai);
+    if (d < blow.reach && toP.normalize().dot(fwd) > blow.cone) {
       g.combat.hurtPlayer(this.dmg, { from: this.center(), kinetic: true });
     }
     if (this.def.ai === 'ancient') { g.vfx.ring(this.position.clone().add(new THREE.Vector3(0, 0.1, 0)), 0x7dffb2, 0.5, 9, 0.6); g.audio.play('enemy.palm', { at: this.center() }); }

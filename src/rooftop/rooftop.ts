@@ -3,7 +3,9 @@ import { signal } from '@preact/signals';
 import type { Game } from '../app/game';
 import { toast, banner } from '../app/game';
 import { appState, setState } from '../app/state';
-import { combatUi, EYES, type EyeId } from '../combat/combat';
+import { combatUi } from '../combat/combat';
+import { EYES, type EyeId } from '../eyes/registry';
+import { TECHNIQUE_IDS, type TechniqueId } from '../techniques/kit';
 import type { Enemy } from '../combat/enemies';
 import type { Pact } from '../pacts/schema';
 import { buildArena, type Arena } from './arena';
@@ -18,11 +20,12 @@ import { WAVES, WAVE_COUNT, SPAWN_GAP, HEAL_BETWEEN, EYE_AFTER, SCORE, CLEAR_BON
 // Pact; `over` is the end screen. Aura works on the roof as it does
 // everywhere, from the first wave.
 
-type OfferStep = { kind: 'eye' } | { kind: 'pact'; offers: Offer[] };
+// The Eye step names the foreign Technique the Vault Eye on offer holds.
+type OfferStep = { kind: 'eye'; vault: TechniqueId } | { kind: 'pact'; offers: Offer[] };
 
 type Phase =
   | { kind: 'idle' }
-  | { kind: 'fight'; wave: number; queue: string[]; spawnT: number; clearT: number }
+  | { kind: 'fight'; wave: number; queue: string[]; spawnT: number; clearT: number; next: THREE.Vector3 | null }
   | { kind: 'offer'; wave: number; steps: OfferStep[] }
   | { kind: 'over'; victory: boolean };
 
@@ -50,6 +53,8 @@ const BEST_KEY = 'zenko.rooftop.best.v1';
 const BACKUP_KEY = 'zenko.rooftop.book-backup.v1';
 const FIRST_SPAWN = 1.7;
 const CLEAR_HOLD = 1.1;
+// Seconds before a body climbs on that its hatch is chosen.
+const ARRIVAL_LEAD = 1.6;
 
 function readBest(): number {
   try { return Number(JSON.parse(localStorage.getItem(BEST_KEY) ?? '{}').score) || 0; } catch { return 0; }
@@ -120,7 +125,7 @@ export class Rooftop {
     g.techniques.charge = Math.max(g.techniques.charge, 0.4);
     this.score = 0; this.kills = 0; this.cleared = 0;
     this.taken = []; this.takenIds.clear();
-    this.eyeTaken = null;
+    this.eyeTaken = g.combat.eye;
     this.startedAt = performance.now();
     this.wagers0 = { won: g.combat.wagersWon, lost: g.combat.wagersLost };
     rooftopUi.result.value = null;
@@ -136,7 +141,7 @@ export class Rooftop {
 
   private startWave(i: number): void {
     const w = WAVES[i]!;
-    this.phase = { kind: 'fight', wave: i, queue: shuffleBossFirst(roster(i)), spawnT: FIRST_SPAWN, clearT: 0 };
+    this.phase = { kind: 'fight', wave: i, queue: shuffleBossFirst(roster(i)), spawnT: FIRST_SPAWN, clearT: 0, next: null };
     banner(w.jp, `Wave ${i + 1} of ${WAVE_COUNT} · ${w.title}`);
     this.game.audio.play('roof.wave');
     this.publish();
@@ -163,7 +168,9 @@ export class Rooftop {
     if (g.player.position.y < this.arena.deckY - 2) { g.player.teleport(this.arena.start.clone()); toast('Back on the roof: the trial is up here', 'bad'); }
 
     p.spawnT -= dt;
-    if (p.queue.length && p.spawnT <= 0) { this.spawnOne(p.wave, p.queue.shift()!); p.spawnT = WAVES[p.wave]!.gap ?? SPAWN_GAP; }
+    // Where the next body climbs on is settled a moment before it does.
+    if (p.queue.length && !p.next && p.spawnT <= ARRIVAL_LEAD) p.next = this.pickSlot();
+    if (p.queue.length && p.spawnT <= 0) { this.spawnOne(p.wave, p.queue.shift()!, p.next ?? this.pickSlot()); p.next = null; p.spawnT = WAVES[p.wave]!.gap ?? SPAWN_GAP; }
 
     for (const e of this.tracked) if (!e.alive && !this.counted.has(e)) this.credit(e);
     this.telegraph();
@@ -181,9 +188,14 @@ export class Rooftop {
     this.score += SCORE[e.key] ?? 10;
   }
 
-  private spawnOne(wave: number, key: string): void {
+  // The hatch the next body will climb out of, and how soon.
+  get arriving(): { at: THREE.Vector3; in: number } | null {
+    const p = this.phase;
+    return p.kind === 'fight' && p.next ? { at: p.next, in: Math.max(0, p.spawnT) } : null;
+  }
+
+  private spawnOne(wave: number, key: string, at: THREE.Vector3): void {
     const g = this.game;
-    const at = this.pickSlot();
     const e = g.encounters.spawn(key, at, scaleFor(wave, key), true);
     e.state = 'chase';
     this.tracked.push(e);
@@ -211,16 +223,14 @@ export class Rooftop {
     return best.clone();
   }
 
-  // A ring at the foot of whoever starts a wind-up. The Horizon Eye draws it
-  // wider and holds it longer, so a crowd's blows can be read before they land.
+  // A ring at the foot of whoever starts a wind-up, so a crowd's blows can
+  // be read before they land. The Horizon Eye sees them sooner (src/eyes/horizon.ts).
   private telegraph(): void {
-    const horizon = this.game.combat.eye === 'horizon';
     for (const e of this.tracked) {
       const winding = e.alive && (e.state === 'windup' || e.state === 'cast');
       if (winding && !this.winding.has(e)) {
         this.winding.add(e);
-        const reach = e.def.ai === 'ancient' ? 9 : horizon ? 2.8 : 1.9;
-        this.game.vfx.ring(e.position.clone().add(new THREE.Vector3(0, 0.08, 0)), horizon ? EYES.horizon.color : 0xff5a4a, 0.5, reach, horizon ? 0.6 : 0.35);
+        this.game.vfx.ring(e.position.clone().add(new THREE.Vector3(0, 0.08, 0)), 0xff5a4a, 0.5, e.def.ai === 'ancient' ? 9 : 1.9, 0.35);
       } else if (!winding) this.winding.delete(e);
     }
   }
@@ -238,7 +248,7 @@ export class Rooftop {
     g.audio.play('roof.clear');
     if (wave + 1 >= WAVE_COUNT) { this.finish(true); return; }
     const steps: OfferStep[] = [];
-    if (wave + 1 === EYE_AFTER) steps.push({ kind: 'eye' });
+    if (wave + 1 === EYE_AFTER) steps.push({ kind: 'eye', vault: this.foreign() });
     steps.push({ kind: 'pact', offers: pickOffers(g, this.takenIds) });
     this.phase = { kind: 'offer', wave, steps };
     this.publish();
@@ -263,11 +273,23 @@ export class Rooftop {
     this.game.requestLock();
   }
 
+  // Installs `id`, taking out the Eye already in the socket if there is
+  // one. Choosing the Eye already there keeps it.
   chooseEye(id: EyeId): void {
-    if (rooftopUi.offer.value?.kind !== 'eye' || EYES[id].locked) return;
-    this.game.combat.installEye(id);
+    const step = rooftopUi.offer.value;
+    if (step?.kind !== 'eye' || EYES[id].locked) return;
+    const g = this.game;
+    if (id !== g.combat.eye || (id === 'vault' && g.combat.eyes.vault !== step.vault)) g.combat.installEye(id, step.vault);
     this.eyeTaken = id;
     this.advance();
+  }
+
+  // A Technique other than the player's, for the Vault Eye on offer.
+  private foreign(): TechniqueId {
+    const kept = this.game.combat.eyes.vault;
+    if (this.game.combat.eye === 'vault' && kept && kept !== this.game.techniqueId) return kept;
+    const others = TECHNIQUE_IDS.filter((t) => t !== this.game.techniqueId);
+    return others[Math.floor(Math.random() * others.length)]!;
   }
 
   // Inscribing binds the Pact to its key, so it is in force when the next wave opens.
@@ -350,11 +372,10 @@ export class Rooftop {
     this.tracked = [];
   }
 
-  // What the trial gave stays on the rooftop: the real Pacts come back, and so does the natural eye.
+  // The Pacts the trial gave stay on the rooftop: the real ones come back.
+  // An Eye installed up here is not given back: installing one is for good.
   private restorePlayer(): void {
     const g = this.game;
-    g.combat.eye = null;
-    combatUi.eye.value = null;
     try {
       const backup = localStorage.getItem(BACKUP_KEY);
       if (backup) { g.book.import(backup); localStorage.removeItem(BACKUP_KEY); }

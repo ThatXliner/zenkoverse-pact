@@ -1,0 +1,32 @@
+/* An Eye's installation (EyeInstall.tsx) and the Vault's key on the HUD. */
+
+.eye-install { position: fixed; inset: 0; z-index: 60; overflow: hidden; cursor: pointer; pointer-events: auto; }
+.eye-install .lid { position: absolute; left: -10%; right: -10%; height: 56%; background: #0b0a0e; will-change: transform; }
+.eye-install .lid.top { top: 0; border-radius: 0 0 50% 50% / 0 0 22% 22%; transform: translateY(-104%); animation: lid-top 2.7s both; }
+.eye-install .lid.bottom { bottom: 0; border-radius: 50% 50% 0 0 / 22% 22% 0 0; transform: translateY(104%); animation: lid-bottom 2.7s both; }
+@keyframes lid-top { 0% { transform: translateY(-104%); animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.4); } 14%, 63% { transform: translateY(0); animation-timing-function: cubic-bezier(0.3, 0, 0.2, 1); } 82%, 100% { transform: translateY(-104%); } }
+@keyframes lid-bottom { 0% { transform: translateY(104%); animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.4); } 14%, 63% { transform: translateY(0); animation-timing-function: cubic-bezier(0.3, 0, 0.2, 1); } 82%, 100% { transform: translateY(104%); } }
+
+.eye-install .dark { position: absolute; inset: 0; animation: dark 2.7s both; }
+@keyframes dark { 0%, 13% { opacity: 0; } 16%, 60% { opacity: 1; } 66%, 100% { opacity: 0; } }
+/* The shut lids: one hairline across the dark. */
+.eye-install .seam { position: absolute; top: 50%; left: 50%; width: 64%; height: 1.5px; background: linear-gradient(90deg, transparent, rgba(243, 238, 228, 0.5) 18%, rgba(243, 238, 228, 0.5) 82%, transparent); transform: translate(-50%, -50%) scaleX(0); animation: seam 2.7s both; }
+@keyframes seam { 0%, 15% { transform: translate(-50%, -50%) scaleX(0); } 30%, 100% { transform: translate(-50%, -50%) scaleX(1); } }
+/* One eye opens again in the dark, and it is the Eye. */
+.eye-install .iris { --x: 64%; position: absolute; left: var(--x); top: 50%; width: clamp(80px, 11vmin, 150px); aspect-ratio: 2.4; transform: translate(-50%, -50%) scaleY(0); border: 2px solid var(--c); border-radius: 50%; box-shadow: 0 0 24px color-mix(in oklab, var(--c) 45%, transparent); animation: iris 2.7s both; }
+.eye-install.left .iris { --x: 36%; }
+.eye-install .iris i { position: absolute; left: 50%; top: 50%; width: 30%; aspect-ratio: 1; border-radius: 50%; background: var(--c); transform: translate(-50%, -50%); box-shadow: inset 0 0 0 5px #0b0a0e, 0 0 14px var(--c); }
+@keyframes iris { 0%, 32% { transform: translate(-50%, -50%) scaleY(0); opacity: 0; } 34% { opacity: 1; } 46%, 60% { transform: translate(-50%, -50%) scaleY(1); opacity: 1; } 66%, 100% { transform: translate(-50%, -50%) scaleY(1); opacity: 0; } }
+.eye-install .name { position: absolute; left: 64%; top: calc(50% + clamp(56px, 8vmin, 100px)); display: grid; justify-items: center; gap: 4px; transform: translateX(-50%); color: var(--c); animation: name 2.7s both; }
+.eye-install.left .name { left: 36%; }
+.eye-install .name .jp { font-family: var(--serif); font-size: 28px; letter-spacing: 0.1em; }
+.eye-install .name small { font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: rgba(243, 238, 228, 0.6); }
+@keyframes name { 0%, 40% { opacity: 0; transform: translate(-50%, 4px); } 50%, 58% { opacity: 1; transform: translate(-50%, 0); } 64%, 100% { opacity: 0; } }
+/* The lids part on the fight with that side still washed in the Eye's colour. */
+.eye-install .wash { position: absolute; inset: 0; background: linear-gradient(90deg, transparent 42%, color-mix(in oklab, var(--c) 55%, transparent)); mix-blend-mode: multiply; opacity: 0; animation: wash 2.7s both; pointer-events: none; }
+.eye-install.left .wash { background: linear-gradient(270deg, transparent 42%, color-mix(in oklab, var(--c) 55%, transparent)); }
+@keyframes wash { 0%, 62% { opacity: 0; } 72% { opacity: 1; } 100% { opacity: 0; } }
+
+/* The Vault's key, beside the extra slots. */
+.x.vault .glyph { color: var(--vc); }
+.x.vault .box { border-color: color-mix(in oklab, var(--vc) 70%, transparent); }

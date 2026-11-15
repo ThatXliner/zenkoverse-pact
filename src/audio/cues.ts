@@ -196,6 +196,13 @@ export const CUES = {
   'drill.tier': sfx([S('powerUp9', 0.3), S('bong_001', 0.4, { pitch: 0.9 }), Y('pluck', { f: 587.33 }, { gain: 0.55 }), Y('pluck', { f: 659.25 }, { gain: 0.5, at: 0.1 }), Y('pluck', { f: 880 }, { gain: 0.5, at: 0.2 }), Y('pluck', { f: 1174.66 }, { gain: 0.55, at: 0.3 }), Y('shimmer', { f: 1174.66, dur: 1.6 }, { gain: 0.12, at: 0.3 })], { wet: 0.5 }),
   'drill.fail': sfx([S('lowDown', 0.35), Y('pluck', { f: 293.66, bright: 0 }, { gain: 0.5 }), Y('pluck', { f: 277.18, bright: 0 }, { gain: 0.45, at: 0.18 })], { wet: 0.4 }),
 
+  // ------------------------------------------------------------ Eyes: heard by the bearer alone
+  'eye.install': ui([S(CLOTH, 0.25, { pitch: 0.8 }), Y('thud', { f: 70, dur: 0.3 }, { gain: 0.55, at: 0.38 }), Y('tone', { f: 110, dur: 1.1, type: 1, lp: 500 }, { gain: 0.14, at: 0.4 }), Y('pluck', { f: 659.25, dur: 1.2 }, { gain: 0.28, at: 0.95 }), Y('shimmer', { f: 1318.5, dur: 1.6 }, { gain: 0.1, at: 0.95 })], { duck: 0.5 }),
+  'eye.horizon.open': sfx([Y('pluck', { f: 987.77, dur: 0.5, bright: 1 }, { gain: 0.25 }), Y('shimmer', { f: 1975.5, dur: 0.5 }, { gain: 0.06 })], { every: 0.2, wet: 0.3 }),
+  'eye.thread.carry': sfx([Y('pluck', { f: 392, dur: 0.4 }, { gain: 0.25 }), Y('whoosh', { dur: 0.18, f0: 900, f1: 2400 }, { gain: 0.12 })], { every: 0.1 }),
+  'eye.thread.snap': sfx([Y('crack', { dur: 0.04, hp: 3000 }, { gain: 0.3 }), Y('pluck', { f: 196, dur: 0.3, bright: 0 }, { gain: 0.3 })], { every: 0.15 }),
+  'eye.empty.through': sfx([Y('thud', { f: 60, dur: 0.12 }, { gain: 0.3 }), Y('whoosh', { dur: 0.12, f0: 1800, f1: 300 }, { gain: 0.15 })], { every: 0.12 }),
+
   // ------------------------------------------------------------ rooftop trial
   'roof.begin': sfx([Y('taiko', { f: 100, dur: 1 }, { gain: 0.9 }), Y('whoosh', { dur: 0.8, f0: 200, f1: 1200 }, { gain: 0.3 })], { wet: 0.5 }),
   'roof.wave': sfx([Y('taiko', { f: 110 }, { gain: 0.55 }), Y('taiko', { f: 110 }, { gain: 0.4, at: 0.18 }), Y('taiko', { f: 90, dur: 1 }, { gain: 0.6, at: 0.36 })], { wet: 0.4 }),

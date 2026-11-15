@@ -152,6 +152,15 @@ export class Renderer {
   }
   get currentLook(): LookId { return this.lookId; }
 
+  // An installed Eye's side of the first-person frame (src/eyes/eyes.ts):
+  // `side` 1 right or -1 left, `k` 0 (none) to 1.
+  eyeView(side: number, color: number, k: number): void {
+    const p = this.page;
+    p.u('eyeSide').value = side;
+    p.u('eyeK').value = k < 0.002 ? 0 : k;
+    (p.u('eyeTint').value as THREE.Color).set(color);
+  }
+
   setChroma(amount: number): void {
     (this.chroma.offset as THREE.Vector2).set(amount, amount * 0.6);
   }

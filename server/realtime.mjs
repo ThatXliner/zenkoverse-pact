@@ -304,7 +304,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
       case 'state': {
         const s = m.s, pos = vec(s?.p), v = vec(s?.v);
         if (!pos || !v || !Number.isFinite(s.ct)) return;
-        const st = { ct: s.ct, p: p.down ? (p.state?.p ?? pos) : pos, v, yaw: num(s.yaw, -1e3, 1e3), pitch: num(s.pitch, -2, 2), g: !!s.g, sign: s.sign === 1 || s.sign === 2 ? s.sign : 0, cine: !!s.cine, f: Array.isArray(s.f) ? [num(s.f[0], 0, rules.field.maxRadius), num(s.f[1], 0, 1)] : [0, 0] };
+        const st = { ct: s.ct, p: p.down ? (p.state?.p ?? pos) : pos, v, yaw: num(s.yaw, -1e3, 1e3), pitch: num(s.pitch, -2, 2), g: !!s.g, sign: s.sign === 1 || s.sign === 2 ? s.sign : 0, cine: !!s.cine, f: Array.isArray(s.f) ? [num(s.f[0], 0, rules.field.maxRadius), num(s.f[1], 0, 1)] : [0, 0], e: Number.isInteger(s.e) && s.e >= 0 && s.e <= 5 ? s.e : 0 };
         p.state = st;
         p.stateAt = now;
         if (p.fresh.length < 6) p.fresh.push(st);

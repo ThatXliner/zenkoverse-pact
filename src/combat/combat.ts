@@ -6,20 +6,13 @@ import { setState } from '../app/state';
 import { KEY_SLOTS } from '../pacts/slots';
 import type { Enemy } from './enemies';
 import { AURA } from './field';
-
-export type EyeId = 'horizon' | 'empty' | 'thread' | 'vault' | 'covenant';
-export const EYES: Record<EyeId, { name: string; jp: string; color: number; text: string; locked?: boolean }> = {
-  horizon: { name: 'Horizon Eye', jp: '地平', color: 0xffb347, text: 'Perceive reachable futures. Enemy wind-ups are shown before the blow arrives.' },
-  empty: { name: 'Empty Eye', jp: '空', color: 0xb7c3d6, text: 'Perceive absence and concealment. Veiled enemies are revealed and take more from you.' },
-  thread: { name: 'Thread Eye', jp: '糸', color: 0xff5fa2, text: 'Perceive dependencies. Damage to an anchor travels down every thread.' },
-  vault: { name: 'Vault Eye', jp: '庫', color: 0x8affd6, text: 'House one transferred foreign Technique, never a copy.' },
-  covenant: { name: 'Covenant Eye', jp: '盟', color: 0xe9e3ff, text: 'A universe-enforced binding vow between multiple willing people. You are fighting alone tonight.', locked: true },
-};
+import { Eyes } from '../eyes/eyes';
+import type { EyeId } from '../eyes/registry';
+import type { TechniqueId } from '../techniques/kit';
 
 export const combatUi = {
   hp: signal(1),
   wagerArmed: signal(false),
-  eye: signal<EyeId | null>(null),
   boss: signal<{ name: string; frac: number; color: number } | null>(null),
   // Damage numbers, and sound words lettered over heavy hits (`word`).
   numbers: signal<FloatText[]>([]),
@@ -39,14 +32,17 @@ export class Combat {
   private wagerSlot: string | null = null;
   invuln = 0;
   flags = { overextension: false, bloodDraw: false };
-  eye: EyeId | null = null;
+  // The installed Eye (src/eyes): kept across sessions, as installing one is for good.
+  readonly eyes: Eyes;
   private nums: FloatNum[] = [];
   private numId = 0;
   private lastWord = -1;
   wagersWon = 0;
   wagersLost = 0;
 
-  constructor(private game: Game) {}
+  constructor(private game: Game) { this.eyes = new Eyes(game); }
+
+  get eye(): EyeId | null { return this.eyes.id; }
 
   resetPlayer(): void {
     this.hp = this.maxHp = 100;
@@ -87,10 +83,11 @@ export class Combat {
     // A body in the player's open field, or one whose guard a clash broke, takes more.
     m *= g.aura.damageOn(e.position);
     if (e.guardBroken > 0) m *= 1 + AURA.guardBreak.taken;
-    if (this.eye === 'empty') m *= 1.2;
+    const eye = this.eyes.dealt(e);
+    m *= eye.mult;
     const final = Math.round(amount * m);
-    if (this.eye === 'thread') this.threadSplash(e, final * 0.35);
-    e.hurt(final, { from: opts.from, knock: opts.knock, lift: opts.lift, stagger: opts.stagger });
+    e.hurt(final, { from: opts.from, knock: opts.knock, lift: opts.lift, stagger: eye.stagger || opts.stagger });
+    this.eyes.landed(e, final);
     g.audio.hit(final, e.center());
     this.number(e.center(), String(final), this.wagerSlot ? '#ffd34d' : m > 1.1 ? '#ffb0ff' : '#f3eee4', final >= 40);
     if (opts.heavy || final >= 40) {
@@ -118,7 +115,6 @@ export class Combat {
     if (!opts.self && !opts.cutscene && (this.invuln > 0 || g.cutscenes.locksPlayer)) return 0;
     let a = amount;
     if (!opts.self) a = g.techniques.def.effects.onStruck?.(g, a, opts.from ?? g.player.position) ?? a;
-    if (this.eye === 'horizon' && !opts.self) a *= 0.7;
     if (g.aura.guardBroken > 0 && !opts.self) a *= 1 + AURA.guardBreak.taken;
     if (a <= 0) return 0;
     if (g.net) { if (!opts.pvp) g.net.selfDamage(a); }
@@ -144,15 +140,6 @@ export class Combat {
     combatUi.hp.value = this.hp / this.maxHp;
   }
 
-  // Thread Eye: damage to one body travels down the thread to its nearest neighbour.
-  private threadSplash(from: Enemy, amount: number): void {
-    const other = this.game.targets().filter((o) => o !== from && o.alive && o.def.ai !== 'dummy' && o.position.distanceTo(from.position) < 7)
-      .sort((a, b) => a.position.distanceTo(from.position) - b.position.distanceTo(from.position))[0];
-    if (!other) return;
-    other.hurt(Math.round(amount), { from: from.position, stagger: false });
-    this.game.vfx.trail([from.center(), other.center()], EYES.thread.color, 0.08, 0.25);
-  }
-
   private defeat(): void {
     const g = this.game;
     if (g.rooftop.active) { g.rooftop.lose(); return; }
@@ -160,12 +147,7 @@ export class Combat {
     setState({ kind: 'defeat' });
   }
 
-  installEye(id: EyeId): void {
-    if (EYES[id].locked) return;
-    this.eye = id;
-    combatUi.eye.value = id;
-    banner(EYES[id].jp, `${EYES[id].name} installed. A natural eye is gone for good.`);
-  }
+  installEye(id: EyeId, vault: TechniqueId | null = null): boolean { return this.eyes.install(id, vault); }
 
   number(pos: THREE.Vector3, text: string, color: string, big: boolean): void {
     this.nums.push({ id: ++this.numId, pos: pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.4, 0.4, 0)), text, color, life: 0.9, big, word: false, tilt: 0 });
@@ -182,6 +164,7 @@ export class Combat {
   }
 
   update(dt: number): void {
+    this.eyes.update(dt, this.game.clock.raw);
     this.invuln = Math.max(0, this.invuln - dt);
     this.wagerCd = Math.max(0, this.wagerCd - dt);
     const cam = this.game.renderer.camera;

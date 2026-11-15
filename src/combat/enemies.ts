@@ -145,6 +145,7 @@ export class Enemy {
     if (!this.alive) return;
     this.alive = false;
     this.state = 'dead';
+    this.game.audio.play('body.down', { at: this.position });
     this.avatar.die();
     this.game.physics.world.removeCollider(this.collider, false);
     this.field?.end('spent');
@@ -204,7 +205,7 @@ export class Enemy {
           const reach = def.ai === 'ancient' ? 7 : 1.7;
           if (dist > reach) move.copy(toP).normalize().multiplyScalar(speed);
           if (def.ai === 'ancient' && dist < 5) move.copy(toP).normalize().multiplyScalar(-speed * 0.7);
-          if (dist <= reach + 0.3 && this.attackCd <= 0 && this.frozen <= 0 && g.encounters.claimAttack()) { this.state = 'windup'; this.t = 0; this.avatar.perform(def.ai === 'ancient' ? MOVES.palm : MOVES.jab); }
+          if (dist <= reach + 0.3 && this.attackCd <= 0 && this.frozen <= 0 && g.encounters.claimAttack()) { this.state = 'windup'; this.t = 0; this.avatar.perform(def.ai === 'ancient' ? MOVES.palm : MOVES.jab); g.audio.play('enemy.swing', { at: this.center(), pitch: def.ai === 'ancient' ? 0.8 : 1 }); }
           if (def.ai !== 'thug' && this.castCd <= 0 && dist < 22 && this.frozen <= 0) {
             // A boss with a Maximum Output reaches for it in place of a cast when it is ready.
             const ult = BOSS_ULTIMATES[def.ai];
@@ -272,9 +273,8 @@ export class Enemy {
     const reach = this.def.ai === 'ancient' ? 8 : 2.2;
     if (d < reach && toP.normalize().dot(fwd) > 0.3) {
       g.combat.hurtPlayer(this.dmg, { from: this.center(), kinetic: true });
-      g.audio.play('impactPunch_medium_000', 0.6, 0.9 + Math.random() * 0.2);
     }
-    if (this.def.ai === 'ancient') { g.vfx.ring(this.position.clone().add(new THREE.Vector3(0, 0.1, 0)), 0x7dffb2, 0.5, 9, 0.6); g.audio.play('impactBell_heavy_002', 0.6, 0.7); }
+    if (this.def.ai === 'ancient') { g.vfx.ring(this.position.clone().add(new THREE.Vector3(0, 0.1, 0)), 0x7dffb2, 0.5, 9, 0.6); g.audio.play('enemy.palm', { at: this.center() }); }
   }
 
   private beginCast(): void {
@@ -282,10 +282,10 @@ export class Enemy {
     if (this.def.ai === 'kuroda') {
       const at = g.player.position.clone();
       this.fuelPatch = g.vfx.patch(at, 2.4, 'fuel', 2.2);
-      g.audio.play('spaceTrash1', 0.4, 0.6);
+      g.audio.play('kuroda.fuel', { at });
       (this as { fuelAt?: THREE.Vector3 }).fuelAt = at;
     } else if (this.def.ai === 'ancient') {
-      g.audio.play('phaserUp3', 0.4, 0.5);
+      g.audio.play('ancient.charge', { at: this.center() });
       g.vfx.ring(this.center(), 0x7dffb2, 0.2, 2.5, 1.1);
     }
   }
@@ -298,14 +298,14 @@ export class Enemy {
       g.vfx.burst(at.clone().add(new THREE.Vector3(0, 0.3, 0)), 26, 'spark', 7, 0xff8a2a);
       g.vfx.patch(at, 2.6, 'burn', 20);
       g.vfx.ring(at.clone().add(new THREE.Vector3(0, 0.1, 0)), 0xff6a1a, 0.3, 3.2, 0.5);
-      g.audio.play('impactMining_000', 0.8, 0.7);
+      g.audio.play('kuroda.ignite', { at });
       g.renderer.impactFrame(2, new THREE.Color(0xff6a1a), at.clone().add(new THREE.Vector3(0, 1, 0)));
       if (g.player.position.distanceTo(at) < 2.6) g.combat.hurtPlayer(this.dmg * 1.6, { from: at, kinetic: false });
       for (const e of g.encounters.enemies) if (e !== this && e.alive && e.position.distanceTo(at) < 2.6) e.hurt(20, { from: at, knock: 3 });
     } else if (this.def.ai === 'ancient') {
       const c = this.center();
       g.vfx.ring(this.position.clone().add(new THREE.Vector3(0, 0.1, 0)), 0x7dffb2, 0.5, 14, 0.9);
-      g.audio.play('impactBell_heavy_000', 0.8, 0.6);
+      g.audio.play('ancient.wave', { at: c });
       const d = g.player.position.distanceTo(this.position);
       if (d < 14) g.combat.hurtPlayer(this.dmg * (1 - d / 16), { from: c, kinetic: true });
       for (const p of g.props.instances) if (p.mesh.position.distanceTo(this.position) < 14) g.props.push(p, p.mesh.position.clone().sub(this.position).normalize().multiplyScalar(p.def.mass * 5).setY(p.def.mass * 3));

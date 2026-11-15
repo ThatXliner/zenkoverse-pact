@@ -5,7 +5,7 @@
 // With --only, just those sections rebuild and the rest of public/assets stays;
 // the manifest is always regenerated from what is on disk.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, copyFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildHuman } from './human.mjs';
 import { writeManifest } from './manifest.mjs';
@@ -39,10 +39,19 @@ const kenney = {
 };
 const furniture = ['bench', 'chair', 'bookcaseOpen', 'lampSquareFloor', 'rugRectangle', 'cardboardBoxClosed', 'cardboardBoxOpen', 'pottedPlant', 'radio', 'coatRackStanding', 'desk', 'stoolBar'];
 const cityBits = ['box_A', 'box_B'];
+// Sound: Kenney's CC0 packs, each file transcoded to mono Opus. The game
+// loads them after the first click (src/audio/library.ts), not at boot.
+const range = (stem, n, from = 0) => Array.from({ length: n }, (_, i) => `${stem}${String(from + i).padStart(3, '0')}`);
 const audio = {
-  'impact-sounds': ['footstep_concrete_000', 'footstep_concrete_001', 'footstep_concrete_002', 'footstep_concrete_003', 'footstep_wood_000', 'footstep_wood_001', 'footstep_wood_002', 'footstep_snow_000', 'footstep_snow_001', 'impactPunch_heavy_000', 'impactPunch_heavy_001', 'impactPunch_medium_000', 'impactPunch_medium_001', 'impactMetal_heavy_000', 'impactMetal_heavy_001', 'impactMetal_medium_000', 'impactGlass_heavy_000', 'impactGlass_heavy_001', 'impactGlass_light_000', 'impactGlass_medium_000', 'impactWood_heavy_000', 'impactWood_heavy_001', 'impactPlank_medium_000', 'impactSoft_heavy_000', 'impactSoft_heavy_001', 'impactBell_heavy_000', 'impactBell_heavy_002', 'impactTin_medium_000', 'impactMining_000', 'impactPlate_heavy_000'],
-  'interface-sounds': ['click_001', 'click_003', 'select_001', 'select_003', 'confirmation_001', 'confirmation_002', 'error_004', 'open_001', 'close_001', 'toggle_001', 'tick_001', 'question_002', 'maximize_006', 'minimize_006', 'glass_002', 'pluck_001', 'bong_001', 'glitch_001'],
-  'digital-audio': ['phaseJump1', 'phaseJump3', 'phaserUp3', 'phaserDown1', 'powerUp3', 'powerUp9', 'zap1', 'zapTwoTone', 'lowDown', 'highUp', 'threeTone1', 'spaceTrash1'],
+  'impact-sounds': [
+    ...range('footstep_concrete_', 5), ...range('footstep_wood_', 5), ...range('footstep_grass_', 5), ...range('footstep_snow_', 3),
+    ...range('impactPunch_heavy_', 3), ...range('impactPunch_medium_', 3), ...range('impactSoft_heavy_', 3), ...range('impactSoft_medium_', 3), ...range('impactGeneric_light_', 3),
+    ...range('impactMetal_heavy_', 2), ...range('impactMetal_medium_', 1), ...range('impactMetal_light_', 2), ...range('impactGlass_heavy_', 3), ...range('impactGlass_medium_', 2), ...range('impactGlass_light_', 3),
+    ...range('impactWood_heavy_', 2), ...range('impactWood_medium_', 2), ...range('impactWood_light_', 2), ...range('impactPlank_medium_', 2), ...range('impactBell_heavy_', 3), ...range('impactPlate_heavy_', 2), ...range('impactMining_', 3),
+  ],
+  'rpg-audio': ['footstep00', 'footstep01', 'footstep02', 'footstep03', 'footstep04', 'footstep05', 'cloth1', 'cloth2', 'cloth3', 'cloth4', 'knifeSlice', 'knifeSlice2', 'creak1', 'creak2', 'creak3', 'bookFlip1', 'bookFlip2', 'bookPlace1', 'beltHandle1', 'drawKnife1'],
+  'interface-sounds': ['click_002', 'click_003', 'select_001', 'select_002', 'select_003', 'confirmation_001', 'confirmation_002', 'error_004', 'error_006', 'open_001', 'close_001', 'tick_001', 'tick_002', 'question_002', 'glass_002', 'pluck_001', 'bong_001', 'glitch_001', 'switch_002'],
+  'digital-audio': ['phaseJump3', 'powerUp9', 'zapTwoTone', 'lowDown', 'spaceTrash1'],
 };
 
 // Each section names its credits and the build that fills public/assets.
@@ -77,12 +86,19 @@ const sections = {
   },
   audio: {
     credits: [
-      { title: 'Impact Sounds', author: 'Kenney', url: 'https://kenney.nl/assets/impact-sounds', license: 'CC0 1.0', use: 'Footsteps and impact layers.' },
-      { title: 'Interface Sounds', author: 'Kenney', url: 'https://kenney.nl/assets/interface-sounds', license: 'CC0 1.0', use: 'UI feedback.' },
+      { title: 'Impact Sounds', author: 'Kenney', url: 'https://kenney.nl/assets/impact-sounds', license: 'CC0 1.0', use: 'Footsteps on stone, wood and grass, and the physical layer of every hit, catch and landing.' },
+      { title: 'Interface Sounds', author: 'Kenney', url: 'https://kenney.nl/assets/interface-sounds', license: 'CC0 1.0', use: 'Menu, Workshop, toast and drill feedback.' },
       { title: 'Digital Audio', author: 'Kenney', url: 'https://kenney.nl/assets/digital-audio', license: 'CC0 1.0', use: 'Technique layers.' },
+      { title: 'RPG Audio', author: 'Kenney', url: 'https://kenney.nl/assets/rpg-audio', license: 'CC0 1.0', use: 'Gravel and sand footsteps, cloth swishes under the hand signs and swings, the hall\'s creaking boards, the Workshop\'s pages, Shift\'s cut.' },
     ],
     build() {
-      for (const [pack, names] of Object.entries(audio)) for (const n of names) copyFileSync(join(raw, 'kenney', pack, 'Audio', `${n}.ogg`), join(out, 'audio', `${n}.ogg`));
+      rmSync(join(out, 'audio'), { recursive: true, force: true });
+      mkdirSync(join(out, 'audio'), { recursive: true });
+      // Mono (the game places every sound itself), Opus at 40 kb/s, any
+      // leading silence trimmed so a hit lands on its frame.
+      for (const [pack, names] of Object.entries(audio)) for (const n of names) {
+        execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', join(raw, 'kenney', pack, 'Audio', `${n}.ogg`), '-ac', '1', '-af', 'silenceremove=start_periods=1:start_threshold=-60dB', '-c:a', 'libopus', '-b:a', '40k', '-vbr', 'on', join(out, 'audio', `${n}.ogg`)]);
+      }
     },
   },
 };
@@ -95,9 +111,12 @@ for (const [name, s] of Object.entries(sections)) {
 
 const manifest = writeManifest(root);
 
-export const CREDITS_FOOT = ['Typography is loaded from Google Fonts under the SIL Open Font License: Shippori Mincho B1, Zen Kaku Gothic New, and Inter.', '', 'The compound itself (walls, hall, roofs, stair, bridge, ring, pond, lanterns, trees and hills), the cel-shading materials, the ink line effect, the sky, the ice, aura and shock-ring effects, the generated clothing shells, the hand poses and gestures, the wind bed, and all UI are original to this repository.'];
+export const CREDITS_FOOT = ['Typography is loaded from Google Fonts under the SIL Open Font License: Shippori Mincho B1, Zen Kaku Gothic New, and Inter.', '', 'The compound itself (walls, hall, roofs, stair, bridge, ring, pond, lanterns, trees and hills), the cel-shading materials, the ink line effect, the sky, the ice, aura and shock-ring effects, the generated clothing shells, the hand poses and gestures, all UI, and every synthesized sound (the ambience beds, the music, and the whooshes, risers, booms and shimmers layered into the Techniques, src/audio) are original to this repository.'];
 const lines = ['# Credits', '', 'Every third-party asset in `public/assets/` is listed here with its source and license. `tools/build-assets.mjs` compresses them from the raw downloads (meshopt for geometry) and writes this file.', '', '| Asset | Author | License | Source | Used for |', '| --- | --- | --- | --- | --- |'];
 for (const s of Object.values(sections)) for (const c of s.credits) lines.push(`| ${c.title} | ${c.author} | ${c.license} | ${c.url} | ${c.use} |`);
+const packTitle = { 'impact-sounds': 'Impact Sounds', 'interface-sounds': 'Interface Sounds', 'digital-audio': 'Digital Audio', 'rpg-audio': 'RPG Audio' };
+lines.push('', 'Every file in `public/assets/audio/`, by the Kenney pack (CC0 1.0) it comes from. Each is transcoded to mono Opus under its original name:', '');
+for (const [pack, names] of Object.entries(audio)) lines.push(`- ${packTitle[pack]} (https://kenney.nl/assets/${pack}): ${names.join(', ')}.`);
 lines.push('', ...CREDITS_FOOT, '');
 writeFileSync(join(root, 'CREDITS.md'), lines.join('\n'));
-console.log(`assets: ${manifest.files.length} files, ${(manifest.total / 1e6).toFixed(1)} MB`);
+console.log(`assets: ${manifest.files.length} files, ${(manifest.total / 1e6).toFixed(1)} MB at boot; ${manifest.audio.length} sounds, ${(manifest.audioTotal / 1e6).toFixed(2)} MB after the first click`);

@@ -66,7 +66,7 @@ export class Combat {
     const pact = KEY_SLOTS.map((s) => this.game.book.bound(s)).find((p) => p?.clauses.some((c) => c.kind === 'wager'));
     this.wagerArmed = true;
     combatUi.wagerArmed.value = true;
-    this.game.audio.play('question_002', 0.5);
+    this.game.audio.play('wager.arm');
     toast(pact ? `Wager declared: ${pact.name} will connect` : 'Wager declared: the next strike connects', 'info');
     this.game.tutorial.notify('wager');
   }
@@ -75,8 +75,8 @@ export class Combat {
 
   resolveWager(hit: boolean): void {
     this.wagerSlot = null;
-    if (hit) { this.wagersWon++; banner('的中', 'Wager won. The universe pays out.'); this.game.audio.play('confirmation_002', 0.7); this.game.techniques.charge = Math.min(1, this.game.techniques.charge + 0.35); }
-    else { this.wagersLost++; banner('外れ', 'Wager lost. Your Technique seals.'); this.game.audio.play('glitch_001', 0.7); this.game.techniques.seal(4); }
+    if (hit) { this.wagersWon++; banner('的中', 'Wager won. The universe pays out.'); this.game.audio.play('wager.won'); this.game.techniques.charge = Math.min(1, this.game.techniques.charge + 0.35); }
+    else { this.wagersLost++; banner('外れ', 'Wager lost. Your Technique seals.'); this.game.audio.play('wager.lost'); this.game.techniques.seal(4); }
   }
 
   get wagerMultiplier(): number { return this.wagerSlot ? 3 : 1; }
@@ -91,6 +91,7 @@ export class Combat {
     const final = Math.round(amount * m);
     if (this.eye === 'thread') this.threadSplash(e, final * 0.35);
     e.hurt(final, { from: opts.from, knock: opts.knock, lift: opts.lift, stagger: opts.stagger });
+    g.audio.hit(final, e.center());
     this.number(e.center(), String(final), this.wagerSlot ? '#ffd34d' : m > 1.1 ? '#ffb0ff' : '#f3eee4', final >= 40);
     if (opts.heavy || final >= 40) {
       g.clock.hitStop(final >= 80 ? 0.11 : 0.06);
@@ -125,7 +126,7 @@ export class Combat {
     hud.hurt.value = Date.now();
     g.cam.shake(Math.min(0.8, a / 30));
     g.cam.kick({ fov: -4, pitch: opts.from ? 0.02 : 0 });
-    g.audio.play(opts.self ? 'impactSoft_heavy_000' : 'impactPunch_heavy_000', 0.6, 1);
+    if (opts.self) g.audio.play('hurt.self'); else g.audio.play('hurt', { weight: Math.min(1, a / 40) });
     if (!opts.self) { this.invuln = 0.35; g.techniques.struck(); g.techniques.charge = Math.min(1, g.techniques.charge + a / 220); }
     g.book.observe('lowHealthFraction', this.hp / this.maxHp < 0.35 ? 1 : 0);
     if (this.hp <= 0 && !g.net) this.defeat();
@@ -150,7 +151,6 @@ export class Combat {
     const g = this.game;
     if (g.rooftop.active) { g.rooftop.lose(); return; }
     g.input.releaseLock();
-    g.audio.play('lowDown', 0.8, 0.6);
     setState({ kind: 'defeat' });
   }
 

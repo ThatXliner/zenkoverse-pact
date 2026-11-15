@@ -38,7 +38,7 @@ function catchProps(ctx: AbilityContext, dt: number): void {
     held.push({ prop: p, offset: new THREE.Vector3(held.length * 0.9 - 0.9, -0.2, 2.0) });
     g.techniques.resource = Math.min(g.techniques.def.resource.max, g.techniques.resource + p.def.mass * speed * 0.12 * (ctx.behaviors.includes('store') ? 1.4 : 1) * (0.6 + ctx.potency * 0.5));
     g.vfx.ring(p.mesh.position, COLOR, 0.2, 1.4, 0.3);
-    g.audio.play('impactSoft_heavy_001', 0.6, 1.1);
+    g.audio.play('recoil.catch', { at: p.mesh.position });
     g.cam.kick({ fov: 3, pitch: -0.01 });
     g.drills.notify(p, 'caught');
     g.mastery.gain('recoil', 'efficiency', 0.01);
@@ -66,7 +66,7 @@ function releaseHeld(ctx: AbilityContext): number {
       n++;
     }
   }
-  if (n) { g.audio.play('phaserDown1', 0.6, 0.8); g.cam.kick({ fov: 5 }); }
+  if (n) { g.audio.play('recoil.release'); g.cam.kick({ fov: 5 }); }
   held.length = 0;
   return n;
 }
@@ -77,9 +77,9 @@ function releaseHeld(ctx: AbilityContext): number {
 const cutscene: CutsceneDef = {
   id: 'max-recoil', title: { jp: '零時', en: 'Zero Hour' }, color: COLOR, pull: 3.4, reach: 12, word: 'ドゴォン',
   shots: [
-    { duration: 1.05, timeScale: 0.03, from: { pos: [1.05, 1.5, 2.0], look: [0, 1.38, 0], fov: 36 }, to: { pos: [0.72, 1.48, 1.5], fov: 30, roll: -0.04 }, events: opening('powerUp3', 0.7) },
-    { duration: 0.5, timeScale: 0.03, from: { pos: [-1.3, 0.25, -1.0], look: [0, 1.3, 0], lookRel: 'mid', fov: 60, roll: 0.14 }, to: { pos: [-1.0, 0.3, -0.6], fov: 54, roll: 0.1 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'phaserUp3', pitch: 0.5 }] , page: { lines: 'rush' } },
-    { duration: 0.95, timeScale: 0.35, from: { rel: 'mid', pos: [5.2, 1.8, 1.0], look: [0, 1.0, 0], fov: 62, roll: -0.1 }, to: { pos: [6.4, 2.4, 1.6], fov: 76, roll: -0.03 }, events: [...blow(0, 'impactMining_000', 0.55), { at: 0.03, kind: 'sfx', id: 'impactBell_heavy_000', pitch: 0.6 }] , page: { lines: 'focus' } },
+    { duration: 1.05, timeScale: 0.03, from: { pos: [1.05, 1.5, 2.0], look: [0, 1.38, 0], fov: 36 }, to: { pos: [0.72, 1.48, 1.5], fov: 30, roll: -0.04 }, events: opening('recoil.max.charge') },
+    { duration: 0.5, timeScale: 0.03, from: { pos: [-1.3, 0.25, -1.0], look: [0, 1.3, 0], lookRel: 'mid', fov: 60, roll: 0.14 }, to: { pos: [-1.0, 0.3, -0.6], fov: 54, roll: 0.1 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'recoil.max.inhale' }] , page: { lines: 'rush' } },
+    { duration: 0.95, timeScale: 0.35, from: { rel: 'mid', pos: [5.2, 1.8, 1.0], look: [0, 1.0, 0], fov: 62, roll: -0.1 }, to: { pos: [6.4, 2.4, 1.6], fov: 76, roll: -0.03 }, events: [...blow(0, 'recoil.max.blow')] , page: { lines: 'focus' } },
     { duration: 0.75, timeScale: 0.55, from: { rel: 'mid', pos: [-2.5, 6.5, -5.5], look: [0, 0.4, 0], fov: 58 }, to: { pos: [-3, 8.2, -6.8], fov: 62 }, ease: 'inOut' },
   ],
 };
@@ -98,13 +98,13 @@ const drill: DrillDef = {
     const at = new THREE.Vector3(hook.x + (Math.random() - 0.5) * 2.5, tier.dropHeight ?? 8, hook.z + (Math.random() - 0.5) * 2.5 + (index % 2) * 1.5);
     const p = game.props.spawn(index % 3 === 2 ? 'barrel' : 'crate', at);
     p.body.setLinvel({ x: 0, y: -1.5, z: 0 }, true);
-    game.audio.play('impactMetal_light_000', 0.3, 0.8);
+    game.audio.play('prop.drop', { at });
     return {
       notify: (prop, event) => (prop === p && event === 'caught' ? 1 : null),
       update: () => {
         if (!p.alive) return 0;
         if (p.body.translation().y >= p.half.y + 0.08 || p.body.linvel().y <= -0.5) return null;
-        game.audio.play('impactWood_heavy_000', 0.5);
+        game.audio.play('prop.land', { at: p.mesh.position });
         game.vfx.until(4, () => game.props.remove(p));
         return 0;
       },
@@ -160,8 +160,8 @@ export const recoil: TechniqueKit = {
         const fist = ctx.origin.clone().addScaledVector(ctx.dir, 0.9).add(new THREE.Vector3(0, -0.25, 0));
         g.vfx.ring(fist, COLOR, 0.15, 1.6 + reserveFrac * 2, 0.35, ctx.dir);
         g.vfx.trail([ctx.origin.clone().add(new THREE.Vector3(0.2, -0.3, 0)), fist, fist.clone().addScaledVector(ctx.dir, 0.6)], COLOR, 0.22, 0.14);
-        if (hits.length || props.length) { g.vfx.burst(fist.clone().addScaledVector(ctx.dir, 0.5), 10, 'spark', 5, 0xffb070, ctx.dir); g.audio.play('impactPunch_heavy_001', 0.8, 0.95); }
-        else g.audio.play('impactSoft_medium_000', 0.4, 1.3);
+        if (hits.length || props.length) { g.vfx.burst(fist.clone().addScaledVector(ctx.dir, 0.5), 10, 'spark', 5, 0xffb070, ctx.dir); g.audio.play('recoil.punch.hit', { weight: reserveFrac }); }
+        else g.audio.play('recoil.punch.whiff');
         return { hits: hits.length + props.length, hitStop: hits.length ? 0.05 + reserveFrac * 0.06 : 0, impactFrame: dmg > 30 && hits.length ? 2 : 0, cameraKick: { fov: 6 + reserveFrac * 8, pitch: 0.02 } };
       }
       if (ctx.shape === 'line') {
@@ -171,7 +171,7 @@ export const recoil: TechniqueKit = {
         shoveProps(ctx, propsInCone(g, ctx.origin, ctx.dir, range, 0.2), 4 + 8 * reserveFrac, 0.8);
         g.techniques.resource *= 0.35;
         for (let i = 1; i <= 6; i++) { const at = g.player.position.clone().addScaledVector(ctx.dir.clone().setY(0).normalize(), i * range / 6); at.y = 0.05; g.vfx.after(i * 0.045, () => { g.vfx.ring(at, COLOR, 0.3, 1.6, 0.35); g.vfx.burst(at, 3, 'debris', 3); }); }
-        g.audio.play('impactMining_000', 0.7, 1.1);
+        g.audio.play('recoil.line');
         return { hits: hits.length, hitStop: hits.length ? 0.05 : 0, cameraKick: { fov: 7, pitch: 0.025 } };
       }
       if (ctx.shape === 'absorb') {
@@ -192,8 +192,7 @@ export const recoil: TechniqueKit = {
         g.vfx.burst(center.clone().add(new THREE.Vector3(0, 1, 0)), 40, 'spark', 12, 0xffc090);
         g.vfx.burst(center, 18, 'debris', 8);
         g.vfx.flash(center.clone().add(new THREE.Vector3(0, 1.5, 0)), COLOR, 120, 0.6, 26);
-        g.audio.play('impactMining_000', 1, 0.5);
-        g.audio.play('impactBell_heavy_000', 0.8, 0.6);
+        g.audio.play('recoil.max.tail');
         return { hits, hitStop: 0.14, impactFrame: 3, rooted: 1.2, cameraKick: { fov: 16, pitch: 0.05, roll: 0.03 } };
       }
       return undefined;
@@ -214,12 +213,12 @@ export const recoil: TechniqueKit = {
       if (!facing) return amount;
       game.techniques.resource = Math.min(100, game.techniques.resource + amount * 1.3);
       game.vfx.ring(game.player.eye().addScaledVector(dir, 0.6), COLOR, 0.2, 1.3, 0.3, dir);
-      game.audio.play('impactPlate_heavy_000', 0.5, 1.2);
+      game.audio.play('recoil.absorbed');
       game.cam.kick({ fov: 3 });
       game.tutorial.notify('absorbed');
       return 0;
     },
   },
-  audio: { primary: { cast: 'impactSoft_medium_000', volume: 0.35, pitch: 1.2 }, secondary: { cast: 'highUp', volume: 0.25, pitch: 0.7 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 0.7 } },
+  audio: { primary: 'recoil.cast', secondary: 'recoil.absorb', max: 'recoil.max.cast' },
 };
 

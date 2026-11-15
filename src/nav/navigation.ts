@@ -100,7 +100,7 @@ export class Navigation {
     game.waypoints.sync(this.unlocked.value);
   }
 
-  track(pin: Pin): void { this.pin.value = pin; this.game.audio.play('select_001', 0.35); }
+  track(pin: Pin): void { this.pin.value = pin; this.game.audio.play('ui.track'); }
   untrack(): void { this.pin.value = null; }
   isPinned(id: PoiId): boolean { const p = this.pin.value; return p?.kind === 'poi' && p.id === id; }
   visited(id: PoiId): boolean { return this.unlocked.value.has(id); }
@@ -159,7 +159,7 @@ export class Navigation {
       this.unlocked.value = new Set([...this.unlocked.value, poi.id]);
       this.game.waypoints.unlock(poi.id);
       toast(`Visited: ${poi.name}.`, 'good');
-      this.game.audio.play('confirmation_001', 0.5);
+      this.game.audio.play('ui.arrive');
     }
   }
 

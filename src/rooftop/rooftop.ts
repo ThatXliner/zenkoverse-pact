@@ -131,14 +131,14 @@ export class Rooftop {
     setState({ kind: 'rooftop' });
     this.startWave(0);
     g.requestLock();
-    g.audio.resumeContext();
+    g.audio.play('roof.begin');
   }
 
   private startWave(i: number): void {
     const w = WAVES[i]!;
     this.phase = { kind: 'fight', wave: i, queue: shuffleBossFirst(roster(i)), spawnT: FIRST_SPAWN, clearT: 0 };
     banner(w.jp, `Wave ${i + 1} of ${WAVE_COUNT} · ${w.title}`);
-    this.game.audio.play('bong_001', 0.6, 0.9);
+    this.game.audio.play('roof.wave');
     this.publish();
   }
 
@@ -190,7 +190,7 @@ export class Rooftop {
     const boss = key === 'kuroda' || key === 'ancient';
     g.vfx.ring(at.clone().add(new THREE.Vector3(0, 0.08, 0)), boss ? (e.def.emissive ?? 0xff6a1a) : 0xffb36b, 0.3, boss ? 5 : 2.4, 0.5);
     g.vfx.burst(at.clone().add(new THREE.Vector3(0, 0.2, 0)), boss ? 24 : 8, 'spark', boss ? 7 : 4, 0xffb36b);
-    g.audio.play('impactMetal_heavy_000', boss ? 0.7 : 0.35, boss ? 0.6 : 1.1);
+    g.audio.play(boss ? 'roof.boss' : 'roof.spawn', { at });
     if (boss) {
       banner(e.def.title ?? e.def.name, key === 'ancient' ? 'Ancient. Not assumed to know expansion. She does.' : 'The Kuroda do not control fire. They control what burns.');
       g.vfx.flash(at.clone().add(new THREE.Vector3(0, 1.4, 0)), e.def.emissive ?? 0xff6a1a, 90, 0.5, 20);
@@ -235,7 +235,7 @@ export class Rooftop {
     g.techniques.sealed = 0;
     g.combat.wagerArmed = false;
     combatUi.wagerArmed.value = false;
-    g.audio.play('confirmation_002', 0.7);
+    g.audio.play('roof.clear');
     if (wave + 1 >= WAVE_COUNT) { this.finish(true); return; }
     const steps: OfferStep[] = [];
     if (wave + 1 === EYE_AFTER) steps.push({ kind: 'eye' });
@@ -281,7 +281,7 @@ export class Rooftop {
     if (!v.ok) { toast(`The universe refused: ${v.errors[0]}`, 'bad'); return; }
     this.taken.push({ pact: offer.pact, text: offer.text });
     this.takenIds.add(offer.pact.id);
-    g.audio.play('select_001', 0.6);
+    g.audio.play('ui.inscribe');
     toast(`"${offer.pact.name}" is inscribed on ${slotWords(offer.pact.slot)}.`, 'good');
     this.advance();
   }
@@ -311,7 +311,7 @@ export class Rooftop {
     this.clearWorld();
     this.restorePlayer();
     g.input.releaseLock();
-    g.audio.play(victory ? 'confirmation_002' : 'lowDown', 0.8, victory ? 1 : 0.6);
+    g.audio.play(victory ? 'roof.won' : 'roof.lost');
     setState({ kind: 'rooftop-end' });
   }
 

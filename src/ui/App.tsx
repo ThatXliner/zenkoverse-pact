@@ -71,7 +71,7 @@ function Title({ game }: { game: Game }) {
         <div><div class="kicker">Choose your Technique</div><h2>生まれ持った技</h2></div>
         <div class="cards">
           {TECHNIQUE_IDS.map((id) => { const k = KITS[id]; return (
-            <button key={id} class={`card ${tech === id ? 'active' : ''}`} data-glyph={k.glyph} style={{ '--c': hex(k.color) } as never} onClick={() => { setTech(id); game.setTechnique(id); game.audio.play('select_001', 0.4); }} onDblClick={() => { game.setTechnique(id); if (online) return; if (rooftop) game.rooftop.begin(); else game.startRun(); }}>
+            <button key={id} class={`card ${tech === id ? 'active' : ''}`} data-glyph={k.glyph} style={{ '--c': hex(k.color) } as never} onClick={() => { setTech(id); game.setTechnique(id); game.audio.play('ui.select'); }} onDblClick={() => { game.setTechnique(id); if (online) return; if (rooftop) game.rooftop.begin(); else game.startRun(); }}>
               <span class="type">{k.type}</span><h3>{k.name}</h3><p>{k.blurb}</p><span class="res">Resource · {k.resource.name}</span>
             </button>); })}
         </div>
@@ -101,10 +101,10 @@ function Title({ game }: { game: Game }) {
         <div class="jp-big">契<em>約</em></div>
         <div class="sub">A dojo at dusk, one Technique, and the Pacts you write to shape it. Every ability is a sacrifice the universe reads back to you.</div>
         <div class="menu" style="margin-top:18px">
-          <button onClick={() => { setRooftop(false); setOnline(false); setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Begin</button>
-          <button onClick={() => { setRooftop(false); setOnline(true); setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Play Online</button>
-          <button onClick={() => { setRooftop(true); setOnline(false); setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Rooftop</button>
-          <button onClick={() => { game.audio.resumeContext(); pause('settings'); setState({ kind: 'paused', resume: { kind: 'title' }, tab: 'settings' }); }}>Settings</button>
+          <button onClick={() => { setRooftop(false); setOnline(false); setSelect(true); game.audio.play('ui.open'); }}>Begin</button>
+          <button onClick={() => { setRooftop(false); setOnline(true); setSelect(true); game.audio.play('ui.open'); }}>Play Online</button>
+          <button onClick={() => { setRooftop(true); setOnline(false); setSelect(true); game.audio.play('ui.open'); }}>Rooftop</button>
+          <button onClick={() => { pause('settings'); setState({ kind: 'paused', resume: { kind: 'title' }, tab: 'settings' }); }}>Settings</button>
           <button onClick={() => setState({ kind: 'paused', resume: { kind: 'title' }, tab: 'codex' })}>Codex</button>
         </div>
       </div>
@@ -348,8 +348,9 @@ function Pause({ game, tab }: { game: Game; tab: PauseTab }) {
             <div class="settings">
               <Range label="Sensitivity" value={s.sensitivity} min={0.2} max={3} step={0.05} onChange={(v) => setSetting('sensitivity', v)} />
               <Range label="Field of view" value={s.fov} min={60} max={110} step={1} onChange={(v) => setSetting('fov', v)} />
-              <Range label="Volume" value={s.volume} min={0} max={1} step={0.05} onChange={(v) => setSetting('volume', v)} />
-              <Range label="Ambience" value={s.music} min={0} max={1} step={0.05} onChange={(v) => setSetting('music', v)} />
+              <Range label="Master volume" value={s.volume} min={0} max={1} step={0.05} onChange={(v) => setSetting('volume', v)} />
+              <Range label="Music" value={s.music} min={0} max={1} step={0.05} onChange={(v) => setSetting('music', v)} />
+              <Range label="Effects" value={s.effects} min={0} max={1} step={0.05} onChange={(v) => setSetting('effects', v)} />
               <div class="row"><label>Quality</label><Seg value={s.quality} options={['low', 'medium', 'high']} onChange={(v) => { setSetting('quality', v as Quality); game.renderer.setQuality(v as Quality); }} /><span /></div>
               <div class="row"><label>Camera</label><Seg value={s.camera} options={CAMERA_MODES} labels={CAMERA_LABEL} onChange={(v) => game.setCamera(v as CameraMode)} /><span /></div>
               <div class="row"><label>Invert Y</label><Seg value={s.invertY ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('invertY', v === 'on')} /><span /></div>

@@ -477,7 +477,7 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
     { id: 'resolve', title: 'Resolve', body: 'The real capability surrendered, not emotional intensity. The same sacrifice cannot be counted twice.', pos: [R.x + 2, 0, R.z + 7.4], rot: Math.PI },
     { id: 'wager', title: 'Wager', body: 'Declare an uncertain outcome. Success grants an enlarged reward; failure applies the forfeit.', pos: [6.8, 0, 16.2], rot: Math.PI },
     { id: 'aura', title: 'Aurabending', body: 'A separate universal faculty, formalized only twenty years ago despite five thousand years of Technique history. Aura does not fuel Techniques.', pos: [19.6, S.deckY, -2.4], rot: Math.PI },
-    { id: 'kuroda', title: 'The Kuroda', body: 'Their "fire" is fuel. The lineage manifests a volatile liquid and lights it. Watch for the sheen before the flame.', pos: [-2.4, G.roofY, 18.8], rot: 0 },
+    { id: 'kuroda', title: 'The Kuroda', body: 'A fighting lineage that keeps doors for the underworld houses. Their Technique manifests a volatile liquid and sets it alight.', pos: [-2.4, G.roofY, 18.8], rot: 0 },
     { id: 'eyes', title: 'Eyes', body: 'Five finite physical artifacts. Installing one permanently replaces a natural eye. They are not Techniques, and most people do not know they exist.', pos: [-12.6, H.deckY, -18.2], rot: 0.7 },
   ];
   for (const p of plaqueDefs) {

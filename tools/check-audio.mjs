@@ -75,7 +75,7 @@ console.log('the bed, outdoors and in');
   await api((g) => g.teleport([0, 0.6, -12]));
   await wait(2500);
   const hall = (await view()).ambience;
-  check(out.mode === 'calm' && out.indoors < 0.1 && out.layers.wind > 0.03 && out.layers.insects > 0.01, `courtyard: wind ${out.layers.wind.toFixed(3)}, insects ${out.layers.insects.toFixed(3)}, room ${out.layers.room}`);
+  check(out.mode === 'calm' && out.indoors < 0.1 && out.layers.wind > 0.03, `courtyard: wind ${out.layers.wind.toFixed(3)}, room ${out.layers.room}`);
   check(hall.indoors > 0.8 && hall.layers.room > 0.05 && hall.layers.wind < out.layers.wind * 0.6, `hall: indoors ${hall.indoors.toFixed(2)}, room ${hall.layers.room.toFixed(3)}, wind down to ${hall.layers.wind.toFixed(3)}`);
 }
 

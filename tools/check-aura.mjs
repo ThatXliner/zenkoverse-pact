@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Aura Expansion and the Aura Clash (issue #4), played with real keys:
-//   F expands and spends the whole pool; F again retracts with nothing
-//   refunded; F does nothing until the pool has refilled completely; an
+//   F expands and spends the whole pool; F again retracts and keeps the
+//   unused share of the field as pool; F does nothing until the pool has refilled completely; an
 //   open field runs out on its own;
 //   inside the field enemies are slowed and the player's hits land harder;
 //   the listening stone's drill raises refinement, answered from the cue on
@@ -87,7 +87,7 @@ await page.evaluate(() => {
   g.step(30);
 });
 
-console.log('\nF expands and spends everything; F retracts; no refund; no expansion before a full refill');
+console.log('\nF expands and spends everything; F retracts and keeps the unused share; no expansion before a full refill');
 let a = await aura();
 check(a.state === 'ready' && a.pool === 1, `the pool starts full and ready (${a.state}, ${a.pool})`);
 await press('KeyF');
@@ -101,10 +101,17 @@ await press('KeyF');
 await step(2);
 a = await aura();
 check(a.state === 'recovering' && a.ended === 'retracted', `F again retracts it (${a.state}, ${a.ended}) with ${left.toFixed(1)} s unused`);
-check(a.pool < 0.01, `retracting refunds nothing (pool ${a.pool.toFixed(3)})`);
+check(near(a.pool, left / a.holds, 0.03), `retracting keeps the unused share as pool (${Math.round(a.pool * 100)}% of ${Math.round(left / a.holds * 100)}% unused)`);
 await press('KeyF');
 await step(4);
 check((await aura()).state === 'recovering', 'F right after a retract does not expand');
+check(await stepUntil(() => window.game.aura().state === 'ready', 60 * 2.5), 'an early retract refills in a second or two, not the full refill');
+await press('KeyF');
+await step(4);
+check((await aura()).state === 'open', 'once full, F expands again');
+check(await stepUntil(() => window.game.aura().state === 'recovering', 60 * 11), 'left alone, the field runs out');
+check((await aura()).ended === 'spent', `and ends as spent, not retracted (${(await aura()).ended})`);
+check((await aura()).pool < 0.01, `a spent field leaves the pool empty (${Math.round((await aura()).pool * 100)}%)`);
 await step(60 * 7);
 a = await aura();
 check(a.state === 'recovering' && a.pool > 0.4 && a.pool < 0.6, `halfway through the refill (${Math.round(a.pool * 100)}%)`);
@@ -112,11 +119,6 @@ await press('KeyF');
 await step(4);
 check((await aura()).state === 'recovering', 'F at half a pool still does not expand');
 check(await stepUntil(() => window.game.aura().state === 'ready', 60 * 9), 'the pool refills completely');
-await press('KeyF');
-await step(4);
-check((await aura()).state === 'open', 'once full, F expands again');
-check(await stepUntil(() => window.game.aura().state === 'recovering', 60 * 11), 'left alone, the field runs out');
-check((await aura()).ended === 'spent', `and ends as spent, not retracted (${(await aura()).ended})`);
 
 console.log('\nwhat a field does');
 await page.evaluate(() => {

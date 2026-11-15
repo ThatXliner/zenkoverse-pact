@@ -4,8 +4,9 @@
 //
 // Expansion commits the whole pool at once. The field then holds for its
 // time, or until it is retracted (by choice) or collapsed (by losing a
-// clash). Nothing is refunded, and the pool must refill completely before
-// the next expansion.
+// clash). Retracting keeps the unused share of the field as pool, so an
+// early retract brings the next expansion sooner; a spent or collapsed field
+// leaves the pool empty. The pool must be full before the next expansion.
 
 // Every number aura uses, in one place. `untrained` is refinement 0 and
 // `refined` is refinement 1; the field interpolates between them.
@@ -64,6 +65,7 @@ export class AuraField {
   // What the open field was given when it expanded.
   reach = 0;
   density = 0;
+  holds = 0;
   // The drawn radius: it grows to `reach` and shrinks back when the field ends.
   radius = 0;
   ended: FieldEnd | null = null;
@@ -77,20 +79,21 @@ export class AuraField {
     if (!this.ready) return false;
     this.state = 'open';
     this.pool = 0;
-    this.left = holds;
+    this.left = this.holds = holds;
     this.reach = reach;
     this.density = density;
     this.ended = null;
     return true;
   }
 
-  // The field ends. Whatever the reason, the pool starts from empty.
+  // The field ends. A retract keeps the time it did not use as pool; a spent
+  // or collapsed field starts the pool from empty.
   end(why: FieldEnd): boolean {
     if (!this.open) return false;
     this.state = 'recovering';
     this.ended = why;
+    this.pool = why === 'retracted' && Number.isFinite(this.holds) && this.holds > 0 ? Math.max(0, Math.min(1, this.left / this.holds)) : 0;
     this.left = 0;
-    this.pool = 0;
     return true;
   }
 

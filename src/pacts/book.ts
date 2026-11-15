@@ -1,5 +1,5 @@
 import { signal } from '@preact/signals';
-import { type Pact, type TechniqueId, type ShapeTable, validatePact, type Validation } from './schema';
+import { type Pact, type TechniqueId, type ShapeTable, validatePact, upgradePact, type Validation } from './schema';
 import { type AbilitySlot, EXTRA_SLOTS } from './slots';
 import { estimateResolve, countedBefore, DEFAULT_TELEMETRY, type Telemetry, type ResolveEstimate } from './resolve';
 
@@ -114,6 +114,16 @@ export class PactBook {
     this.persist();
   }
 
+  // A name is only a label: an inscribed Pact's terms never change, but what the player calls it may.
+  rename(id: string, name: string): void {
+    const n = name.trim().slice(0, 48);
+    if (!n) return;
+    if (this.inscribed.value.some((p) => p.id === id)) this.inscribed.value = this.inscribed.value.map((p) => (p.id === id ? { ...p, name: n } : p));
+    else if (this.drafts.value.some((p) => p.id === id)) this.drafts.value = this.drafts.value.map((p) => (p.id === id ? { ...p, name: n } : p));
+    else return;
+    this.persist();
+  }
+
   deleteDraft(id: string): void {
     this.drafts.value = this.drafts.value.filter((d) => d.id !== id);
     if (this.preview.value?.id === id) this.preview.value = null;
@@ -170,8 +180,8 @@ export class PactBook {
   }
 
   private apply(s: Partial<Saved>): void {
-    this.inscribed.value = (s.inscribed ?? []).filter((p) => validatePact(p).ok);
-    this.drafts.value = (s.drafts ?? []).filter((p) => validatePact(p).ok);
+    this.inscribed.value = (s.inscribed ?? []).map(upgradePact).filter((p) => validatePact(p).ok);
+    this.drafts.value = (s.drafts ?? []).map(upgradePact).filter((p) => validatePact(p).ok);
     this.bindings.value = s.bindings ?? {};
     this.claimed = new Set(s.claimed ?? this.settled());
     this.telemetry = { ...DEFAULT_TELEMETRY, ...(s.telemetry ?? {}) };

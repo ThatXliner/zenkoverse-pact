@@ -17,7 +17,7 @@ const catalogue: Pact[] = [
   { id: 'recoil.zero-hour', technique: 'recoil', name: 'Zero Hour', slot: 'max', grant: { shape: 'zeroHour' }, clauses: [
     { kind: 'restrict', restriction: { param: 'resource', value: 'all' } }, { kind: 'restrict', restriction: { param: 'trigger', value: 'declared' } }, { kind: 'restrict', restriction: { param: 'body', value: 'noMove' } }] },
   { id: 'recoil.shockline', technique: 'recoil', name: 'Shockline', slot: 'primary', grant: { shape: 'line' }, clauses: [
-    { kind: 'restrict', restriction: { param: 'direction', value: 'line' } }, { kind: 'restrict', restriction: { param: 'trigger', value: 'grounded' } }, { kind: 'wager', predict: 'hit' }] },
+    { kind: 'restrict', restriction: { param: 'direction', value: 'line' } }, { kind: 'restrict', restriction: { param: 'trigger', value: 'grounded' } }, { kind: 'wager', declare: 'hit', reward: 'output', forfeit: 'seal' }] },
 ];
 
 const held: { prop: PropInstance; offset: THREE.Vector3 }[] = [];

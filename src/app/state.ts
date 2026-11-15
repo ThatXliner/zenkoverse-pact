@@ -1,6 +1,6 @@
 import { signal, computed } from '@preact/signals';
 
-export type TutorialStepId = 'move' | 'camera' | 'primary' | 'reserve' | 'sign' | 'art' | 'aura' | 'clash' | 'pact' | 'wager' | 'max' | 'done';
+export type TutorialStepId = 'move' | 'camera' | 'primary' | 'reserve' | 'sign' | 'aura' | 'clash' | 'pact' | 'wager' | 'max' | 'done';
 export type PauseTab = 'menu' | 'settings' | 'controls' | 'codex' | 'map';
 export type EncounterId = 'sparring' | 'kuroda' | 'ancient' | 'dummy-room';
 export type DrillId = 'recoil-crane' | 'field-reading';

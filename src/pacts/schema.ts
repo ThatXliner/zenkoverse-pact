@@ -4,6 +4,7 @@
 // engine derives every number from a parsed Pact.
 
 import { SLOTS, slotAccepts, slotDef, type AbilitySlot, type AbilityKind } from './slots';
+import { DECLARATIONS, REWARDS, FORFEITS, rewardFits, type WagerTerms } from './wager';
 
 export type TechniqueId = 'recoil' | 'shift' | 'rime' | 'blink' | 'echo';
 export type Param = 'direction' | 'range' | 'target' | 'trigger' | 'duration' | 'resource' | 'body';
@@ -25,7 +26,6 @@ export type Restriction =
   | { param: 'resource'; value: ResourceValue }
   | { param: 'body'; value: BodyValue };
 
-export type Prediction = 'hit' | 'kill' | 'untouched' | 'firstStrike';
 export type RiskCost = 'health' | 'exhaustion' | 'seal';
 export type ProgramThen = 'activate' | 'suppress' | 'prefer';
 
@@ -33,7 +33,8 @@ export type Clause =
   | { kind: 'restrict'; restriction: Restriction }
   | { kind: 'sunset'; term: { seconds: number } | { encounters: number } }
   | { kind: 'risk'; beyond: Param; cost: RiskCost }
-  | { kind: 'wager'; predict: Prediction }
+  // A Declaration, a Reward and a Forfeit, all written by the player (src/pacts/wager.ts).
+  | ({ kind: 'wager' } & WagerTerms)
   | { kind: 'program'; when: TriggerValue; then: ProgramThen };
 
 // What the Pact grants: a shape for the Ability and optional behaviors. The
@@ -72,7 +73,6 @@ export function valuesFor(param: Param, technique: TechniqueId): readonly string
   return PARAM_VALUES[param].filter((v) => VALUE_OWNERS[`${param}:${v}`]?.includes(technique) ?? true);
 }
 
-export const PREDICTIONS: readonly Prediction[] = ['hit', 'kill', 'untouched', 'firstStrike'];
 export const RISK_COSTS: readonly RiskCost[] = ['health', 'exhaustion', 'seal'];
 export const TECHNIQUE_IDS: readonly TechniqueId[] = ['recoil', 'shift', 'rime', 'blink', 'echo'];
 
@@ -139,7 +139,14 @@ function validateClause(c: unknown): string | null {
       if (!RISK_COSTS.includes(r.cost!)) return 'risk.cost must be health, exhaustion or seal';
       return null;
     }
-    case 'wager': return PREDICTIONS.includes((c as { predict?: Prediction }).predict!) ? null : 'wager.predict is unknown';
+    case 'wager': {
+      const w = c as Partial<WagerTerms>;
+      if (!DECLARATIONS.includes(w.declare!)) return 'wager.declare is unknown';
+      if (!REWARDS.includes(w.reward!)) return 'wager.reward is unknown';
+      if (!FORFEITS.includes(w.forfeit!)) return 'wager.forfeit is unknown';
+      if (!rewardFits(w.declare!, w.reward!)) return 'a harder strike pays only on a wager that the strike lands';
+      return null;
+    }
     case 'program': {
       const pr = c as { when?: TriggerValue; then?: ProgramThen };
       if (!PARAM_VALUES.trigger.includes(pr.when!)) return 'program.when must be a trigger';
@@ -177,12 +184,29 @@ export const PACT_SCHEMA = {
         { type: 'object', required: ['kind', 'restriction'], additionalProperties: false, properties: { kind: { const: 'restrict' }, restriction: { $ref: '#/$defs/restriction' } } },
         { type: 'object', required: ['kind', 'term'], additionalProperties: false, properties: { kind: { const: 'sunset' }, term: { oneOf: [{ type: 'object', required: ['seconds'], properties: { seconds: { type: 'number', minimum: 5, maximum: 600 } } }, { type: 'object', required: ['encounters'], properties: { encounters: { type: 'integer', minimum: 1, maximum: 10 } } }] } } },
         { type: 'object', required: ['kind', 'beyond', 'cost'], additionalProperties: false, properties: { kind: { const: 'risk' }, beyond: enumOf(Object.keys(PARAM_VALUES)), cost: enumOf(RISK_COSTS) } },
-        { type: 'object', required: ['kind', 'predict'], additionalProperties: false, properties: { kind: { const: 'wager' }, predict: enumOf(PREDICTIONS) } },
+        { type: 'object', required: ['kind', 'declare', 'reward', 'forfeit'], additionalProperties: false, properties: { kind: { const: 'wager' }, declare: enumOf(DECLARATIONS), reward: enumOf(REWARDS), forfeit: enumOf(FORFEITS) } },
         { type: 'object', required: ['kind', 'when', 'then'], additionalProperties: false, properties: { kind: { const: 'program' }, when: enumOf(PARAM_VALUES.trigger), then: enumOf(['activate', 'suppress', 'prefer']) } },
       ],
     },
   },
 } as const;
+
+// A save from before Wagers had terms held only a prediction; it carried a
+// tripled strike and a sealed Technique, so it keeps those.
+export function upgradePact<T>(p: T): T {
+  const q = p as { clauses?: unknown };
+  if (!Array.isArray(q.clauses)) return p;
+  const clauses = q.clauses.map((c: { kind?: string; predict?: string }) => {
+    if (c?.kind !== 'wager' || !('predict' in c)) return c;
+    const declare = c.predict === 'kill' || c.predict === 'untouched' ? c.predict : 'hit';
+    return { kind: 'wager', declare, reward: declare === 'hit' ? 'output' : 'charge', forfeit: 'seal' };
+  });
+  return { ...p, clauses };
+}
+
+export function wagerOf(p: Pact): Extract<Clause, { kind: 'wager' }> | null {
+  return (p.clauses.find((c) => c.kind === 'wager') as Extract<Clause, { kind: 'wager' }> | undefined) ?? null;
+}
 
 export function restrictions(p: Pact): Restriction[] {
   return p.clauses.filter((c): c is Extract<Clause, { kind: 'restrict' }> => c.kind === 'restrict').map((c) => c.restriction);

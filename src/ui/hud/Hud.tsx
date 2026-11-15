@@ -6,6 +6,8 @@ import { keyLabel } from '../../app/keymap';
 import { EXTRA_SLOTS, KEY_SLOTS, KIND_DEFS, slotDef, type AbilityKind, type KeySlot } from '../../pacts/slots';
 import { KITS, techUi, type SlotLabel, type SignState } from '../../techniques/techniques';
 import { MASTERY_CONFIG } from '../../mastery/mastery';
+import { wagerUi, type WagerCall } from '../../techniques/wagers';
+import { declareUi } from '../../techniques/declarations';
 import { combatUi } from '../../combat/combat';
 import { clashUi } from '../../combat/clash';
 import { auraUi } from '../../combat/aura';
@@ -54,7 +56,7 @@ export function Hud({ game }: { game: Game }) {
       {!cut && <NavHud />}
       {!cut && <Captions game={game} />}
       {game.net && !cine && <OnlineHud game={game} />}
-      {combatUi.wagerArmed.value && !cut && <div class="wager-arm">Wager declared · the next strike connects</div>}
+      {wagerUi.value && !cut && <WagerTag key={wagerUi.value.id} call={wagerUi.value} />}
       <ClashLayer game={game} />
       {boss && !cut && <div class="boss" style={{ '--c': hex(boss.color) } as never}><span class="n">{boss.name}</span><div class="track"><i style={{ width: `${boss.frac * 100}%` }} /></div></div>}
       {prompt && !cut && <div class="prompt"><kbd>{keyLabel('interact')}</kbd><span>{prompt.text}</span></div>}
@@ -65,6 +67,7 @@ export function Hud({ game }: { game: Game }) {
         {combatUi.numbers.value.map((n) => n.word
           ? <span key={n.id} class={`sfx-word${n.big ? ' big' : ''}`} style={{ left: `${n.x}%`, top: `${n.y}%`, '--tilt': `${n.tilt}deg`, '--word-color': n.color }}>{n.text}</span>
           : <span key={n.id} class={`dmg-num${n.big ? ' big' : ''}`} style={{ left: `${n.x}%`, top: `${n.y}%`, color: n.color }}>{n.text}</span>)}
+        {!cut && declareUi.value.map((s) => <span key={s.id} class={`declare${s.small ? ' small' : ''}${s.wager ? ' wager' : ''}`} style={{ left: `${s.x}%`, top: `${s.y}%`, '--word-color': s.color } as never}>「{s.text}」</span>)}
       </div>
     </div>
   );
@@ -208,7 +211,7 @@ function Extra({ slot, label, glyph, cd }: { slot: KeySlot; label: SlotLabel; gl
   return (
     <div class={`x ${label.empty ? 'empty' : ''} ${cd.ready && !label.empty ? 'ready' : ''} ${label.preview ? 'preview' : ''} ${fresh && !label.empty ? 'fresh' : ''}`} data-slot={slot} title={label.empty ? `${keyLabel(slot)}: empty. Inscribe a Pact on it in the Workshop.` : undefined}>
       <kbd>{keyLabel(slot)}</kbd>
-      {!label.empty && <div class="box"><span class="glyph">{glyph}</span><div class="cool" style={{ height: `${Math.max(0, Math.min(1, cd.cd)) * 100}%` }} /></div>}
+      {!label.empty && <div class="box"><span class="glyph">{glyph}</span><div class="cool" style={{ height: `${Math.max(0, Math.min(1, cd.cd)) * 100}%` }} /><Bet label={label} /></div>}
       <span class="name">{label.empty ? 'Empty' : label.name}</span>
     </div>
   );
@@ -222,13 +225,30 @@ function Ability({ slot, label, glyph, cd, ready }: { slot: KeySlot; label: Slot
   const fresh = useFresh(`${label.name}|${label.preview ? 1 : 0}`);
   return (
     <div class={`ab ${ready ? 'ready' : ''} ${label.kind === 'max' ? 'max' : ''} ${label.preview ? 'preview' : ''} ${fresh ? 'fresh' : ''}`} data-slot={slot}>
-      <div class="box"><span class="glyph">{glyph}</span><div class="cool" style={{ height: `${Math.max(0, Math.min(1, cd)) * 100}%` }} /></div>
+      <div class="box"><span class="glyph">{glyph}</span><div class="cool" style={{ height: `${Math.max(0, Math.min(1, cd)) * 100}%` }} /><Bet label={label} /></div>
       <div class="txt">
         <span class="key">{keyLabel(slot)}{label.preview ? ' · trying a draft' : ''}</span>
         <span class="key-short" aria-hidden="true">{shortKey(keyLabel(slot))}</span>
         <span class="name">{label.name}</span>
         <span class="what">{label.what}</span>
       </div>
+    </div>
+  );
+}
+
+// A Pact that holds a Wager wears the mark on its key: each cast is a bet.
+function Bet({ label }: { label: SlotLabel }) {
+  return label.wager ? <i class="bet jp" title={`Each cast wagers that ${label.wager}`}>賭</i> : null;
+}
+
+// The open Wager, under the player: what the cast called and both ends of
+// the bet. How it fell is the banner's, with a gold or red ring.
+function WagerTag({ call }: { call: WagerCall }) {
+  const left = call.left !== null ? ` · ${call.left} s` : '';
+  return (
+    <div class="wager-call declared">
+      <b class="jp">賭</b>
+      <span>{call.pact} calls: {call.call}{left}<em>right: {call.win} · wrong: {call.lose}</em></span>
     </div>
   );
 }

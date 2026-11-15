@@ -2,7 +2,7 @@
 // Drives the built game with real keys and clicks to check the full hand
 // sign (issue #42):
 //   Alt roots the player for the sign's length, then lets go;
-//   casts, dash, jump, Wager and Tab during the sign do nothing, and work again after;
+//   casts (and the Wagers they would declare), dash, jump and Tab during the sign do nothing, and work again after;
 //   a hit taken mid-sign lands and does not cancel the sign;
 //   the primed cast within the window skips its wind-up and deals the boosted
 //   damage the config promises, and a cast after the window does not;
@@ -130,7 +130,7 @@ await page.waitForTimeout((windowS + 0.3) * 1000);
 check((await sign()).kind === 'idle', `the prime lapses after its ${windowS} s window when nothing is cast`);
 check((await page.locator('.sign').count()) === 0, 'the card leaves the HUD when the prime lapses');
 
-console.log('casts, dash, jump, Wager and Tab do nothing during the sign');
+console.log('casts, dash, jump and Tab do nothing during the sign');
 await toDummies();
 const hpBefore = await dummyHp();
 await pressAlt();
@@ -143,13 +143,12 @@ await click();
 await page.keyboard.press('Digit1');
 await page.keyboard.press('KeyC');
 await page.keyboard.press('Space');
-await page.keyboard.press('KeyR');
 await page.keyboard.press('Tab');
 await page.waitForTimeout(400);
 check((await api((g) => g.game.techniques.casting)) === false && (await dummyHp()) === hpBefore, 'left click and 1 cast nothing');
 check(dist(still, await pos()) < 0.05 && (await api((g) => g.game.player.dashTimer)) === 0, 'C does not dash');
 check((await api((g) => g.game.player.grounded)) === true && (await api((g) => g.game.player.velocity.y)) <= 0.01, 'Space does not jump');
-check((await api((g) => g.game.combat.wagerArmed)) === false && (await page.locator('.wager-arm').count()) === 0, 'R does not declare a Wager');
+check((await page.locator('.wager-call').count()) === 0, '1 declares no Wager while signing');
 check((await state()) === 'encounter', `Tab does not open the Workshop: state ${await state()}`);
 check((await sign()).kind === 'signing', 'the sign is still running after all that input');
 check(await waitSign('primed'), 'and it primes');

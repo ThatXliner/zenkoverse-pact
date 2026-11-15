@@ -1,4 +1,5 @@
-import { type Pact, type Param, type Restriction, restrictions, sacrificeTag } from './schema';
+import { type Pact, type Param, type Restriction, restrictions, sacrificeTag, wagerOf } from './schema';
+import { stakeOf, wagerTag, type Stake, type WagerTerms } from './wager';
 
 // Play telemetry the Resolve estimate reads. Fractions are 0..1 and decay
 // toward what the player actually does, so a restriction on something they
@@ -14,17 +15,24 @@ export interface Telemetry {
   waterNearby: number;
   lowHealthFraction: number;
   eyesOpenReliance: number;
+  // How often a cast lands, finishes a target, and how often eight seconds pass without a hit: the odds a Wager is called against.
+  hitRate: number;
+  killRate: number;
+  untouchedRate: number;
 }
 
 export const DEFAULT_TELEMETRY: Telemetry = {
   movingWhileCasting: 0.6, dashesPerMinute: 4, airborneFraction: 0.12, hitsFromBehind: 0.25, longRangeFraction: 0.35,
   multiTargetFraction: 0.4, propUse: 0.3, waterNearby: 0.5, lowHealthFraction: 0.15, eyesOpenReliance: 0.9,
+  hitRate: 0.6, killRate: 0.2, untouchedRate: 0.5,
 };
 
 export type ResolveRead = 'trivial' | 'slight' | 'meaningful' | 'heavy' | 'grave';
 
 export interface ResolveLine { label: string; value: number; reason: string; zero?: boolean; warn?: boolean; param?: Param; by?: string }
-export interface ResolveEstimate { total: number; read: ResolveRead; lines: ResolveLine[]; potency: number }
+// `wager` is the Pact's Wager and its stake. The stake funds the Wager's own
+// reward, so it is not part of `total`, which funds every cast.
+export interface ResolveEstimate { total: number; read: ResolveRead; lines: ResolveLine[]; potency: number; wager: (WagerTerms & Stake) | null }
 
 // Base weight: how much capability the restriction surrenders for a typical
 // fighter. The usage function scales it by what this player does.
@@ -76,7 +84,11 @@ const WEIGHTS: Record<string, { base: number; usage: (t: Telemetry) => number; w
 export function countedBefore(pact: Pact, inscribed: Pact[]): Map<string, string> {
   const at = inscribed.findIndex((p) => p.id === pact.id);
   const counted = new Map<string, string>();
-  for (const other of at < 0 ? inscribed : inscribed.slice(0, at)) for (const r of restrictions(other)) if (!counted.has(sacrificeTag(r))) counted.set(sacrificeTag(r), other.name);
+  for (const other of at < 0 ? inscribed : inscribed.slice(0, at)) {
+    for (const r of restrictions(other)) if (!counted.has(sacrificeTag(r))) counted.set(sacrificeTag(r), other.name);
+    const w = wagerOf(other);
+    if (w && !counted.has(wagerTag(w))) counted.set(wagerTag(w), other.name);
+  }
   return counted;
 }
 
@@ -103,13 +115,14 @@ export function estimateResolve(pact: Pact, inscribed: Pact[], telemetry: Teleme
   for (const c of pact.clauses) {
     if (c.kind === 'sunset') { const f = 'seconds' in c.term ? 0.55 : 0.7; lines.push({ label: 'sunset clause', value: round(-total * (1 - f)), reason: 'a term that ends is worth less than one that does not' }); total *= f; }
     if (c.kind === 'risk') { lines.push({ label: `risk: past ${c.beyond} for ${c.cost}`, value: 0.4, reason: 'the escape clause is itself a cost' }); total += 0.4; }
-    if (c.kind === 'wager') { lines.push({ label: `wager: ${c.predict}`, value: 0, reason: 'paid at the moment of declaration, not here' }); }
     if (c.kind === 'program') { lines.push({ label: `program: when ${c.when}, ${c.then}`, value: 0.2, reason: 'automation removes a choice' }); total += 0.2; }
   }
+  const w = wagerOf(pact);
+  const wager = w ? { ...w, ...stakeOf(w, telemetry, counted.get(wagerTag(w))) } : null;
   total = round(total);
   const read: ResolveRead = total < 0.8 ? 'trivial' : total < 2.2 ? 'slight' : total < 4.5 ? 'meaningful' : total < 7.5 ? 'heavy' : 'grave';
   const potency = 1 - Math.exp(-total / 4.2);
-  return { total, read, lines, potency };
+  return { total, read, lines, potency, wager };
 }
 
 export function describe(r: Restriction): string {

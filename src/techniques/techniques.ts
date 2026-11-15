@@ -6,7 +6,8 @@ import { keyLabel } from '../app/keymap';
 import type { TechniqueKit, AbilityContext, CastResult, TechniqueId } from './kit';
 import type { Pact, TriggerValue } from '../pacts/schema';
 import { KEY_SLOTS, KIND_DEFS, kindOn, slotDef, type AbilityKind, type AbilitySlot, type KeySlot } from '../pacts/slots';
-import { restriction } from '../pacts/schema';
+import { restriction, wagerOf } from '../pacts/schema';
+import { DECLARE } from '../pacts/wager';
 import { describe } from '../pacts/resolve';
 import { pick, type Gesture } from '../hands/gestures';
 import type { CameraKick } from '../player/camera';
@@ -21,13 +22,15 @@ import { echo } from './kits/echo';
 import { GROUP_PROP, GROUP_WORLD, GROUP_ENEMY } from '../physics/world';
 import { playerActor, enemyActor } from '../cutscene/cutscene';
 import { RULES } from '../net/protocol';
+import { Wagers } from './wagers';
+import { Declarations } from './declarations';
 
 export const KITS: Record<TechniqueId, TechniqueKit> = { recoil, shift, rime, blink, echo };
 
 interface Cast { slot: KeySlot; ctx: AbilityContext; t: number; impactAt: number; duration: number; fired: boolean; held: boolean; result?: CastResult | void }
 
 // The full hand sign (issue #42). Alt starts it; nothing cancels it. While
-// signing the player is rooted and cannot cast, Wager or open the Workshop.
+// signing the player is rooted and cannot cast or open the Workshop.
 // A finished sign primes the Technique for `MASTERY_CONFIG.sign.window`
 // seconds: the next cast skips its wind-up and carries the boost. A cast
 // consumes the prime; the window running out drops it.
@@ -42,8 +45,9 @@ const RAW_POTENCY = 0.22;
 // What the HUD shows for a key: the Ability's name, a few words on what it
 // does, how it is cast, and whether it is the raw Technique, a draft being
 // tried, or nothing yet (an extra slot with no Pact).
-export interface SlotLabel { name: string; what: string; kind: AbilityKind | null; raw: boolean; preview: boolean; empty: boolean }
-const EMPTY_LABEL: SlotLabel = { name: '', what: '', kind: null, raw: false, preview: false, empty: true };
+// `wager` is what the Pact on the key bets on each cast, when it holds a Wager.
+export interface SlotLabel { name: string; what: string; kind: AbilityKind | null; raw: boolean; preview: boolean; empty: boolean; wager: string | null }
+const EMPTY_LABEL: SlotLabel = { name: '', what: '', kind: null, raw: false, preview: false, empty: true, wager: null };
 const perSlot = <T>(make: (s: KeySlot) => T): Record<KeySlot, T> => Object.fromEntries(KEY_SLOTS.map((s) => [s, make(s)])) as Record<KeySlot, T>;
 
 export const techUi = {
@@ -73,8 +77,14 @@ export class Techniques {
   // When this player last began a Maximum Output (performance.now()).
   private maxAt = -Infinity;
   readonly limbTrail: THREE.Vector3[] = [];
+  // The Wagers written into Pacts, declared by casting them.
+  readonly wagers: Wagers;
+  // Named Pacts called out over the caster as they are cast.
+  readonly declarations: Declarations;
 
   constructor(private game: Game) {
+    this.wagers = new Wagers(game);
+    this.declarations = new Declarations(game);
     for (const k of Object.values(KITS)) {
       game.book.registerCatalogue(k.id, k.catalogue);
       if (k.drill) game.drills.register(k.drill);
@@ -99,6 +109,8 @@ export class Techniques {
     this.cast_ = null;
     this.sign = SIGN_IDLE;
     for (const k of Object.values(KITS)) k.effects.reset?.(this.game);
+    this.wagers.clear();
+    this.declarations.clear();
     this.stopGesture();
   }
 
@@ -133,10 +145,11 @@ export class Techniques {
       const p = preview?.slot === s && preview.technique === this.def.id ? preview : book.bound(s);
       if (p) {
         const shape = this.def.shapes[p.grant.shape];
-        return { name: p.name, what: shape?.short ?? '', kind: kindOn(s, shape?.kinds), raw: false, preview: p === preview, empty: false };
+        const w = wagerOf(p);
+        return { name: p.name, what: shape?.short ?? '', kind: kindOn(s, shape?.kinds), raw: false, preview: p === preview, empty: false, wager: w ? DECLARE[w.declare].words : null };
       }
       const raw = slotDef(s).raw;
-      return raw ? { name: `Raw ${this.def.primitive.name}`, what: this.def.primitive.short, kind: raw, raw: true, preview: false, empty: false } : EMPTY_LABEL;
+      return raw ? { name: `Raw ${this.def.primitive.name}`, what: this.def.primitive.short, kind: raw, raw: true, preview: false, empty: false, wager: null } : EMPTY_LABEL;
     });
   }
 
@@ -241,7 +254,7 @@ export class Techniques {
     const aimHit = g.physics.castRay(origin, dir, 60, GROUP_WORLD | GROUP_PROP | GROUP_ENEMY, g.player.body);
     const ctx: AbilityContext = {
       game: g, pact, slot, kind, shape, behaviors, potency: this.potency(pact) * (primed ? 1 + g.mastery.signBoost(this.def.id) : 1),
-      variant, origin, dir, aim: aimHit ? aimHit.point : origin.clone().addScaledVector(dir, 30), targets: [], wagered: g.combat.wagerArmed,
+      variant, origin, dir, aim: aimHit ? aimHit.point : origin.clone().addScaledVector(dir, 30), targets: [], wagered: false,
     };
     if (primed) this.sign = SIGN_IDLE;
     this.resource = Math.max(0, this.resource - cost.resource);
@@ -257,10 +270,12 @@ export class Techniques {
     if (!cut) this.perform(gesture, speed);
     this.cast_ = { slot, ctx, t: 0, impactAt: gesture.impactAt / speed, duration: gesture.duration / speed, fired: false, held };
     if (!cut) g.audio.play(this.def.audio[kind], { pitch: variant === 'none' ? 1.15 : 1 });
-    g.net?.cast(kind, kind === 'max' ? this.def.cutscene.title.en : pact?.name ?? `Raw ${this.def.primitive.name}`, variant, speed);
     this.cooldown[slot] = KIND_DEFS[kind].cooldown;
     if (kind === 'max') this.charge = 0;
-    if (g.combat.wagerArmed) g.combat.wagerCommitted(slot);
+    ctx.wagered = this.wagers.declare(pact, ctx);
+    // A Maximum Output's cutscene letters its own title.
+    const shout = kind !== 'max' && this.declarations.cast(pact, ctx.wagered);
+    g.net?.cast(kind, kind === 'max' ? this.def.cutscene.title.en : pact?.name ?? `Raw ${this.def.primitive.name}`, variant, speed, shout);
     g.book.observe('movingWhileCasting', g.player.planarSpeed.value > 0.5 ? 1 : 0);
     g.book.observe('airborneFraction', g.player.grounded ? 0 : 1);
     g.mastery.gain(this.def.id, 'activation', 0.004);
@@ -271,7 +286,7 @@ export class Techniques {
   private fire(c: Cast): void {
     const g = this.game;
     c.fired = true;
-    const r = this.def.effects.cast(c.ctx);
+    const r = this.wagers.fire(c.ctx, () => this.def.effects.cast(c.ctx));
     c.result = r;
     const pact = c.ctx.pact;
     if (r) {
@@ -280,7 +295,8 @@ export class Techniques {
       if (r.cameraKick) g.cam.kick(r.cameraKick);
       if (r.rooted) g.player.rooted = Math.max(g.player.rooted, r.rooted);
       if (r.moveLock) g.player.moveLock = Math.max(g.player.moveLock, r.moveLock);
-      if (c.ctx.wagered) g.combat.resolveWager((r.hits ?? 0) > 0);
+      // The odds a Wager is called against follow what this player's casts actually do.
+      if (c.ctx.kind !== 'max') { g.book.observe('hitRate', (r.hits ?? 0) > 0 ? 1 : 0); g.book.observe('multiTargetFraction', (r.hits ?? 0) >= 2 ? 1 : 0, 0.02); }
       if ((r.hits ?? 0) > 0) { this.charge = Math.min(1, this.charge + 0.08 * (r.hits ?? 1)); g.mastery.gain(this.def.id, 'precision', 0.006); }
       else if (c.ctx.kind !== 'max') g.book.observe('longRangeFraction', c.ctx.aim && c.ctx.aim.distanceTo(c.ctx.origin) > 8 ? 1 : 0);
     }
@@ -294,7 +310,7 @@ export class Techniques {
   }
 
   seal(seconds: number): void { this.sealed = seconds; this.cast_ = null; this.stopGesture(); }
-  struck(): void { this.struckRecently = 2.5; }
+  struck(): void { this.struckRecently = 2.5; this.wagers.struck(); }
 
   update(dt: number, raw: number): void {
     const g = this.game;
@@ -306,6 +322,8 @@ export class Techniques {
     if (!this.cast_?.held) this.resource = Math.min(this.def.resource.max, this.resource + regen * dt);
     this.strain = Math.max(0, this.strain - dt * 0.03 * (1 + g.mastery.get(this.def.id, 'tolerance')));
     this.def.effects.passive?.(g, dt);
+    this.wagers.update(dt);
+    this.declarations.update(raw);
 
     if (!g.cutscenes.active && inp.enabled) {
       if (inp.hit('fullsign')) this.beginSign();
@@ -319,7 +337,6 @@ export class Techniques {
             this.beginMax();
           } else this.cast(s);
         }
-        if (inp.hit('wager')) g.combat.armWager();
       }
     }
     this.tickSign(dt);

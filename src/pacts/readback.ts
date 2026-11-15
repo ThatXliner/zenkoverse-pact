@@ -2,6 +2,7 @@ import { type Pact, type Clause, type Param } from './schema';
 import { slotDef, type AbilitySlot } from './slots';
 import { keyPhrase } from '../app/keymap';
 import { describe } from './resolve';
+import { DECLARE, REWARD, FORFEIT } from './wager';
 
 // The terms as the universe reads them, built from the parsed Pact and
 // nothing else. The Workshop renders the segments as the editor, so what the
@@ -34,7 +35,7 @@ export function readbackSegments(pact: Pact, shapeLabel: (shape: string) => stri
     const focus: Focus = { kind: 'clause', index };
     if (c.kind === 'sunset') out.push({ text: 'seconds' in c.term ? `Invoked, its term runs ${c.term.seconds} seconds; the Pact remains` : `Its term ends after ${c.term.encounters} ${c.term.encounters === 1 ? 'fight' : 'fights'}; the Pact remains`, focus }, { text: '. ' });
     if (c.kind === 'risk') out.push({ text: `Risk: you may push past the ${c.beyond} limit, and ${riskCost(c.cost)}`, focus }, { text: '. ' });
-    if (c.kind === 'wager') out.push({ text: `Wager: before it fires, you may declare ${prediction(c.predict)}. Correct, the universe pays out; wrong, your Technique seals`, focus }, { text: '. ' });
+    if (c.kind === 'wager') out.push({ text: `Wager: each cast declares that ${DECLARE[c.declare].words}. Called right, ${REWARD[c.reward].plain}; called wrong, ${FORFEIT[c.forfeit].words}`, focus }, { text: '. ' });
     if (c.kind === 'program') out.push({ text: `Programmed: when ${triggerWords(c.when)}, this Pact ${c.then === 'activate' ? 'fires on its own' : c.then === 'suppress' ? 'refuses to fire' : 'takes precedence over your other Pacts'}`, focus }, { text: '. ' });
   });
   out.push({ text: 'Once inscribed it cannot be unwritten.' });
@@ -51,9 +52,6 @@ function joinAnd(items: string[]): string {
 }
 export function riskCost(c: 'health' | 'exhaustion' | 'seal'): string {
   return c === 'health' ? 'every use past it costs health' : c === 'exhaustion' ? 'every use past it leaves you winded and slow' : 'a use past it seals the Technique for a while';
-}
-export function prediction(p: string): string {
-  return p === 'hit' ? 'that the next strike connects' : p === 'kill' ? 'that the next strike finishes its target' : p === 'untouched' ? 'that you take no hit for the next ten seconds' : 'that you land the first strike of the fight';
 }
 export function triggerWords(t: string): string {
   const m: Record<string, string> = { still: 'you stand still', grounded: 'your feet are on the ground', airborne: 'you are in the air', struck: 'you are struck', eyesClosed: 'your eyes are shut', declared: 'you declare it', lowHealth: 'you are near defeat', fullSign: 'you perform the full hand sign' };

@@ -165,6 +165,8 @@ export const CUES = {
 
   // ------------------------------------------------------------ aura
   'aura.expand': sfx([Y('inhale', { dur: 0.3, f1: 4000 }, { gain: 0.45 }), Y('boom', { f0: 90, f1: 40, dur: 0.9 }, { gain: 0.85, at: 0.3 }), Y('whoosh', { dur: 0.7, f0: 200, f1: 2600, peak: 0.25 }, { gain: 0.6, at: 0.3 }), Y('shimmer', { f: 392, dur: 1.8 }, { gain: 0.18, at: 0.3 })], { wet: 0.6, net: true, duck: 0.4 }),
+  'aura.push': sfx([Y('riser', { dur: 1.1, f0: 70, f1: 520, tone: 0.35 }, { gain: 0.32 }), Y('whoosh', { dur: 1.1, f0: 120, f1: 900, peak: 0.8 }, { gain: 0.3 })], { wet: 0.5, net: true }),
+  'aura.release': sfx([Y('boom', { f0: 80, f1: 34, dur: 0.9 }, { gain: 0.75 }), Y('whoosh', { dur: 0.6, f0: 300, f1: 2200, peak: 0.2 }, { gain: 0.5 })], { wet: 0.6, net: true, duck: 0.3 }),
   'aura.retract': sfx([Y('whoosh', { dur: 0.6, f0: 2000, f1: 200, peak: 0.2 }, { gain: 0.85 }), Y('tone', { f: 392, glide: 130, dur: 0.6 }, { gain: 0.16 })], { net: true }),
   'aura.collapse': sfx([S(GLASS_H, 0.85, { pitch: 0.8 }), Y('crack', { dur: 0.12, hp: 1600 }, { gain: 0.6 }), Y('tinkle', { count: 20, spread: 0.9, lo: 1200 }, { gain: 0.8 }), Y('boom', { f0: 100, f1: 34, dur: 0.8 }, { gain: 0.7 })], { wet: 0.5, net: true, duck: 0.6 }),
   'aura.denied': ui([S('error_004', 0.25, { pitch: 0.8 })]),

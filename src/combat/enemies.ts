@@ -114,6 +114,9 @@ export class Enemy {
   // the heading it locked to when it committed.
   readonly attack: AttackDef;
   private mark: Mark | null = null;
+  // Inside the player's field a blow is sensed before it starts: its mark
+  // lies on the ground, unswept, until the wind-up takes it over.
+  private omen: Mark | null = null;
   private committed = false;
   private lungeLeft = 0;
   private poise = 0;
@@ -241,6 +244,7 @@ export class Enemy {
 
   private setState(next: State): void {
     if (this.state === 'windup' && next !== 'strike') { this.mark?.cancel(); this.mark = null; }
+    if (next !== 'chase' && next !== 'windup') this.foresee(false);
     if (this.state === 'cast' && next !== 'recover') { this.castMark?.cancel(); this.castMark = null; this.fuse?.fizzle(); }
     this.state = next;
     this.t = 0;
@@ -272,7 +276,8 @@ export class Enemy {
     this.resonance = Math.max(0, this.resonance - dt * 0.5);
     this.slow = THREE.MathUtils.lerp(this.slow, 1, 1 - Math.exp(-1.5 * dt));
     const move = new THREE.Vector3();
-    const hindered = g.aura.hinder(this.position);
+    const hindered = g.aura.hinder(this);
+    const sensed = this.alive && g.aura.senses(this.position);
     const speed = def.speed * this.slow * hindered * (this.frozen > 0 ? 0 : 1);
 
     this.poise = Math.max(0, this.poise - POISE_DECAY * dt);
@@ -305,7 +310,7 @@ export class Enemy {
             this.committed = true;
             g.vfx.glint(this.center().add(new THREE.Vector3(0, this.height * 0.45, 0)), 0.5, 0.2, () => this.center().add(new THREE.Vector3(0, this.height * 0.45, 0)));
           }
-          if (this.mark) { this.mark.place(markOrigin(atk, this.position, this.yaw), this.yaw); this.mark.progress = this.t / windup; }
+          if (this.mark) { this.mark.place(markOrigin(atk, this.position, this.yaw), this.yaw); this.mark.progress = this.t / windup; this.mark.glow = sensed ? AURA.sense.glow : 0; }
           if (this.t > windup) { this.setState('strike'); this.strike(); }
           break;
         }
@@ -328,11 +333,12 @@ export class Enemy {
           break;
         case 'cast':
           this.face(p, dt, def.ai === 'ancient' ? 2.5 : 4);
-          if (this.castMark) this.castMark.progress = this.t / CAST_SECONDS;
+          if (this.castMark) { this.castMark.progress = this.t / CAST_SECONDS; this.castMark.glow = sensed ? AURA.sense.glow * 0.5 : 0; }
           if (this.t > CAST_SECONDS) { this.resolveCast(); this.setState('recover'); this.castCd = def.ai === 'kuroda' ? (this.phase2 ? 4 : 5) : 6.5; }
           break;
       }
     }
+    this.foresee(sensed && this.state === 'chase' && this.locked <= 0 && def.ai !== 'dummy' && this.attackCd < AURA.sense.lead && dist <= reachOf(atk) + 1.5);
     if (this.state === 'knocked') {
       // Thrown: no footing in the air, and on the ground a skid that the
       // feet fight with steps until it stops, rather than a glide.
@@ -405,12 +411,25 @@ export class Enemy {
     if (dist > reachOf(this.attack)) move.copy(toP).normalize().multiplyScalar(speed);
   }
 
+  // The sensed blow: while `want` holds, its mark lies where it will land,
+  // faint and unswept.
+  private foresee(want: boolean): void {
+    if (!want) { this.omen?.cancel(); this.omen = null; return; }
+    const a = this.attack;
+    this.omen ??= this.game.vfx.mark(a.shape, DANGER, markOrigin(a, this.position, this.yaw), this.yaw);
+    this.omen.place(markOrigin(a, this.position, this.yaw), this.yaw);
+    this.omen.mat.uniforms.opacity!.value = 0.6;
+    this.omen.glow = AURA.sense.glow;
+  }
+
   private beginWindup(): void {
     const g = this.game, a = this.attack;
     this.setState('windup');
     this.committed = false;
     this.avatar.perform(a.move, a.move.impactAt / a.windup);
-    this.mark = g.vfx.mark(a.shape, DANGER, markOrigin(a, this.position, this.yaw), this.yaw);
+    this.mark = this.omen ?? g.vfx.mark(a.shape, DANGER, markOrigin(a, this.position, this.yaw), this.yaw);
+    this.mark.mat.uniforms.opacity!.value = this.mark.peak;
+    this.omen = null;
     g.audio.play('enemy.swing', { at: this.center(), pitch: a.pitch });
   }
 

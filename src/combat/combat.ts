@@ -58,7 +58,7 @@ export class Combat {
     const wager = g.techniques.wagers.boost;
     let m = wager;
     // A body in the player's open field, or one whose guard a clash broke, takes more.
-    m *= g.aura.damageOn(e.position);
+    m *= g.aura.damageOn(e);
     if (e.guardBroken > 0) m *= 1 + AURA.guardBreak.taken;
     const eye = this.eyes.dealt(e);
     m *= eye.mult;
@@ -99,6 +99,7 @@ export class Combat {
     let a = amount;
     if (!opts.self) a = g.techniques.def.effects.onStruck?.(g, a, opts.from ?? g.player.position) ?? a;
     if (g.aura.guardBroken > 0 && !opts.self) a *= 1 + AURA.guardBreak.taken;
+    if (!opts.self) a *= g.aura.reinforce;
     if (a <= 0) return 0;
     if (g.net) { if (!opts.pvp) g.net.selfDamage(a); }
     else { this.hp = Math.max(0, this.hp - a); combatUi.hp.value = this.hp / this.maxHp; }

@@ -115,7 +115,7 @@ await wait(800 * slack);
 // One player walks for a second and stops; the other's drawing of them is
 // sampled every frame meanwhile.
 async function walk(walker, watcher, key, label) {
-  const id = (await walker.net()).id;
+  const { id, pos: from } = await walker.net();
   const sampling = watcher.page.evaluate(async (id) => {
     const steps = [];
     let last = null;
@@ -138,7 +138,10 @@ async function walk(walker, watcher, key, label) {
   const seen = remoteOf(await watcher.net(), id)?.drawn;
   const moved = steps.reduce((s, x) => s + x, 0);
   const jump = Math.max(...steps);
-  check(moved > 3, `${label}: the watcher saw the walker cover ground (${moved.toFixed(1)} m)`);
+  // Against the walker's own travel, not a fixed distance: a prop in the way
+  // shortens the walk without saying anything about the sync.
+  const travel = dist(from, truth);
+  check(travel > 1.5 && moved > travel * 0.85, `${label}: the watcher saw the walker cover ground (${moved.toFixed(1)} of ${travel.toFixed(1)} m)`);
   check(seen && dist(seen, truth) < 0.1, `${label}: drawn within 10 cm of the true position once stopped (${seen ? (dist(seen, truth) * 100).toFixed(1) : '?'} cm)`);
   check(jump < 0.35, `${label}: no frame-to-frame jump (largest step ${(jump * 100).toFixed(0)} cm at running speed)`);
   return steps;

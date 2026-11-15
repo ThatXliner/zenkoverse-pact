@@ -5,7 +5,7 @@ import { Mark, kiraTexture, type MarkShape } from './mark';
 
 interface Particle { mesh: THREE.Object3D; vel: THREE.Vector3; spin: THREE.Vector3; life: number; max: number; kind: 'debris' | 'spark' | 'shard' | 'flame'; gravity: number; scaleEnd: number; size?: number }
 interface Glint { sprite: THREE.Sprite; life: number; max: number; size: number; follow?: () => THREE.Vector3 }
-interface Ring { mesh: THREE.Mesh; life: number; max: number; from: number; to: number; mat: THREE.MeshBasicMaterial }
+interface Ring { mesh: THREE.Mesh; life: number; max: number; from: number; to: number; mat: THREE.MeshBasicMaterial; peak: number }
 interface Trail { mesh: THREE.Mesh; points: THREE.Vector3[]; life: number; mat: THREE.MeshBasicMaterial; width: number; peak: number; at: THREE.Vector3 }
 interface Flash { light: PointSource; life: number; max: number; peak: number }
 interface Patch { mesh: THREE.Mesh; life: number; max: number; mat: THREE.MeshPhysicalMaterial }
@@ -102,6 +102,21 @@ export class Vfx {
     this.glints.push({ sprite, life, max: life, size, follow });
   }
 
+  // Motes drawn in to `center` from a circle of `radius`, arriving together
+  // after `seconds`: the air and the dust pulled toward a gathering body.
+  gather(center: THREE.Vector3, radius: number, count: number, seconds: number, color: number): void {
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + Math.random() * 0.4, r = radius * (0.7 + Math.random() * 0.3);
+      const from = new THREE.Vector3(center.x + Math.cos(a) * r, center.y + 0.1 + Math.random() * 1.4, center.z + Math.sin(a) * r);
+      const m = new THREE.Mesh(this.sparkGeo, new THREE.MeshBasicMaterial({ color }));
+      m.position.copy(from);
+      m.scale.setScalar(1.2 + Math.random());
+      this.scene.add(m);
+      const to = center.clone().setY(center.y + 0.9);
+      this.particles.push({ mesh: m, vel: to.sub(from).divideScalar(seconds), spin: new THREE.Vector3(), life: seconds, max: seconds, kind: 'spark', gravity: 0, scaleEnd: 0 });
+    }
+  }
+
   // Flame tongues licking up off `center`, spread over a disc of `radius`:
   // fire only where there is something to burn.
   flames(center: THREE.Vector3, radius: number, count: number, height = 1): void {
@@ -125,7 +140,7 @@ export class Vfx {
     t.mat.dispose();
   }
 
-  ring(center: THREE.Vector3, color: number, from: number, to: number, life = 0.45, normal?: THREE.Vector3): void {
+  ring(center: THREE.Vector3, color: number, from: number, to: number, life = 0.45, normal?: THREE.Vector3, peak = 0.95): void {
     const mat = new THREE.MeshBasicMaterial({ color, map: ensoTexture(), transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false });
     const mesh = new THREE.Mesh(this.ringGeo, mat);
     mesh.position.copy(center);
@@ -134,7 +149,7 @@ export class Vfx {
     mesh.rotateZ(Math.random() * Math.PI * 2);
     mesh.scale.setScalar(from);
     this.scene.add(mesh);
-    this.rings.push({ mesh, life, max: life, from, to, mat });
+    this.rings.push({ mesh, life, max: life, from, to, mat, peak });
   }
 
   burst(center: THREE.Vector3, count: number, kind: 'debris' | 'spark' | 'shard', speed: number, color?: number, dir?: THREE.Vector3): void {
@@ -259,7 +274,7 @@ export class Vfx {
       const u = 1 - r.life / r.max;
       const e = 1 - Math.pow(1 - u, 3);
       r.mesh.scale.setScalar(Math.min(THREE.MathUtils.lerp(r.from, r.to, e), this.nearCap(r.mesh.position)));
-      r.mat.opacity = Math.min(1, (1 - u) * 1.6) * 0.95 * this.nearFade(r.mesh.position);
+      r.mat.opacity = Math.min(1, (1 - u) * 1.6) * r.peak * this.nearFade(r.mesh.position);
       if (r.life <= 0) { this.scene.remove(r.mesh); r.mat.dispose(); this.rings.splice(i, 1); }
     }
     for (let i = this.trails.length - 1; i >= 0; i--) {

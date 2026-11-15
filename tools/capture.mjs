@@ -3,7 +3,7 @@
 // `?debug` hooks to fixed scenarios and saves screenshots and short frame
 // sequences per piece. Usage:
 //   node tools/capture.mjs [url] [--out captures] [--only hands,district] [--url http://...] [--port 4173] [--gpu]
-// Pieces: ui, hud, hands, variants, sign, poses, third-person, views, compound, vfx, style, encounters, fight, roles, workshop, tutorial, drill, perf.
+// Pieces: ui, hud, hands, variants, sign, poses, third-person, views, compound, vfx, style, encounters, fight, expand, roles, workshop, tutorial, drill, perf.
 // Without a URL it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -530,6 +530,25 @@ if (run('fight')) {
       await step(10); await shot('fight', `recoil-heavy-${view}-f15`);
       await step(20); await shot('fight', `recoil-heavy-${view}-f35`);
     }
+  }
+}
+
+// Aura Expansion's beat, top-down, over the shoulder and in first person: mid gather, the
+// release frame, the shockwave, the field settling, and the open field a
+// second later, with two bodies and a crate close enough to be shoved.
+if (run('expand')) {
+  for (const view of ['top', 'third', 'first']) {
+    await startRun('recoil');
+    await api((g, v) => {
+      const G = g.game, V = G.player.position.constructor;
+      g.god(true); g.teleport([-8, 0, 8]); g.auraReady();
+      for (const [x, z] of [[-6.2, 6.6], [-10, 6.9]]) { const e = G.encounters.spawn('thug', new V(x, 0, z)); e.attackCd = 1e6; e.castCd = 1e6; }
+      G.props.spawn('crate', new V(-8, 0.5, 5.6));
+      g.camera(v); g.look(0, -0.12);
+    }, view);
+    await step(30);
+    await api((g) => g.game.aura.expand());
+    for (const [f, name] of [[9, 'gather'], [10, 'release'], [4, 'shock'], [12, 'settle'], [60, 'open']]) { await step(f); await shot('expand', `${view}-${name}`); }
   }
 }
 

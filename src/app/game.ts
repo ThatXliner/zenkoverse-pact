@@ -285,7 +285,13 @@ export class Game {
     this.closeWorkshop();
     this.book.preview.value = p;
     if (appState.value.kind !== 'encounter') this.encounters.begin('dummy-room', true);
-    toast(`Trying "${p.name}" on ${slotWords(p.slot)}. ${keyLabel('workshop')} returns to the Workshop.`);
+    toast(`Trying "${p.name}" on ${slotWords(p.slot)}. ${keyLabel('workshop')} returns to the Workshop; ${keyLabel('pause')} or walking out stops.`);
+  }
+
+  // Ends a try: the draft leaves its key and the dummy room closes.
+  stopTrying(): void {
+    this.book.preview.value = null;
+    this.encounters.leaveDummyRoom();
   }
 
   loop(on: boolean): void { this.renderer.gl.setAnimationLoop(on ? () => this.frame() : null); }

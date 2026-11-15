@@ -131,6 +131,10 @@ export class Encounters {
     for (let i = this.enemies.length - 1; i >= 0; i--) if (this.enemies[i]!.disposed) this.enemies.splice(i, 1);
   }
 
+  // The dummy room has no winner: the player leaves it, by walking out or from the menu.
+  get inDummyRoom(): boolean { return this.active?.id === 'dummy-room'; }
+  leaveDummyRoom(): void { if (this.inDummyRoom) this.finish(); }
+
   private finish(victory = true): void {
     const g = this.game;
     const d = this.active!;

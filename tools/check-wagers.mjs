@@ -151,8 +151,12 @@ console.log('what each forfeit really takes, against a model of the seconds afte
 // needs it, what share of a fight one key carries, what slowed legs cost.
 const MODEL = {
   perUnit: 5 / 2.4,
-  // Losing all of one's health is worth this many sealed seconds (a fifth = 2 units, as it always was).
-  health: 20.83,
+  // Losing all of one's health is worth this many sealed seconds. Before
+  // out-of-combat regen it was 20.83 (a fifth = 2 units): the loss weighed
+  // on the rest of the fight and on the fights after it. Health now returns
+  // once a fight ends, so it weighs on the rest of one fight only, about
+  // half a fight against the fight and a half it used to: a third.
+  health: 20.83 / 3,
   // The resource refills a tenth a second; below `enough` of it a fighter
   // casts less, in proportion; `needs` of a fight runs on it.
   resource: { regen: 0.1, enough: 0.6, needs: 0.67, at: { none: 0.6, half: 0.3, all: 0.05 } },
@@ -360,7 +364,9 @@ function mutate(k) {
 // ------------------------------------------------------------- 5. old saves
 console.log('old saves keep what their Wagers meant');
 {
-  const OLD_WEIGHT = { seal: 2.4, blood: 2.0, drain: 1.6, slow: 1.0 };
+  // A saved forfeit keeps its size; its weight follows the game. Blood's is a
+  // third of its old 2.0 now that health returns out of a fight (see MODEL.health).
+  const OLD_WEIGHT = { seal: 2.4, blood: 2.0 / 3, drain: 1.6, slow: 1.0 };
   const OLD_AT = { multi: 2, kill: 0.9, untouched: 8 };
   let bad = [];
   for (const declare of ['hit', 'multi', 'kill', 'untouched']) for (const reward of ['output', 'charge', 'mend']) for (const forfeit of ['seal', 'blood', 'drain', 'slow']) {

@@ -53,9 +53,9 @@ export function fieldReading(game: Game): DrillDef {
     brief: 'Watch the stone\'s field. Each change warns of a move; answer with the move that beats it.',
     howTo: [
       'The stone\'s field warns you before it moves. Answer before the warning fades.',
-      'Swells toward you: a push is coming. Hold with S.',
-      'Draws in tight: a hold is coming. Feint with A or D.',
-      'Far side flickers: a feint is coming. Push with W.',
+      'Swells toward you: a push is coming. Feint with A or D.',
+      'Draws in tight: a hold is coming. Push with W.',
+      'Far side flickers: a feint is coming. Hold with S.',
       'An Aura Clash is read the same way.',
     ],
     position: STAND,

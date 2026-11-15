@@ -17,25 +17,23 @@ import { PLAYER_SUIT } from '../character/avatar';
 // left hand runs the mirrored pose.
 interface HandState extends HandSpring { arm: Arm; claws: THREE.Mesh[] }
 
-// Where the rig sits against the camera and how pose coordinates become
-// wrist targets. The eye of the model lands on the camera plus `eye`.
+// Where the rig sits against the camera. Pose positions are wrist targets
+// in camera metres, used as they are; the eye of the model lands on the
+// camera plus `eye`.
 const VIEW = {
   // Vertical field of view at the 16:9 the poses are framed for.
   fov: 75,
   aspect: 16 / 9,
-  // Viewmodel arms run slightly under life size, as most shooters do, so
-  // the forearms do not crowd the frame at this focal length.
-  scaleRig: 0.92,
+  scaleRig: 1.1,
   // The furthest a wrist reaches from the shoulder, as a share of the arm.
   reach: 0.93,
-  // The rig sits ahead of the eye, as viewmodels do: with the shoulders
-  // where a real player's are, a short stylized arm fell short of nearly
-  // every pose, so each arm locked straight and the camera looked down a
-  // wall of sleeve. Here the poses are in reach with the elbow bent, and
-  // the forearms rise into the frame from its lower corners.
-  eye: new THREE.Vector3(0, -0.015, -0.16),
-  scale: new THREE.Vector3(0.95, 0.85, 0.8),
-  offset: new THREE.Vector3(0, 0.13, 0),
+  // The rig sits ahead of the eye and a little low, as viewmodels do: the
+  // stylized arm is a quarter shorter than a real one, so with the
+  // shoulders where a player's are, a hand held in view folds the arm and
+  // the elbow swings up beside the hand. From here the shoulders sit below
+  // the hands at rest, the elbows hang, and each forearm rises into the
+  // frame from a lower corner in line with its hand.
+  eye: new THREE.Vector3(0, -0.06, -0.18),
 };
 const FLIP = new THREE.Quaternion(0, 1, 0, 0);
 
@@ -94,7 +92,8 @@ export class Hands {
   private pulseT = 0;
   // Holds one named pose on both hands, for the capture harness.
   debugPose: PoseName | HandPose | null = null;
-  // Orbits the view around the right hand, for judging a pose from the side or above.
+  // Orbits the view around the right hand (yaw from its right, negative
+  // pitch from above), for judging a pose from the side or above.
   inspect: { yaw: number; pitch: number } | null = null;
 
   constructor(scene: THREE.Scene, private camera: THREE.PerspectiveCamera, assets: Assets) {
@@ -211,7 +210,7 @@ export class Hands {
 
     for (const h of this.hands) {
       const tp = h.targetPose;
-      const target = new THREE.Vector3(tp.pos[0], tp.pos[1], tp.pos[2]).multiply(VIEW.scale).add(VIEW.offset).add(bob);
+      const target = new THREE.Vector3(tp.pos[0], tp.pos[1], tp.pos[2]).add(bob);
       target.y += breathe;
       target.x += this.sway.x * (h.side === 1 ? 1.2 : 0.9);
       target.y += this.sway.y;
@@ -229,9 +228,12 @@ export class Hands {
     }
 
     if (this.inspect) {
+      // The camera orbits the right hand at a fixed distance: positive yaw
+      // from its right, negative pitch from above. Moving the hands the
+      // other way stands in for moving the camera.
       const pivot = this.hands[0]!.pos.clone();
-      this.root.quaternion.setFromEuler(new THREE.Euler(this.inspect.pitch, this.inspect.yaw, 0, 'YXZ'));
-      this.root.position.copy(pivot).sub(pivot.clone().applyQuaternion(this.root.quaternion));
+      this.root.quaternion.setFromEuler(new THREE.Euler(this.inspect.pitch, this.inspect.yaw, 0, 'YXZ')).invert();
+      this.root.position.set(0, 0, -0.5).sub(pivot.applyQuaternion(this.root.quaternion));
     } else { this.root.quaternion.identity(); this.root.position.set(0, 0, 0); }
 
     const glowTarget = this.playing ? 1 : 0;

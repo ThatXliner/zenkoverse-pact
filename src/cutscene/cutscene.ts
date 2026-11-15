@@ -443,7 +443,7 @@ export class Cutscenes {
       case 'title': if (l.presenting) cutsceneUi.title.value = { ...r.def.title, sub: r.sub, color, id: ++this.titleN }; break;
       case 'resolveHit':
         if (!l.resolved) { l.resolved = true; r.resolve(); }
-        if (l.presenting) g.combat.letter(l.aim.clone().add(new THREE.Vector3(0, 1.6, 0)), r.def.word, color, true);
+        if (l.presenting) g.combat.letter(l.aim.clone().add(new THREE.Vector3(0, 2.3, 0)), r.def.word, color, true);
         break;
       case 'impactFrame': g.renderer.impactFrame(e.frames, new THREE.Color(color), l.aim.clone().add(new THREE.Vector3(0, 1.1, 0))); break;
       case 'hitStop': l.hold = e.seconds; if (!g.net) g.clock.hitStop(e.seconds); break;

@@ -91,7 +91,7 @@ void main() {
     if ( texture2D( depthMain, vUv ).r >= 0.9999 ) { gl_FragColor = vec4( 0.0 ); return; }
     e = edge( depthMain, clipMain, vUv, px, z );
   }
-  float fine = smoothstep( crease, crease * 2.2, e.x ) * 0.72;
+  float fine = smoothstep( crease, crease * 2.2, e.x ) * 0.85;
   float full = smoothstep( silhouette, silhouette * 2.0, e.x );
   float fade = arm ? 1.0 : 1.0 - smoothstep( 45.0, 120.0, z );
   float strength = max( fine, full ) * fade;
@@ -102,9 +102,9 @@ void main() {
   // Heavier toward the camera, and heavier the deeper the break behind the
   // edge, so a figure against the floor outweighs a step in it; a silhouette
   // keeps its weight however far it is.
-  float near = clamp( 7.5 / z, mix( 0.5, 0.8, full ), 1.8 );
+  float near = clamp( 7.5 / z, mix( 0.65, 0.8, full ), 1.8 );
   float deep = smoothstep( silhouette * 2.0, silhouette * 7.0, e.x );
-  float width = mix( 0.75, 1.75 + 0.45 * deep, full ) * near * ( 0.5 + 0.8 * pressure );
+  float width = mix( 0.95, 1.75 + 0.45 * deep, full ) * near * ( 0.5 + 0.8 * pressure );
   vec2 n = normalize( e.yz + 1e-6 );
   float angle = fract( atan( n.y, n.x ) / 3.14159265 + 1.0 );
   gl_FragColor = vec4( strength, width / 6.0, angle, pressure );

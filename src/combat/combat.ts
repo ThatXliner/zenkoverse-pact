@@ -96,7 +96,8 @@ export class Combat {
       g.clock.hitStop(final >= 80 ? 0.11 : 0.06);
       g.cam.shake(0.35);
       g.renderer.impactFrame(final >= 80 ? 3 : 1, new THREE.Color(g.techniques.def.color), e.center());
-      this.letter(e.center().add(new THREE.Vector3(0, 0.9, 0)), g.techniques.def.sfx, g.techniques.def.color, final >= 80);
+      // A cutscene letters its own word over its blow.
+      if (!g.cutscenes.active) this.letter(e.center().add(new THREE.Vector3(0, 0.9, 0)), g.techniques.def.sfx, g.techniques.def.color, final >= 80);
     }
     else g.cam.shake(0.12);
     g.mastery.gain(g.techniqueId, 'output', 0.0015);

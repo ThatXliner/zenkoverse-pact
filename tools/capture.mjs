@@ -278,7 +278,8 @@ if (run('style')) {
     for (const view of VIEWS) {
       await api((g, w) => g.teleport(w), where);
       await face(view, yaw, pitch);
-      await step(40);
+      // Long enough for a roof over the player to fade out from the top-down camera.
+      await step(90);
       await shot('style', `${name}-${view}`);
     }
   }

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { POSES, FINGERS, type Finger, type PoseName } from './poses';
+import { POSES, FINGERS, type Finger, type PoseName, type HandPose } from './poses';
 import type { Gesture } from './gestures';
 import { GestureClock, handSpring, aimSpring, poseSpring, stepSpring, type HandSpring } from './performer';
 import { ArmRig, type Arm } from './rig';
@@ -8,7 +8,8 @@ import type { CameraRig } from '../player/camera';
 import type { Input } from '../app/input';
 import type { TechniqueKit } from '../techniques/kit';
 import type { Assets } from '../app/assets';
-import { toon, addInkHulls } from '../render/materials';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { toon, addInkHulls, inkHullMaterial } from '../render/materials';
 import { PLAYER_SUIT } from '../character/avatar';
 
 // Each hand is a spring (src/hands/performer.ts) run through its own
@@ -17,24 +18,63 @@ import { PLAYER_SUIT } from '../character/avatar';
 interface HandState extends HandSpring { arm: Arm; claws: THREE.Mesh[] }
 
 // Where the rig sits against the camera and how pose coordinates become
-// wrist targets. The eye of the model lands on the camera plus `eye`, so
-// shoulders fall where a real player's would.
+// wrist targets. The eye of the model lands on the camera plus `eye`.
 const VIEW = {
+  // Vertical field of view at the 16:9 the poses are framed for.
+  fov: 75,
+  aspect: 16 / 9,
   // Viewmodel arms run slightly under life size, as most shooters do, so
   // the forearms do not crowd the frame at this focal length.
   scaleRig: 0.92,
-  eye: new THREE.Vector3(0, -0.015, -0.02),
+  // The furthest a wrist reaches from the shoulder, as a share of the arm.
+  reach: 0.93,
+  // The rig sits ahead of the eye, as viewmodels do: with the shoulders
+  // where a real player's are, a short stylized arm fell short of nearly
+  // every pose, so each arm locked straight and the camera looked down a
+  // wall of sleeve. Here the poses are in reach with the elbow bent, and
+  // the forearms rise into the frame from its lower corners.
+  eye: new THREE.Vector3(0, -0.015, -0.16),
   scale: new THREE.Vector3(0.95, 0.85, 0.8),
   offset: new THREE.Vector3(0, 0.13, 0),
 };
 const FLIP = new THREE.Quaternion(0, 1, 0, 0);
+const INK_WIDTH = 0.0035;
+
+// The sleeve shell stops a few centimetres short of the wrist with a bare
+// cut. A cuff finishes it: a hem turned back over the shell's end, covering
+// the forearm to just above the wrist so the hand reads out of a sleeve.
+// The profile is radius (fraction of CUFF.r) against distance along the
+// forearm, negative toward the elbow from the wrist.
+const CUFF = {
+  r: 0.043,
+  depth: 0.94,
+  profile: [[0.9, -0.09], [1, -0.09], [1.02, -0.04], [1.08, -0.034], [1.1, -0.016], [1.07, -0.011], [0.88, -0.011], [0.88, -0.04], [0.9, -0.09]] as const,
+};
+
+function addCuff(arm: Arm, material: THREE.Material): void {
+  const pts = CUFF.profile.map(([r, y]) => new THREE.Vector2(r * CUFF.r, y));
+  const lathe = new THREE.LatheGeometry(pts, 20);
+  lathe.deleteAttribute('uv');
+  lathe.deleteAttribute('normal');
+  const geo = mergeVertices(lathe);
+  geo.scale(1, 1, CUFF.depth);
+  geo.computeVertexNormals();
+  // Lathe +Y runs along the forearm toward the hand; zero sits at the wrist.
+  const toWrist = arm.hand.bone.position.clone();
+  geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), toWrist.clone().normalize()));
+  geo.translate(toWrist.x, toWrist.y, toWrist.z);
+  const cuff = new THREE.Mesh(geo, material);
+  const ink = new THREE.Mesh(geo, inkHullMaterial(INK_WIDTH));
+  cuff.name = `cuff_${arm.side}`;
+  ink.name = `cuff_${arm.side}_ink`;
+  arm.fore.bone.add(cuff, ink);
+}
 
 export class Hands {
   readonly root = new THREE.Group();
   private rigRoot = new THREE.Group();
   private rig: ArmRig;
   private hands: HandState[] = [];
-  private skin: THREE.MeshToonMaterial;
   private clawMat: THREE.MeshStandardMaterial;
   private clock = new GestureClock();
   private onEvent: ((e: string) => void) | null = null;
@@ -52,11 +92,11 @@ export class Hands {
   private light: THREE.PointLight;
   frost = 0;
   glow = 0;
-  // A beat of Technique-coloured light on the skin and the hand light, set by
+  // A beat of Technique-coloured light on the hands, set by
   // the full sign on its seal and release keys and decaying over a few frames.
   private pulseT = 0;
   // Holds one named pose on both hands, for the capture harness.
-  debugPose: PoseName | null = null;
+  debugPose: PoseName | HandPose | null = null;
   // Orbits the view around the right hand, for judging a pose from the side or above.
   inspect: { yaw: number; pitch: number } | null = null;
 
@@ -64,11 +104,12 @@ export class Hands {
     this.rig = new ArmRig(assets.model('characters/human'));
     // The same flat skin and suit the third-person body wears, with an ink
     // hull: the player's own hands are drawn like everyone else's.
-    this.skin = toon(0xf7d9bf);
-    for (const m of this.rig.skinMeshes) m.material = this.skin;
+    const skin = toon(0xf7d9bf);
+    for (const m of this.rig.skinMeshes) m.material = skin;
     const sleeve = toon(PLAYER_SUIT, { side: THREE.DoubleSide });
     for (const m of this.rig.sleeveMeshes) m.material = sleeve;
-    addInkHulls(this.rig.object, 0.0045);
+    addInkHulls(this.rig.object, INK_WIDTH);
+    for (const arm of [this.rig.arms.r, this.rig.arms.l]) addCuff(arm, sleeve);
     this.clawMat = new THREE.MeshStandardMaterial({ color: 0xd8f4ff, roughness: 0.3, emissive: 0x9fe8ff, emissiveIntensity: 0.4 });
 
     this.rigRoot.quaternion.copy(FLIP);
@@ -78,12 +119,19 @@ export class Hands {
     this.root.add(this.rigRoot);
     for (const [side, arm] of [[1, this.rig.arms.r], [-1, this.rig.arms.l]] as const) this.hands.push({ ...handSpring(side, POSES.rest), arm, claws: this.buildClaws(arm) });
 
-    this.light = new THREE.PointLight(0xffffff, 0, 1.6, 2);
+    // The Technique's light on the hands, in front of the chest. No falloff:
+    // with it, palms sealed a hand's width from the light took hundreds of
+    // times its strength and blew out to a white shape with no form. Flat,
+    // it tints the skin through the same light bands as the key.
+    this.light = new THREE.PointLight(0xffffff, 0, 1.6, 0);
     this.light.position.set(0, -0.1, -0.35);
-    // Lit like the world: a warm key from the upper left, sky fill from above.
-    const fill = new THREE.HemisphereLight(0x9fb8e6, 0xb08a66, 1.1);
-    const key = new THREE.DirectionalLight(0xffd9a6, 2.6);
-    key.position.set(-0.7, 0.9, 0.3);
+    // Lit like the world: a warm key and sky fill. The key comes from the
+    // upper left and ahead, so it rakes across the backs of the hands and
+    // the terminator falls between the knuckles and down the fingers'
+    // sides; from behind the camera it lit every face we see the same.
+    const fill = new THREE.HemisphereLight(0x9fb8e6, 0xb08a66, 0.8);
+    const key = new THREE.DirectionalLight(0xffd9a6, 2.8);
+    key.position.set(-0.5, 0.8, -0.9);
     this.root.add(this.light, fill, key);
     scene.add(this.root);
     camera.add(this.root);
@@ -133,6 +181,7 @@ export class Hands {
 
   update(rawDt: number, player: PlayerController, cam: CameraRig, input: Input): void {
     const dtc = Math.min(rawDt, 1 / 30);
+    this.fitView();
     this.idleT += dtc;
     this.landDip *= Math.exp(-7 * dtc);
     this.jumpLift *= Math.exp(-6 * dtc);
@@ -160,7 +209,7 @@ export class Hands {
     });
     if (ended) this.onEvent?.('end');
     if (!this.playing) {
-      const base = this.debugPose ? POSES[this.debugPose] : sprinting ? POSES.sprint : this.dashT > 0 ? POSES.guard : speed > 1 ? POSES.rest : POSES.restLow;
+      const base = this.debugPose ? (typeof this.debugPose === 'string' ? POSES[this.debugPose] : this.debugPose) : sprinting ? POSES.sprint : this.dashT > 0 ? POSES.guard : speed > 1 ? POSES.rest : POSES.restLow;
       for (const h of this.hands) poseSpring(h, base, this.debugPose ? 400 : 70, this.debugPose ? 30 : 13);
     }
 
@@ -175,7 +224,7 @@ export class Hands {
 
       const twitch = this.idleTwitch.find((t) => t.side === h.side);
       this.rig.solve(h.arm, {
-        wrist: this.toModel(h.pos),
+        wrist: this.withinReach(h.arm, this.toModel(h.pos)),
         hand: FLIP.clone().multiply(h.rot),
         curl: h.curl, spread: h.spread,
         twitch: twitch ? { finger: twitch.finger, amount: Math.sin(twitch.t * 20) * 0.06 } : undefined,
@@ -192,9 +241,31 @@ export class Hands {
     const glowTarget = this.playing ? 1 : 0;
     this.glow += (glowTarget - this.glow) * (1 - Math.exp(-8 * dtc));
     this.pulseT *= Math.exp(-5 * dtc);
-    this.light.intensity = this.glow * 0.03 + this.pulseT * 2.5;
-    this.skin.emissive.copy(this.color).multiplyScalar(this.pulseT * 0.3);
+    this.light.intensity = this.glow * 0.25 + this.pulseT * 1.1;
     this.clawMat.emissiveIntensity = 0.3 + this.glow * 0.8 + this.pulseT;
+  }
+
+  // The arms are framed for a 16:9 window. A narrower window keeps that
+  // horizontal field and widens the vertical one, so the hands stay the
+  // same share of the width instead of swelling toward the middle.
+  private fitView(): void {
+    const c = this.camera;
+    const halfV = THREE.MathUtils.degToRad(VIEW.fov / 2);
+    const fov = c.aspect >= VIEW.aspect ? VIEW.fov : THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(halfV) * VIEW.aspect / c.aspect));
+    if (Math.abs(c.fov - fov) < 1e-3) return;
+    c.fov = fov;
+    c.updateProjectionMatrix();
+  }
+
+  // A wrist past arm's length locks the arm straight along the line of
+  // sight, and the near sleeve hides the hand at its end. Pulled back toward
+  // the shoulder inside the reach, the elbow keeps a bend and the forearm
+  // rises into the hand from below, so the fist or open hand sits on top.
+  // (Pulled back toward the eye instead, it swells toward the lens.)
+  private withinReach(arm: Arm, wrist: THREE.Vector3): THREE.Vector3 {
+    const max = (arm.upperLen + arm.foreLen) * VIEW.reach;
+    const d = wrist.distanceTo(arm.shoulder);
+    return d <= max ? wrist : arm.shoulder.clone().lerp(wrist, max / d);
   }
 
   // Camera space to the rig's model space (character faces +Z).

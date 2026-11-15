@@ -103,6 +103,9 @@ export class Game {
   private fpsN = 0;
   private raycaster = new THREE.Raycaster();
   private cutaway = new Map<THREE.Mesh, number>();
+  // Where the body faces, which can differ from the aim (`cam.yaw`).
+  bodyYaw = 0;
+  private aimHold = 0;
   ready = false;
 
   constructor(readonly canvas: HTMLCanvasElement) {
@@ -334,6 +337,7 @@ export class Game {
     this.cam.baseFov = s.fov;
     const look = this.input.consumeLook();
     if (this.input.hit('camera') && !this.cam.inShot) { this.setCamera(this.cam.cycleMode(), true); this.audio.play('toggle_001', 0.3); this.tutorial.notify('camera'); }
+    if (this.input.wheel && !this.cam.inShot) { const to = this.cam.zoom(-this.input.wheel); if (to) { this.setCamera(to, true); this.tutorial.notify('camera'); } }
     if (this.cam.isTop) {
       if (!this.cam.inShot) this.aimAtCursor();
     } else if (this.input.enabled && !this.cam.inShot) this.cam.look(look.x, look.y, s.sensitivity, s.invertY);
@@ -350,7 +354,13 @@ export class Game {
     const axis = this.input.axis();
     this.avatar.root.position.copy(this.player.position);
     const moving = this.player.planarSpeed.value > 0.5;
-    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.cam.yaw);
+    // Outside first person the body runs the way it goes, like a twin-stick
+    // or GTA hero, and turns back to the aim to sign, cast, and a beat after.
+    this.aimHold = this.techniques.casting || this.techniques.sign.kind !== 'idle' || this.cam.inShot || this.cam.isFirst ? 0.6 : Math.max(0, this.aimHold - raw);
+    const v = this.player.velocity;
+    if (this.aimHold > 0) this.bodyYaw = this.cam.yaw;
+    else if (moving && this.player.grounded) this.bodyYaw = Math.atan2(-v.x, -v.z);
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.bodyYaw);
     this.avatar.root.quaternion.slerp(q, 1 - Math.exp(-(moving ? 14 : 8) * raw));
     if (!this.net?.downed) this.avatar.setLocomotion(this.player.velocity, this.player.grounded, raw);
     this.avatar.setAimPitch(this.cam.isTop ? 0 : this.cam.pitch);

@@ -168,10 +168,12 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
       const q = (opts.rotX || opts.rotY || opts.rotZ) ? new THREE.Quaternion().setFromEuler(m.rotation) : undefined;
       tag(physics.staticBox(new THREE.Vector3(x, y, z), new THREE.Vector3(w / 2, h / 2, d / 2), q), opts.surface ?? 'stone');
     }
-    if (opts.occluder) onRoof(m, typeof opts.occluder === 'string' ? opts.occluder : '', true);
+    // A wall in the way stays as a faint ghost; a roof slab hides outright,
+    // since even a faint one over the whole room buries everyone under it.
+    if (opts.occluder) onRoof(m, typeof opts.occluder === 'string' ? opts.occluder : '', opts.occluder === true);
     return m;
   };
-  // A roof slab stays as a ghost when faded; the dressing on it hides outright, so nothing floats over the room below.
+  // A ghost stays faintly drawn when faded; everything else hides outright.
   const onRoof = (m: THREE.Mesh, roof: string, ghost = false): void => { m.material = (m.material as THREE.Material).clone(); m.userData.cutaway = roof; m.userData.ghost = ghost; occluders.push(m); };
   // Collision only: the tall rails that keep everyone on the roofs and inside the walls.
   const rail = (x: number, y: number, z: number, w: number, h: number, d: number): void => { physics.staticBox(new THREE.Vector3(x, y, z), new THREE.Vector3(w / 2, h / 2, d / 2)); };

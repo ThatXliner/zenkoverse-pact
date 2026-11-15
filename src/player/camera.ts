@@ -29,6 +29,13 @@ const ease = (t: number): number => t * t * (3 - 2 * t);
 const TOP_OFFSET = new THREE.Vector3(0, 17.5, 11.5);
 const TOP_FOV = 46;
 const TOP_LEAD = 0.16;
+// The scroll wheel steps the top-down view through these heights (scales of
+// TOP_OFFSET, far to near). In past the nearest it goes over the shoulder,
+// then into first person; out walks the same ladder back.
+export const TOP_ZOOMS = [1.5, 1.0, 0.66, 0.42] as const;
+const TOP_ZOOM_DEFAULT = 1;
+const ZOOM_LADDER: readonly CameraMode[] = ['top', 'third', 'first'];
+const ZOOM_REPEAT = 0.16;
 const SWITCH_SECONDS = 0.45;
 
 // Owns the gameplay camera in its three views: the top-down view with its
@@ -60,6 +67,10 @@ export class CameraRig {
   private armDist = 3.0;
   private topTarget = new THREE.Vector3();
   private topSettled = false;
+  // The top-down zoom stage, and the eased scale it snaps toward.
+  topStage = TOP_ZOOM_DEFAULT;
+  private topScale: number = TOP_ZOOMS[TOP_ZOOM_DEFAULT];
+  private zoomCool = 0;
   private shot: Shot | null = null;
   private shotT = 0;
   private tmpPos = new THREE.Vector3();
@@ -93,12 +104,33 @@ export class CameraRig {
     if (mode === this.mode) return;
     this.switchFrom = { pos: this.camera.position.clone(), quat: this.camera.quaternion.clone(), fov: this.camera.fov };
     this.switchT = 0;
+    // The cursor aim pitches down at the ground; a view the mouse turns
+    // starts level instead.
+    if (this.mode === 'top') this.pitch = -0.12;
     this.mode = mode;
     if (mode === 'top') this.pitch = 0;
   }
   // Jumps straight to `mode`, for the debug hooks.
   snap(mode: CameraMode): void { this.mode = mode; this.switchFrom = null; this.blend = mode === 'first' ? 0 : 1; this.topSettled = false; }
   cycleMode(): CameraMode { const next = CAMERA_MODES[(CAMERA_MODES.indexOf(this.mode) + 1) % CAMERA_MODES.length]!; this.setMode(next); return next; }
+
+  // One scroll notch: positive zooms in. Returns the view to switch to when
+  // the step leaves the top-down ladder, or null. Trackpads send bursts of
+  // events, so steps are spaced out.
+  zoom(dir: number): CameraMode | null {
+    if (!dir || this.zoomCool > 0) return null;
+    this.zoomCool = ZOOM_REPEAT;
+    if (this.mode === 'top') {
+      const next = this.topStage + Math.sign(dir);
+      if (next < TOP_ZOOMS.length && next >= 0) { this.topStage = next; return null; }
+      return next >= TOP_ZOOMS.length ? 'third' : null;
+    }
+    const i = ZOOM_LADDER.indexOf(this.mode) + Math.sign(dir);
+    if (i < 0 || i >= ZOOM_LADDER.length) return null;
+    // Coming back out to top-down lands on its nearest stage.
+    if (ZOOM_LADDER[i] === 'top') this.topStage = TOP_ZOOMS.length - 1;
+    return ZOOM_LADDER[i]!;
+  }
 
   play(shot: Shot): void {
     this.shot = shot;
@@ -142,6 +174,8 @@ export class CameraRig {
   get heading(): number { return this.mode === 'top' ? 0 : this.yaw; }
 
   update(rawDt: number, dt: number, playerPos: THREE.Vector3, stepCycle: number, speed: number, grounded: boolean, strafe: number, time: number): void {
+    this.zoomCool = Math.max(0, this.zoomCool - rawDt);
+    this.topScale += (TOP_ZOOMS[this.topStage]! - this.topScale) * (1 - Math.exp(-10 * rawDt));
     const targetBlend = this.mode === 'first' ? 0 : 1;
     this.blend += (targetBlend - this.blend) * (1 - Math.exp(-7 * rawDt));
     if (Math.abs(this.blend - targetBlend) < 0.002) this.blend = targetBlend;
@@ -197,7 +231,7 @@ export class CameraRig {
       if (this.aimPoint) want.lerp(new THREE.Vector3(this.aimPoint.x, playerPos.y, this.aimPoint.z), TOP_LEAD);
       if (!this.topSettled) { this.topTarget.copy(want); this.topSettled = true; }
       this.topTarget.lerp(want, 1 - Math.exp(-6 * rawDt));
-      pos.copy(this.topTarget).add(TOP_OFFSET);
+      pos.copy(this.topTarget).addScaledVector(TOP_OFFSET, this.topScale);
       const look = this.topTarget.clone().add(new THREE.Vector3(0, 1.0, 0));
       quat.setFromRotationMatrix(new THREE.Matrix4().lookAt(pos, look, new THREE.Vector3(0, 1, 0)));
       quat.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(shakePitch * 0.6, shakeYaw * 0.6, shakeRoll * 0.5, 'YXZ')));

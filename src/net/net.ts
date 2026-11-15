@@ -425,7 +425,7 @@ export class Net {
       if (now - this.lastSend >= SEND_MS - 2) {
         this.lastSend = now;
         const s = g.techniques.sign;
-        this.send({ type: 'state', s: { ct: now, p: v3(g.player.position), v: v3(g.player.velocity), yaw: Math.round(g.cam.yaw * 1000) / 1000, pitch: g.cam.isTop ? 0 : Math.round(g.cam.pitch * 1000) / 1000, g: g.player.grounded, sign: s.kind === 'signing' || g.cutscenes.sealing ? 1 : s.kind === 'primed' ? 2 : 0, cine: g.cutscenes.active, f: [Math.round(g.aura.field.radius * 100) / 100, Math.round(g.aura.field.density * 100) / 100] } });
+        this.send({ type: 'state', s: { ct: now, p: v3(g.player.position), v: v3(g.player.velocity), yaw: Math.round(g.bodyYaw * 1000) / 1000, pitch: g.cam.isTop ? 0 : Math.round(g.cam.pitch * 1000) / 1000, g: g.player.grounded, sign: s.kind === 'signing' || g.cutscenes.sealing ? 1 : s.kind === 'primed' ? 2 : 0, cine: g.cutscenes.active, f: [Math.round(g.aura.field.radius * 100) / 100, Math.round(g.aura.field.density * 100) / 100] } });
       }
     } else this.fx.take();
     this.props.update(raw);

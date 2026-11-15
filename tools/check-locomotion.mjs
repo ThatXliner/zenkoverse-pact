@@ -1,6 +1,6 @@
 // Asserts that characters move like people: in third person the player's chest
-// stays square to the body in every movement direction and the feet point
-// along the line of travel, and the sparring partners face the way they walk.
+// stays square to the body in every movement direction and the body turns so
+// the feet point along the line of travel, backward moves included, and the sparring partners face the way they walk.
 // Facing is read from the model itself (authored facing +Z, which the idle
 // stance's toes confirm), not from any yaw the code stores.
 // Usage: npm run check:locomotion -- [url] [--url http://localhost:4173/] [--port 4173]
@@ -74,7 +74,7 @@ const torso = await page.evaluate((moves) => {
       if (Math.hypot(v.x, v.z) < 1) continue;
       const t = toes(av);
       const off = Math.abs(deg(wrap(heading(t) - heading(v))));
-      feetOff.push(name.startsWith('back') ? 180 - off : off);
+      feetOff.push(off);
     }
     for (const k of keys) g.hold(k, false);
     const mean = feetOff.length ? feetOff.reduce((a, b) => a + b, 0) / feetOff.length : 0;

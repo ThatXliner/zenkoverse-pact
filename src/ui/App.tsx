@@ -185,7 +185,7 @@ function Hud({ game }: { game: Game }) {
         {drill.cue && !drill.starting && <span class="cue">{drill.cue}</span>}
         <ul>{drill.howTo.map((l) => <li>{l}</li>)}</ul>
       </div>}
-      {pl && !cut && <div class="objective" style="top:auto;bottom:calc(var(--hud-pad) + 120px);right:var(--hud-pad);border-color:#9fdfff"><span class="step">Lore plaque</span><span class="t">{pl.title}</span><span class="b">{pl.body}</span></div>}
+      {pl && !cut && <div class="objective" style="top:auto;bottom:calc(var(--hud-pad) + 120px);right:var(--hud-pad);border-color:#9fdfff"><span class="step">{pl.kicker ?? 'Lore plaque'}</span><span class="t">{pl.title}</span><span class="b">{pl.body}</span></div>}
       {!cut && <div class="toasts">{hud.toasts.value.map((t) => <div key={t.id} class={`toast ${t.tone}`}>{t.text}</div>)}</div>}
       {ban && !cine && <div class="banner" key={ban.id}><div class="big jp">{ban.big}</div><div class="small">{ban.small}</div></div>}
       {title && <CutTitle key={title.id} title={title} />}

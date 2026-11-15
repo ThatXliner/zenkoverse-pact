@@ -67,7 +67,7 @@ function clearMessages(): void {
 
 // The Architect's desk in the hall, where the Workshop can also be opened by hand.
 const ARCHITECT_DESK = new THREE.Vector3(-10, 0.3, -16.4);
-const CUTAWAY_OPACITY = 0.1;
+const CUTAWAY_OPACITY = 0.28;
 const ARCHITECT = {
   title: 'The Pact Architect',
   kicker: 'Workshop desk',

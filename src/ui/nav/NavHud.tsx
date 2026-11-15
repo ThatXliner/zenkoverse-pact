@@ -81,6 +81,8 @@ function TrackedPip({ pip }: { pip: CompassPip }) {
   );
 }
 
+// The marker in the world: the diamond, and its name once you are close.
+// The distance is read on the compass, so it is said once.
 function Marker({ view }: { view: NavView }) {
   const m = view.marker!;
   const t = view.target!;
@@ -91,7 +93,6 @@ function Marker({ view }: { view: NavView }) {
       {m.edge && <i class="arrow" style={{ transform: `rotate(${m.angle}deg) translateY(-30px)` }} />}
       {near && <span class="name">{t.title}</span>}
       <b class="gem" />
-      <span class="d">{metres(t.dist)}</span>
     </div>
   );
 }

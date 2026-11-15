@@ -1,29 +1,21 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Game } from '../app/game';
-import { hud } from '../app/game';
 import { appState, setState, pause, resume, type PauseTab } from '../app/state';
 import { settings, setSetting, type Quality, type CutscenePlay } from '../app/settings';
 import { CAMERA_MODES, CAMERA_LABEL, type CameraMode } from '../player/camera';
 import { keyLabel } from '../app/keymap';
-import { KEY_SLOTS, EXTRA_SLOTS, KIND_DEFS, slotDef, type AbilityKind, type KeySlot } from '../pacts/slots';
 import { Controls } from './Controls';
-import { KITS, techUi, type SlotLabel, type SignState } from '../techniques/techniques';
-import { MASTERY_CONFIG } from '../mastery/mastery';
+import { KITS } from '../techniques/techniques';
 import { TECHNIQUE_IDS, type TechniqueId } from '../pacts/schema';
-import { combatUi, EYES } from '../combat/combat';
-import { clashUi } from '../combat/clash';
-import { AuraMeter, ClashLayer } from './Aura';
-import { tutorialUi } from '../tutorial/tutorial';
-import { drillUi } from '../drills/drills';
-import { cutsceneUi } from '../cutscene/cutscene';
-import { blinkUi } from '../techniques/kits/blink';
+import { EYES } from '../combat/combat';
 import { Workshop } from '../workshop/Workshop';
 import { RooftopLayer } from '../rooftop/RooftopUi';
-import { NavHud } from './nav/NavHud';
 import { NavMap } from './nav/NavMap';
-import { TopLeft } from './nav/TopLeft';
-import { OnlineHud, OnlineJoin, OnlineMenu } from './Online';
+import { OnlineJoin, OnlineMenu } from './Online';
 import { roomFromUrl } from '../net/net';
+import { Hud } from './hud/Hud';
+import { Status } from './Status';
+import { useSheetKeys } from './useSheetKeys';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -61,17 +53,20 @@ function Title({ game }: { game: Game }) {
   const [rooftop, setRooftop] = useState(false);
   const [tech, setTech] = useState<TechniqueId>(game.techniqueId);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter' && !select) { setRooftop(false); setOnline(false); setSelect(true); } };
+    // Enter begins from anywhere on the title; on a focused button the button decides.
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter' && !select && !(e.target instanceof HTMLButtonElement)) { setRooftop(false); setOnline(false); setSelect(true); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [select]);
+  const root = useRef<HTMLDivElement>(null);
+  useSheetKeys(root, { focusKey: select });
   if (select) {
     return (
-      <div class="select">
+      <div class="select" ref={root}>
         <div><div class="kicker">Choose your Technique</div><h2>生まれ持った技</h2></div>
-        <div class="cards">
+        <div class="cards" data-row>
           {TECHNIQUE_IDS.map((id) => { const k = KITS[id]; return (
-            <button key={id} class={`card ${tech === id ? 'active' : ''}`} data-glyph={k.glyph} style={{ '--c': hex(k.color) } as never} onClick={() => { setTech(id); game.setTechnique(id); game.audio.play('select_001', 0.4); }} onDblClick={() => { game.setTechnique(id); if (online) return; if (rooftop) game.rooftop.begin(); else game.startRun(); }}>
+            <button key={id} class={`card ${tech === id ? 'active' : ''}`} data-autofocus={tech === id ? '' : undefined} data-glyph={k.glyph} style={{ '--c': hex(k.color) } as never} onClick={() => { setTech(id); game.setTechnique(id); game.audio.play('select_001', 0.4); }} onDblClick={() => { game.setTechnique(id); if (online) return; if (rooftop) game.rooftop.begin(); else game.startRun(); }}>
               <span class="type">{k.type}</span><h3>{k.name}</h3><p>{k.blurb}</p><span class="res">Resource · {k.resource.name}</span>
             </button>); })}
         </div>
@@ -95,213 +90,25 @@ function Title({ game }: { game: Game }) {
     );
   }
   return (
-    <div class="title">
+    <div class="title" ref={root}>
       <div class="title-brand">
         <div class="kicker">The Zenkoverse power system</div>
         <div class="jp-big">契<em>約</em></div>
         <div class="sub">A dojo at dusk, one Technique, and the Pacts you write to shape it. Every ability is a sacrifice the universe reads back to you.</div>
         <div class="menu" style="margin-top:18px">
-          <button onClick={() => { setRooftop(false); setOnline(false); setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Begin</button>
+          <button data-autofocus onClick={() => { setRooftop(false); setOnline(false); setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Begin</button>
           <button onClick={() => { setRooftop(false); setOnline(true); setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Play Online</button>
           <button onClick={() => { setRooftop(true); setOnline(false); setSelect(true); game.audio.resumeContext(); game.audio.play('open_001', 0.4); }}>Rooftop</button>
           <button onClick={() => { game.audio.resumeContext(); pause('settings'); setState({ kind: 'paused', resume: { kind: 'title' }, tab: 'settings' }); }}>Settings</button>
           <button onClick={() => setState({ kind: 'paused', resume: { kind: 'title' }, tab: 'codex' })}>Codex</button>
         </div>
       </div>
-      <div class="title-foot"><span>Enter to begin · The cursor aims once inside</span><span>v0.3 · proof of concept</span></div>
-    </div>
-  );
-}
-
-function Meter({ label, value, color, cls, text }: { label: string; value: number; color?: string; cls?: string; text?: string }) {
-  return (
-    <div class={`meter ${cls ?? ''}`} style={color ? ({ '--c': color } as never) : undefined}>
-      <span class="lbl">{label}</span><span class="val">{text ?? Math.round(value * 100)}</span>
-      <div class="track"><i style={{ width: `${Math.max(0, Math.min(100, value * 100))}%` }} /></div>
-    </div>
-  );
-}
-
-function Hud({ game }: { game: Game }) {
-  const kit = KITS[game.techniqueId];
-  const c = hex(kit.color);
-  const slots = techUi.slots.value;
-  const cd = techUi.cooldowns.value;
-  const glyphs: Record<AbilityKind, string> = { primary: kit.glyph, secondary: '構', max: '全' };
-  const prompt = hud.prompt.value;
-  const ban = hud.banner.value;
-  const tut = tutorialUi.step.value;
-  const drill = drillUi.active.value;
-  const boss = combatUi.boss.value;
-  const cine = cutsceneUi.active.value;
-  // A Maximum Output cutscene or an Aura Clash: the HUD steps aside.
-  const cut = cine || clashUi.value !== null;
-  const title = cutsceneUi.title.value;
-  const hurt = hud.hurt.value;
-  const [flash, setFlash] = useState(false);
-  useEffect(() => { if (!hurt) return; setFlash(true); const t = setTimeout(() => setFlash(false), 220); return () => clearTimeout(t); }, [hurt]);
-  const view = hud.camera.value;
-  const third = view !== 'first';
-  const blind = blinkUi.blind.value;
-  const pl = hud.plaque.value;
-  const root = useRef<HTMLDivElement>(null);
-  useBottomBand(root, cut);
-  return (
-    <div ref={root} class={`hud ${cine ? 'letterbox' : ''}`} style={{ '--c': c } as never}>
-      <div class={`damage ${flash ? 'hit' : ''}`} />
-      {blind > 0 && !cine && <div style={{ position: 'absolute', inset: 0, background: '#000', opacity: Math.min(1, blind / 1.5) }} />}
-      {!cut && view !== 'top' && <div class={`reticle ${techUi.cooldowns.value.primary > 0 ? 'hot' : ''} ${third ? 'third' : ''}`} />}
-      {!cut && view === 'top' && <Cursor hot={techUi.cooldowns.value.primary > 0} />}
-      {!cut && (
-        <div class="vitals">
-          <Meter label="Health" value={combatUi.hp.value} />
-          <Meter label={kit.resource.name} value={techUi.resource.value} color={c} cls="resource" />
-          {techUi.strain.value > 0.02 && <Meter label="Strain" value={techUi.strain.value} cls="strain" />}
-          <AuraMeter />
-        </div>
-      )}
-      {!cut && (
-        <div class={`abilities ${techUi.sign.value.kind}`}>
-          <SignRing sign={techUi.sign.value} />
-          <div class="xs" role="group" aria-label="Extra Abilities">
-            {EXTRA_SLOTS.map((s) => <Extra key={s} slot={s} label={slots[s]} glyph={glyphs[slots[s].kind ?? 'primary']} cd={cooldownOf(s, slots[s].kind, cd)} />)}
-          </div>
-          <div class="mains">
-            {MAIN_SLOTS.map((s) => { const r = cooldownOf(s, slots[s].kind, cd); return <Ability key={s} slot={s} label={slots[s]} glyph={glyphs[slots[s].kind!]} cd={r.cd} ready={r.ready} />; })}
-          </div>
-        </div>
-      )}
-      {!cut && <NavHud />}
-      {!cut && <TopLeft game={game} />}
-      {game.net && !cine && <OnlineHud game={game} />}
-      {combatUi.wagerArmed.value && !cut && <div class="wager-arm">WAGER DECLARED · THE NEXT STRIKE CONNECTS</div>}
-      <ClashLayer game={game} />
-      {boss && !cut && <div class="boss" style={{ '--c': hex(boss.color) } as never}><span class="n">{boss.name}</span><div class="track"><i style={{ width: `${boss.frac * 100}%` }} /></div></div>}
-      {prompt && !cut && <div class="prompt"><kbd>{keyLabel('interact')}</kbd><span>{prompt.text}</span></div>}
-      {tut && !cut && !drill && <div class="objective"><span class="step">Tutorial {tut.index} / {tut.total} · {tut.jp}</span><span class="t">{tut.title}</span><span class="b">{tut.body()}</span><span class="step">{keyLabel('pause')} pauses · Skip tutorial is in the pause menu</span></div>}
-      {drill && !cut && <div class="drill-hud">
-        <span class="s">{drill.jp} · {drill.title} · {drill.tier}</span>
-        <span class="big">{drill.score} / {drill.needed}<small>{drill.left} left</small></span>
-        {(drill.cue || drill.waiting) && <span class="cue">{drill.waiting ? `Press ${keyLabel('interact')} when ready` : drill.cue}</span>}
-        <ul>{drill.howTo.map((l) => <li>{l}</li>)}</ul>
-      </div>}
-      {pl && !cut && <div class="objective" style="top:auto;bottom:calc(var(--hud-pad) + 120px);right:var(--hud-pad);border-color:#9fdfff"><span class="step">{pl.kicker ?? 'Lore plaque'}</span><span class="t">{pl.title}</span><span class="b">{pl.body}</span></div>}
-      {!cut && <div class="toasts">{hud.toasts.value.map((t) => <div key={t.id} class={`toast ${t.tone}`}>{t.text}</div>)}</div>}
-      {ban && !cine && <div class="banner" key={ban.id}><div class="big jp">{ban.big}</div><div class="small">{ban.small}</div></div>}
-      {title && <CutTitle key={title.id} title={title} />}
-      {cine && <div class="skip">{keyLabel('jump').toUpperCase()} · SKIP</div>}
-      <div style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none">
-        {combatUi.numbers.value.map((n) => n.word
-          ? <span key={n.id} class={`sfx-word${n.big ? ' big' : ''}`} style={{ left: `${n.x}%`, top: `${n.y}%`, '--tilt': `${n.tilt}deg`, '--word-color': n.color }}>{n.text}</span>
-          : <span key={n.id} class={`dmg-num${n.big ? ' big' : ''}`} style={{ left: `${n.x}%`, top: `${n.y}%`, color: n.color }}>{n.text}</span>)}
-      </div>
+      <div class="title-foot"><span>↑ ↓ choose · Enter to begin · The cursor aims once inside</span><span>v0.3 · proof of concept</span></div>
     </div>
   );
 }
 
 const CUTSCENE_LABEL: Record<CutscenePlay, string> = { always: 'Always', first: 'First time', never: 'Never' };
-
-// The Maximum Output name card, as a fighting game's ultimate: a slash of
-// the Output's colour cuts across the frame, speed lines rake it, the name
-// slams in huge and slanted with the kanji stamped behind it, and the whole
-// card shears away. The keyframes are in styles.css under "Cutscene title".
-function CutTitle({ title }: { title: NonNullable<typeof cutsceneUi.title.value> }) {
-  return (
-    <div class="cut-title" style={{ '--c': hex(title.color) } as never} aria-live="polite">
-      <div class="slash" />
-      <div class="lines" />
-      <div class="kanji jp">{title.jp}</div>
-      <div class="name">
-        <span class="sub">{title.sub}</span>
-        <span class="en">{title.en}</span>
-      </div>
-    </div>
-  );
-}
-
-const MAIN_SLOTS = KEY_SLOTS.filter((s) => slotDef(s).raw !== null);
-
-// How tall the bottom corners stand (the vitals on the left, the Ability
-// cards on the right), as --bottom-band on the HUD. The interact prompt sits
-// above it: at 1280 wide the extra Ability row reaches past the middle of
-// the screen, and on a narrow screen both corners do.
-function useBottomBand(root: { current: HTMLDivElement | null }, cut: boolean): void {
-  useEffect(() => {
-    const el = root.current;
-    if (!el || cut) return;
-    const corners = [...el.querySelectorAll<HTMLElement>(':scope > .vitals, :scope > .abilities')];
-    const measure = () => el.style.setProperty('--bottom-band', `${Math.max(0, ...corners.map((c) => c.offsetHeight))}px`);
-    const watch = new ResizeObserver(measure);
-    for (const c of corners) watch.observe(c);
-    measure();
-    return () => watch.disconnect();
-  }, [cut]);
-}
-
-// The top-down aim: a ring that rides the mouse. It is drawn here, not as a
-// CSS cursor, so it can take the Technique's colour and swell on a cast.
-function Cursor({ hot }: { hot: boolean }) {
-  const [at, setAt] = useState({ x: -100, y: -100 });
-  useEffect(() => {
-    const on = (e: MouseEvent) => setAt({ x: e.clientX, y: e.clientY });
-    window.addEventListener('mousemove', on);
-    return () => window.removeEventListener('mousemove', on);
-  }, []);
-  return <div class={`cursor ${hot ? 'hot' : ''}`} style={{ left: `${at.x}px`, top: `${at.y}px` }} />;
-}
-
-// The full sign above the cards: a ring that fills while the sign plays,
-// then drains over the primed window while the label reads the time left.
-const RING = 2 * Math.PI * 20;
-function SignRing({ sign }: { sign: SignState }) {
-  if (sign.kind === 'idle') return null;
-  const signing = sign.kind === 'signing';
-  const fill = sign.kind === 'signing' ? sign.t / sign.duration : sign.left / MASTERY_CONFIG.sign.window;
-  return (
-    <div class={`sign ${sign.kind}`} data-sign={sign.kind}>
-      <div class="txt">
-        <span class="k">{signing ? 'Full sign' : 'Primed'}</span>
-        <span class="v">{signing ? 'committed' : `${Math.max(0, sign.left).toFixed(1)} s`}</span>
-      </div>
-      <div class="ring">
-        <svg viewBox="0 0 48 48" aria-hidden="true"><circle class="trk" cx="24" cy="24" r="20" /><circle class="arc" cx="24" cy="24" r="20" style={{ strokeDasharray: RING, strokeDashoffset: RING * (1 - Math.max(0, Math.min(1, fill))) }} /></svg>
-        <span class="glyph">印</span>
-      </div>
-    </div>
-  );
-}
-
-// How far a slot is from ready: Maximum Output waits on the charge ring, the
-// rest on their cooldown. `cd` is the share still to wait.
-function cooldownOf(slot: KeySlot, kind: AbilityKind | null, cooldowns: Record<KeySlot, number>): { cd: number; ready: boolean } {
-  if (kind === 'max') return { cd: 1 - techUi.charge.value, ready: techUi.charge.value >= 1 };
-  return { cd: kind ? cooldowns[slot] / KIND_DEFS[kind].cooldown : 0, ready: kind !== null && cooldowns[slot] <= 0 };
-}
-
-// The compact cell for an extra slot: key, glyph, name. An empty slot shows
-// its key and stays dim.
-function Extra({ slot, label, glyph, cd }: { slot: KeySlot; label: SlotLabel; glyph: string; cd: { cd: number; ready: boolean } }) {
-  return (
-    <div class={`x ${label.empty ? 'empty' : ''} ${cd.ready && !label.empty ? 'ready' : ''} ${label.preview ? 'preview' : ''}`} data-slot={slot}>
-      <kbd>{keyLabel(slot)}</kbd>
-      <div class="box"><span class="glyph">{label.empty ? '' : glyph}</span><div class="cool" style={{ height: `${Math.max(0, Math.min(1, cd.cd)) * 100}%` }} /></div>
-      <span class="name">{label.empty ? 'Empty' : label.name}</span>
-    </div>
-  );
-}
-
-function Ability({ slot, label, glyph, cd, ready }: { slot: KeySlot; label: SlotLabel; glyph: string; cd: number; ready: boolean }) {
-  return (
-    <div class={`ab ${ready ? 'ready' : ''} ${label.kind === 'max' ? 'max' : ''} ${label.preview ? 'preview' : ''}`} data-slot={slot}>
-      <div class="box"><span class="glyph">{glyph}</span><div class="cool" style={{ height: `${Math.max(0, Math.min(1, cd)) * 100}%` }} /></div>
-      <div class="txt">
-        <span class="key">{keyLabel(slot)}{label.preview ? ' · trying a draft' : ''}</span>
-        <span class="name">{label.name}</span>
-        <span class="what">{label.what}</span>
-      </div>
-    </div>
-  );
-}
 
 const CODEX: { id: string; title: string; jp: string; body: string | (() => string); after?: string }[] = [
   { id: 'technique', title: 'Technique', jp: '技', body: 'A person\'s underlying, unique supernatural capability. Everyone has one, usually exactly one. Most are weak, narrow, or useful only outside combat. A Technique is refined by training and shaped by Pacts.' },
@@ -318,6 +125,8 @@ const CODEX: { id: string; title: string; jp: string; body: string | (() => stri
   { id: 'views', title: 'Camera', jp: '視点', body: () => `${keyLabel('camera')} cycles the view. Top-down: you move with the screen and aim with the cursor. Over the shoulder: the camera follows the mouse and you aim at the crosshair. First person: the sign is in your own hands.` },
 ];
 
+const TAB_JP: Record<PauseTab, string> = { menu: '一時停止', settings: '設定', controls: '操作', codex: '事典', map: '地図' };
+
 function Pause({ game, tab }: { game: Game; tab: PauseTab }) {
   const s = settings.value;
   const [entry, setEntry] = useState(CODEX[0]!.id);
@@ -325,23 +134,34 @@ function Pause({ game, tab }: { game: Game; tab: PauseTab }) {
   const fromTitle = st.kind === 'paused' && st.resume.kind === 'title';
   const back = () => { if (fromTitle) setState({ kind: 'title' }); else { resume(); game.requestLock(); } };
   const tabs = fromTitle ? (['settings', 'controls', 'codex'] as const) : (['menu', 'settings', 'controls', 'codex', 'map'] as const);
+  const go = (t: PauseTab) => { if (st.kind === 'paused') setState({ ...st, tab: t }); };
+  const step = (d: number) => { const i = (tabs as readonly PauseTab[]).indexOf(tab); go(tabs[(i + d + tabs.length) % tabs.length]!); };
+  const root = useRef<HTMLDivElement>(null);
+  useSheetKeys(root, { tabs: { prev: () => step(-1), next: () => step(1) }, focusKey: tab });
   return (
     <div class="sheet-wrap">
-      <div class="sheet" role="dialog" aria-label="Menu">
+      <div class="sheet pause-sheet" role="dialog" aria-label="Menu" ref={root}>
         <header>
-          <div><div class="kicker">{fromTitle ? 'Title' : game.net ? 'Menu · the room keeps going' : 'Paused'}</div><h2>{tab === 'menu' ? '一時停止' : tab === 'settings' ? '設定' : tab === 'controls' ? '操作' : tab === 'codex' ? '事典' : '地図'}</h2></div>
-          <div class="tabs" role="tablist">{tabs.map((t) => <button key={t} role="tab" class={tab === t ? 'on' : ''} onClick={() => setState({ ...(st as Extract<typeof st, { kind: 'paused' }>), tab: t })}>{t}</button>)}</div>
+          <div class="title-block"><div class="kicker">{fromTitle ? 'Title' : game.net ? 'Menu · the room keeps going' : 'Paused'}</div><h2 class="brush" key={tab}>{TAB_JP[tab]}</h2></div>
+          <div class="tabs" role="tablist" aria-label="Menu pages">
+            <kbd class="shoulder" aria-hidden="true">Q</kbd>
+            {tabs.map((t) => <button key={t} role="tab" aria-selected={tab === t} class={tab === t ? 'on' : ''} onClick={() => go(t)}>{t}</button>)}
+            <kbd class="shoulder" aria-hidden="true">E</kbd>
+          </div>
         </header>
-        <div class="body">
+        <div class="body" key={tab}>
           {tab === 'menu' && game.net && <OnlineMenu game={game} back={back} />}
           {tab === 'menu' && !game.net && (
-            <div class="pause-menu">
-              <button onClick={back}>Resume</button>
-              <button onClick={() => { resume(); game.tutorial.skip(); game.requestLock(); }}>Skip tutorial</button>
-              <button onClick={() => { resume(); game.startRun(); }}>Replay tutorial</button>
-              {st.kind === 'paused' && st.resume.kind === 'rooftop' && <button onClick={() => game.rooftop.abandon()}>Leave the rooftop</button>}
-              <button onClick={() => { game.rooftop.abandon(); game.book.resetAll(); game.mastery.reset(); setState({ kind: 'title' }); }}>Reset Pacts and mastery</button>
-              <button onClick={() => { game.rooftop.abandon(); setState({ kind: 'title' }); }}>Quit to title</button>
+            <div class="pause-main">
+              <div class="pause-menu">
+                <button data-autofocus onClick={back}>Resume</button>
+                <button onClick={() => { resume(); game.tutorial.skip(); game.requestLock(); }}>Skip tutorial</button>
+                <button onClick={() => { resume(); game.startRun(); }}>Replay tutorial</button>
+                {st.kind === 'paused' && st.resume.kind === 'rooftop' && <button onClick={() => game.rooftop.abandon()}>Leave the rooftop</button>}
+                <button onClick={() => { game.rooftop.abandon(); game.book.resetAll(); game.mastery.reset(); setState({ kind: 'title' }); }}>Reset Pacts and mastery</button>
+                <button onClick={() => { game.rooftop.abandon(); setState({ kind: 'title' }); }}>Quit to title</button>
+              </div>
+              <Status game={game} />
             </div>
           )}
           {tab === 'settings' && (
@@ -353,20 +173,29 @@ function Pause({ game, tab }: { game: Game; tab: PauseTab }) {
               <div class="row"><label>Quality</label><Seg value={s.quality} options={['low', 'medium', 'high']} onChange={(v) => { setSetting('quality', v as Quality); game.renderer.setQuality(v as Quality); }} /><span /></div>
               <div class="row"><label>Camera</label><Seg value={s.camera} options={CAMERA_MODES} labels={CAMERA_LABEL} onChange={(v) => game.setCamera(v as CameraMode)} /><span /></div>
               <div class="row"><label>Invert Y</label><Seg value={s.invertY ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('invertY', v === 'on')} /><span /></div>
-              <div class="row"><label>Mastery numbers</label><Seg value={s.showMastery ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('showMastery', v === 'on')} /><span /></div>
+              <div class="row"><label>Key hints when idle</label><Seg value={s.keyHints ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('keyHints', v === 'on')} /><span /></div>
               <div class="row"><label>Max Output cutscenes</label><Seg value={s.cutscenes} options={['always', 'first', 'never']} labels={CUTSCENE_LABEL} onChange={(v) => setSetting('cutscenes', v as CutscenePlay)} /><span /></div>
             </div>
           )}
           {tab === 'controls' && <Controls />}
           {tab === 'codex' && (
             <div class="codex">
-              <nav>{CODEX.map((c) => <button key={c.id} class={entry === c.id ? 'on' : ''} onClick={() => setEntry(c.id)}>{c.jp} · {c.title}</button>)}</nav>
-              <article>{(() => { const c = CODEX.find((x) => x.id === entry)!; return <><h3>{c.jp} · {c.title}</h3><p>{typeof c.body === 'string' ? c.body : c.body()}</p>{Object.values(EYES).length && c.id === 'eyes' && <p class="locked">{Object.values(EYES).map((e) => `${e.jp} ${e.name}`).join(' · ')}</p>}</>; })()}</article>
+              <nav>{CODEX.map((c) => <button key={c.id} class={entry === c.id ? 'on' : ''} onClick={() => setEntry(c.id)} onFocus={() => setEntry(c.id)}><span class="jp">{c.jp}</span> {c.title}</button>)}</nav>
+              <article key={entry}>{(() => { const c = CODEX.find((x) => x.id === entry)!; return <><h3><span class="jp brush">{c.jp}</span> {c.title}</h3><p>{typeof c.body === 'string' ? c.body : c.body()}</p>{Object.values(EYES).length && c.id === 'eyes' && <p class="locked">{Object.values(EYES).map((e) => `${e.jp} ${e.name}`).join(' · ')}</p>}</>; })()}</article>
             </div>
           )}
           {tab === 'map' && <NavMap game={game} />}
         </div>
-        <footer><div class="kbd-hint"><span><kbd>{keyLabel('pause')}</kbd> resume</span><span><kbd>{keyLabel('workshop')}</kbd> workshop</span><span><kbd>{keyLabel('map')}</kbd> map</span></div><button class="btn" onClick={back}>{fromTitle ? 'Back' : 'Resume'}</button></footer>
+        <footer>
+          <div class="kbd-hint">
+            <span><kbd>↑</kbd><kbd>↓</kbd> choose</span>
+            <span><kbd>Enter</kbd> press</span>
+            <span><kbd>{keyLabel('pause')}</kbd> {fromTitle ? 'back' : 'resume'}</span>
+            {!fromTitle && <span><kbd>{keyLabel('workshop')}</kbd> workshop</span>}
+            {!fromTitle && <span><kbd>{keyLabel('map')}</kbd> map</span>}
+          </div>
+          <button class="btn" onClick={back}>{fromTitle ? 'Back' : 'Resume'}</button>
+        </footer>
       </div>
     </div>
   );

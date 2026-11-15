@@ -357,6 +357,9 @@ const tBack = Date.now();
 while (Date.now() - tBack < 4000 * slack && await isAway()) await wait(100);
 check(!(await isAway()), "B is back for A once B's tab shows again");
 check(await B.api((g) => g.game.clock.time) > clockHidden, "B's game runs again");
+// The blow on the hidden B may have downed it; let it respawn before it walks.
+await until(B, (v) => v.hp >= 100, 8000 * slack);
+await wait(400 * slack);
 await walk(B, A, 'KeyA', 'B walks again after the background, A watches');
 await walk(A, B, 'KeyD', 'A walks, B watches after the background');
 {

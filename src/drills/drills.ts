@@ -6,17 +6,23 @@ import { toast, banner } from '../app/game';
 import type { TechniqueId } from '../pacts/schema';
 import type { MasteryStat } from '../mastery/mastery';
 import type { PropInstance } from '../world/props';
+import type { Enemy } from '../combat/enemies';
 
 // A drill is data: where it lives, what it trains, and its tiers. Tiers are
 // skill gates (issue #17): the next unlocks when the current is executed.
 // A drill hands out items at a rhythm (a crate to catch, a tell to answer),
 // and each item scores once when it is decided.
-export interface DrillTier { name: string; count: number; interval: number; pass: number; gains: Partial<Record<MasteryStat, number>>; dropHeight?: number; window?: number }
+// A tier pays in `gains` (added, with diminishing returns) or `raises` (the
+// stat stands at least that high once the tier is cleared, and clearing it
+// again adds nothing).
+export interface DrillTier { name: string; count: number; interval: number; pass: number; gains?: Partial<Record<MasteryStat, number>>; raises?: Partial<Record<MasteryStat, number>>; dropHeight?: number; window?: number }
 export interface DrillItem {
   // Points once the item is decided, null while it is still live.
   update(dt: number): number | null;
   // A Technique acted on a prop: the item's points, or null when it is not about this item.
   notify?(prop: PropInstance, event: 'caught' | 'absorbed'): number | null;
+  // A blow of the player's landed on a body: the item's points, or null when it is not about this item.
+  struck?(e: Enemy, damage: number): number | null;
   // Anything the item drew, for when the drill ends early.
   dispose?(): void;
 }
@@ -24,12 +30,15 @@ export interface DrillDef {
   id: DrillId;
   // The Technique it trains, or null for one any Technique can run (aura).
   technique: TechniqueId | null;
+  // A drill any Technique runs can keep its tiers per Technique, so each
+  // climbs them on its own.
+  tiersPerTechnique?: boolean;
   title: string;
   jp: string;
   brief: string;
   // The rules as short lines for the drill panel, shown for the whole drill.
   // Read when the panel renders, so they name the keys as bound now.
-  howTo?: () => string[];
+  howTo?: (tier: DrillTier) => string[];
   // A line under the score while the drill runs, if the drill has one.
   cue?: () => string;
   position: [number, number, number];
@@ -62,13 +71,17 @@ export class Drills {
   // The Technique a drill's gains go to: its own, or the one in hand.
   private trains(def: DrillDef): TechniqueId { return def.technique ?? this.game.techniqueId; }
 
+  // Where a drill's reached tier is kept.
+  private key(def: DrillDef): string { return def.tiersPerTechnique ? `${def.id}:${this.game.techniqueId}` : def.id; }
+  reached(id: DrillId): number { const d = this.defs.get(id); return d ? this.progress[this.key(d)] ?? 0 : 0; }
+
   interactable(p: THREE.Vector3): { text: string; act: () => void } | null {
     if (this.current) return null;
     for (const d of this.defs.values()) {
       if (d.technique && d.technique !== this.game.techniqueId) continue;
       const pos = new THREE.Vector3(...d.position);
       if (pos.distanceTo(p) < 3) {
-        const tier = Math.min(this.progress[d.id] ?? 0, d.tiers.length - 1);
+        const tier = Math.min(this.progress[this.key(d)] ?? 0, d.tiers.length - 1);
         return { text: `Begin drill: ${d.title} (${d.tiers[tier]!.name})`, act: () => this.begin(d.id) };
       }
     }
@@ -80,7 +93,7 @@ export class Drills {
   begin(id: DrillId, ready = false): void {
     const def = this.defs.get(id);
     if (!def || this.current) return;
-    const tier = Math.min(this.progress[id] ?? 0, def.tiers.length - 1);
+    const tier = Math.min(this.progress[this.key(def)] ?? 0, def.tiers.length - 1);
     const st = appState.value;
     this.current = { def, tier, score: 0, spawned: 0, timer: FIRST_ITEM, live: [], resume: st.kind === 'tutorial' ? 'tutorial' : 'explore', waiting: !ready, armed: false };
     setState({ kind: 'drill', id });
@@ -93,7 +106,7 @@ export class Drills {
     const c = this.current;
     if (!c) { drillUi.active.value = null; return; }
     const t = c.def.tiers[c.tier]!;
-    drillUi.active.value = { title: c.def.title, jp: c.def.jp, tier: t.name, score: c.score, needed: t.pass, left: t.count - c.spawned + c.live.length, best: this.progress[c.def.id] ?? 0, cue: c.def.cue?.() ?? '', howTo: c.def.howTo?.() ?? [c.def.brief], waiting: c.waiting };
+    drillUi.active.value = { title: c.def.title, jp: c.def.jp, tier: t.name, score: c.score, needed: t.pass, left: t.count - c.spawned + c.live.length, best: this.progress[this.key(c.def)] ?? 0, cue: c.def.cue?.() ?? '', howTo: c.def.howTo?.(t) ?? [c.def.brief], waiting: c.waiting };
   }
 
   // Kits call this when a Technique acts on a prop, so the drill can score it.
@@ -102,6 +115,19 @@ export class Drills {
     if (!c) return;
     for (let i = 0; i < c.live.length; i++) {
       const pts = c.live[i]!.notify?.(prop, event);
+      if (pts === null || pts === undefined) continue;
+      c.live.splice(i, 1);
+      this.score(pts);
+      return;
+    }
+  }
+
+  // Combat calls this for every blow the player lands on a body.
+  struck(e: Enemy, damage: number): void {
+    const c = this.current;
+    if (!c || c.waiting) return;
+    for (let i = 0; i < c.live.length; i++) {
+      const pts = c.live[i]!.struck?.(e, damage);
       if (pts === null || pts === undefined) continue;
       c.live.splice(i, 1);
       this.score(pts);
@@ -161,9 +187,11 @@ export class Drills {
     const passed = c.score >= t.pass;
     c.def.end?.(g);
     if (passed) {
-      for (const [stat, amt] of Object.entries(t.gains) as [MasteryStat, number][]) g.mastery.gain(this.trains(c.def), stat, amt);
+      for (const [stat, amt] of Object.entries(t.gains ?? {}) as [MasteryStat, number][]) g.mastery.gain(this.trains(c.def), stat, amt);
+      for (const [stat, level] of Object.entries(t.raises ?? {}) as [MasteryStat, number][]) g.mastery.raiseTo(this.trains(c.def), stat, level);
       g.mastery.addStrain(0.12);
-      if (c.tier === (this.progress[c.def.id] ?? 0) && c.tier < c.def.tiers.length - 1) this.progress[c.def.id] = c.tier + 1;
+      const key = this.key(c.def);
+      if (c.tier === (this.progress[key] ?? 0) && c.tier < c.def.tiers.length - 1) this.progress[key] = c.tier + 1;
       banner('合格', `${t.name} cleared. Mastery grows.`);
       g.audio.play('drill.tier');
     } else {
@@ -171,7 +199,7 @@ export class Drills {
       g.audio.play('drill.fail');
     }
     try { localStorage.setItem(KEY, JSON.stringify(this.progress)); } catch { /* */ }
-    g.tutorial.notify(passed ? 'drill-passed' : 'drill-failed');
+    g.tutorial.notify(`${passed ? 'drill-passed' : 'drill-failed'}:${c.def.id}`);
     this.current = null;
     drillUi.active.value = null;
     setState({ kind: c.resume === 'tutorial' ? 'tutorial' : 'explore', ...(c.resume === 'tutorial' ? { step: g.tutorial.stepId } : {}) } as never);

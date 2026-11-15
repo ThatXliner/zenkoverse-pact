@@ -97,7 +97,7 @@ function Vitals({ game }: { game: Game }) {
   const calm = hp >= 0.999 && strain <= 0.02 && field.state === 'ready' && !busy && !field.guardBroken;
   return (
     <div class={`vitals ${calm ? 'calm' : ''}`}>
-      <Meter label="Health" jp="体" value={hp} cls={hp < 0.3 ? 'health low' : 'health'} />
+      <Meter label="Health" jp="体" value={hp} cls={`health${hp < 0.3 ? ' low' : ''}${combatUi.mending.value ? ' mend' : ''}`} />
       <Meter label={kit.resource.name} jp={kit.glyph} value={techUi.resource.value} color={hex(kit.color)} cls="resource" />
       {strain > 0.02 && <Meter label="Strain" jp="疲" value={strain} cls="strain" />}
       <AuraMeter />

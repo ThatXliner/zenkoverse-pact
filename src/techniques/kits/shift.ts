@@ -127,7 +127,7 @@ export const shift: TechniqueKit = {
         g.vfx.ring(dest.clone().add(new THREE.Vector3(0, 1, 0)), COLOR, 1.6, 0.2, 0.3, flat);
         g.vfx.flash(dest.clone().add(new THREE.Vector3(0, 1.4, 0)), COLOR, 30, 0.3, 10);
         g.audio.play('shift.translate');
-        g.mastery.gain('shift', 'range', 0.004);
+        g.mastery.gainPassive('shift', 'range', 0.004);
         g.tutorial.notify('shifted');
         return { hits, cameraKick: { fov: 12, roll: 0.04 }, hitStop: hits ? 0.04 : 0 };
       }

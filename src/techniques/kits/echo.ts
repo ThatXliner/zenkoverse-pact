@@ -88,7 +88,7 @@ export const echo: TechniqueKit = {
         if (allow.props) for (const p of propsInCone(g, ctx.origin, ctx.dir, range, 0.55)) { if (p.def.traits.includes('resonant')) { echo.traits.resonant!(p, ctx); hits++; } else g.props.push(p, ctx.dir.clone().multiplyScalar(p.def.mass * 1.5)); }
         for (let i = 1; i <= 4; i++) g.vfx.after(i * 0.04, () => g.vfx.ring(ctx.origin.clone().addScaledVector(ctx.dir, i * range / 4), COLOR, 0.4, 1.2 + i * 0.6, 0.3, ctx.dir));
         g.audio.play('echo.ring');
-        g.mastery.gain('echo', 'precision', 0.003);
+        g.mastery.gainPassive('echo', 'precision', 0.003);
         return { hits, hitStop: hits ? 0.03 : 0, cameraKick: { fov: 4 } };
       }
       if (ctx.shape === 'quiet') { quiet = true; return { cameraKick: { fov: -4 } }; }

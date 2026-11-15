@@ -108,6 +108,10 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
   // screen can settle what it predicted.
   function damage(room, target, amount, by) {
     if (target.down) return;
+    // Both sides of a blow are fighting, so neither regenerates for a while.
+    const now = Date.now();
+    target.foughtAt = now;
+    if (by) by.foughtAt = now;
     target.hp = Math.max(0, target.hp - amount);
     broadcast(room, { type: 'hp', id: target.id, hp: Math.round(target.hp * 10) / 10, by: by?.id ?? null, amount: Math.round(amount * 10) / 10 });
     if (target.hp > 0) return;
@@ -122,6 +126,19 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
     broadcast(room, { type: 'down', id: target.id, by: by && by !== target ? by.id : null });
     broadcast(room, { type: 'info', player: info(target) });
     if (by && by !== target) broadcast(room, { type: 'info', player: info(by) });
+  }
+
+  // Out-of-combat regen, the same rule the game runs offline: after
+  // rules.regen.quietSeconds with no blow dealt or taken, health climbs at up
+  // to perSecond, reached over rampSeconds. Not while down, in a clash or in
+  // a Maximum Output. The snapshot carries the new value to everyone.
+  function regen(p, now, dt) {
+    if (p.down || p.hp >= rules.maxHp) return;
+    if (p.clash !== null || p.max) { p.foughtAt = now; return; }
+    const R = rules.regen;
+    const quiet = (now - (p.foughtAt ?? 0)) / 1000;
+    const rate = R.perSecond * Math.min(1, Math.max(0, (quiet - R.quietSeconds) / R.rampSeconds));
+    if (rate > 0) p.hp = Math.min(rules.maxHp, p.hp + rate * dt);
   }
 
   function respawn(room, p) {
@@ -235,8 +252,11 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
       const target = room.players.get(h.target);
       if (target) damage(room, target, h.amount, room.players.get(h.by) ?? null);
     }
+    const dt = Math.min(0.25, (now - (room.tickAt ?? now)) / 1000);
+    room.tickAt = now;
     for (const p of room.players.values()) {
       if (p.down && now >= p.respawnAt && p.ws) respawn(room, p);
+      regen(p, now, dt);
       if (now - p.stateAt > AWAY_MS) releaseProps(room, p);
       if (!p.ws && now - p.leftAt > rules.reconnectGraceSeconds * 1000) room.players.delete(p.id);
     }
@@ -245,7 +265,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
     if (room.players.size === 0) { clearInterval(room.timer); rooms.delete(room.code); return; }
     const live = present(room);
     if (!live.length) return;
-    const snap = { type: 'snap', t: now, players: live.map((p) => ({ id: p.id, hp: p.hp, down: p.down, away: now - p.stateAt > AWAY_MS, st: p.fresh.splice(0) })) };
+    const snap = { type: 'snap', t: now, players: live.map((p) => ({ id: p.id, hp: Math.round(p.hp * 10) / 10, down: p.down, away: now - p.stateAt > AWAY_MS, st: p.fresh.splice(0) })) };
     for (const p of live) send(p.ws, snap);
   }
 
@@ -263,7 +283,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
         if (absent) room.players.delete(absent.id);
       }
       if (present(room).length >= rules.maxPlayers || freeSlot(room) < 0) { send(ws, { type: 'full', room: code, max: rules.maxPlayers }); return null; }
-      p = { id: nextId++, token, slot: freeSlot(room), hp: rules.maxHp, down: false, kills: 0, downs: 0, state: null, fresh: [], stateAt: 0, protectUntil: 0, respawnAt: 0, leftAt: 0, bucket: HITS_PER_SECOND, bucketAt: Date.now(), seen: new Set(), clash: null, clashAt: 0, propBucket: PROP_HITS_PER_SECOND, propBucketAt: Date.now(), iceAt: 0, max: null, maxAt: -Infinity };
+      p = { id: nextId++, token, slot: freeSlot(room), hp: rules.maxHp, down: false, foughtAt: 0, kills: 0, downs: 0, state: null, fresh: [], stateAt: 0, protectUntil: 0, respawnAt: 0, leftAt: 0, bucket: HITS_PER_SECOND, bucketAt: Date.now(), seen: new Set(), clash: null, clashAt: 0, propBucket: PROP_HITS_PER_SECOND, propBucketAt: Date.now(), iceAt: 0, max: null, maxAt: -Infinity };
       room.players.set(p.id, p);
     }
     p.ws = ws;

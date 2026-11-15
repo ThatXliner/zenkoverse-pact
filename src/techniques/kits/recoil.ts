@@ -41,7 +41,7 @@ function catchProps(ctx: AbilityContext, dt: number): void {
     g.audio.play('recoil.catch', { at: p.mesh.position });
     g.cam.kick({ fov: 3, pitch: -0.01 });
     g.drills.notify(p, 'caught');
-    g.mastery.gain('recoil', 'efficiency', 0.01);
+    g.mastery.gainPassive('recoil', 'efficiency', 0.01);
     g.tutorial.notify('absorbed');
   }
   for (const h of held) {
@@ -90,7 +90,7 @@ const drill: DrillDef = {
   tiers: [
     { name: 'First Catch', count: 4, interval: 3.2, dropHeight: 8, pass: 2, gains: { efficiency: 0.12, activation: 0.08 } },
     { name: 'Rhythm', count: 6, interval: 2.2, dropHeight: 9, pass: 4, gains: { efficiency: 0.14, tolerance: 0.08, activation: 0.08 } },
-    { name: 'Hailstorm', count: 9, interval: 1.4, dropHeight: 10, pass: 7, gains: { efficiency: 0.16, output: 0.1, activation: 0.1 } },
+    { name: 'Hailstorm', count: 9, interval: 1.4, dropHeight: 10, pass: 7, gains: { efficiency: 0.16, activation: 0.1 } },
   ],
   // Each item is one crate or barrel off the hoist: caught scores, landed does not.
   spawn(game, tier, index) {

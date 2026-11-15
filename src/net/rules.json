@@ -11,6 +11,7 @@
   "maxHitDamage": 300,
   "maxHitRange": 48,
   "reconnectGraceSeconds": 20,
+  "regen": { "quietSeconds": 5, "perSecond": 6, "rampSeconds": 2, "clearRadius": 14 },
   "field": { "maxRadius": 14, "clashSlack": 1.5, "clashCooldownMs": 1000 },
   "max": { "minMs": 2000, "maxMs": 4000, "cooldownMs": 15000, "reach": 22, "slack": 3, "hitsPerTarget": 3 },
   "clash": { "introMs": 700, "windowMs": 1200, "graceMs": 250, "revealMs": 650, "rounds": 3, "winAt": 2, "tieMargin": 0.1, "closeMargin": 0.02 },

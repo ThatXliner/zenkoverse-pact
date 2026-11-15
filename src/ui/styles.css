@@ -159,6 +159,7 @@ kbd { display: inline-block; font-family: var(--sans); font-size: 11px; font-wei
 .status .mastery .bar { grid-column: 1 / -1; position: relative; height: 5px; background: rgba(243,238,228,0.1); transform: skewX(-18deg); }
 .status .mastery .bar i { position: absolute; inset: 0; right: auto; background: var(--paper); }
 .status .mastery .bar s { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #9fe3ff; }
+.status .mastery .bar s.ceil { width: 1px; background: rgba(243,238,228,0.45); }
 .status .mastery li[data-stat='refinement'] .bar i { background: #9fe3ff; }
 
 .settings { display: grid; gap: 16px; max-width: 640px; }

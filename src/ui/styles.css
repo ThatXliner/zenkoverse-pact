@@ -127,7 +127,7 @@ body.top-view .hud { cursor: none; }
 .prompt { position: absolute; left: 50%; bottom: max(20%, calc(var(--hud-pad) + var(--bottom-band, 136px) + 14px)); translate: -50% 0; z-index: 4; max-width: calc(100% - 2 * var(--hud-pad)); display: flex; gap: 12px; align-items: center; padding: 7px 14px 7px 8px; background: rgba(10,11,16,0.6); backdrop-filter: blur(8px); font-size: 13px; letter-spacing: 0.08em; color: var(--paper); animation: rise 0.4s var(--ease); }
 .prompt kbd { font-family: var(--sans); font-size: 11px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 3px; color: var(--paper); }
 .toasts { position: absolute; left: 50%; top: var(--below-compass); transform: translateX(-50%); display: grid; gap: 8px; justify-items: center; }
-.boss ~ .toasts, .drill-hud ~ .toasts { top: calc(var(--below-compass) + 70px); }
+.boss ~ .toasts { top: calc(var(--below-compass) + 70px); }
 .toast { padding: 8px 16px; border-left: 2px solid var(--accent); background: rgba(10,11,16,0.7); backdrop-filter: blur(8px); font-size: 13px; letter-spacing: 0.08em; animation: rise 0.4s var(--ease); }
 .toast.good { border-color: #7dffb2; }
 .toast.bad { border-color: #ff6b6b; }
@@ -355,10 +355,13 @@ button.ph.on { background: var(--c); color: var(--ink); border-bottom-color: tra
 .confirm .box p:first-of-type { font-family: var(--serif); color: var(--paper); }
 .confirm .hold { position: relative; overflow: hidden; }
 .confirm .hold i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); opacity: 0.35; width: 0; }
-.drill-hud { position: absolute; left: 50%; top: var(--below-compass); transform: translateX(-50%); display: grid; gap: 6px; justify-items: center; }
-.drill-hud .big { font-family: var(--serif); font-size: 44px; line-height: 1; font-variant-numeric: tabular-nums; }
-.drill-hud .s { font-size: 11px; letter-spacing: 0.35em; text-transform: uppercase; color: var(--mist); }
-.drill-hud .cue { font-family: var(--sans); font-size: 14px; letter-spacing: 0.04em; color: var(--paper); text-shadow: 0 1px 8px #000; max-width: 70vw; text-align: center; }
+.drill-hud { position: absolute; left: var(--hud-pad); bottom: calc(var(--hud-pad) + 150px); width: 340px; display: grid; gap: 8px; padding: 16px 18px; border-left: 2px solid #9fe3ff; background: rgba(10,11,16,0.6); backdrop-filter: blur(10px); animation: rise 0.4s var(--ease); }
+.drill-hud .big { font-family: var(--serif); font-size: 38px; line-height: 1; font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 12px; }
+.drill-hud .big small { font-family: var(--sans); font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--mist); }
+.drill-hud .s { font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--mist); }
+.drill-hud .cue { font-family: var(--serif); font-size: 20px; color: #9fe3ff; }
+.drill-hud ul { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 13px; line-height: 1.4; color: var(--paper); }
+.drill-hud li:first-child { color: var(--mist); }
 .defeat { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(6,7,10,0.8); animation: fade 1.2s; text-align: center; }
 .defeat .jp { font-size: 96px; font-weight: 800; }
 .defeat p { color: var(--mist); letter-spacing: 0.1em; }

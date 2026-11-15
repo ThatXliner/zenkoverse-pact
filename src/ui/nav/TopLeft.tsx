@@ -7,6 +7,7 @@ import { keyLabel } from '../../app/keymap';
 import { hud } from '../../app/game';
 import { auraUi } from '../../combat/aura';
 import { CAMERA_LABEL } from '../../player/camera';
+import { drillUi } from '../../drills/drills';
 
 const KEYS = [['camera', 'camera'], ['workshop', 'workshop'], ['map', 'map'], ['wager', 'wager'], ['aura', 'aura'], ['pause', 'menu']] as const;
 const SOURCE = { goal: 'Goal', tutorial: 'Tutorial', pin: 'Pin' } as const;
@@ -30,7 +31,8 @@ export function TopLeft({ game }: { game: Game }) {
           <span class="tr-sub"><span>{t.subtitle}</span><span class="tr-dist">{Math.round(t.dist)} m</span></span>
         </div>
       )}
-      {s.showMastery && (
+      {/* A drill's panel takes the left side, so the reminders step aside. */}
+      {s.showMastery && !drillUi.active.value && (
         <div class="hint">
           <span>{kit.name} · {sign} · {keyLabel('fullsign')} performs the full sign</span>
           <span>{CAMERA_LABEL[hud.camera.value]} · {keyLabel('camera')} changes the view</span>

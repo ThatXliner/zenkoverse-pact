@@ -27,6 +27,8 @@ export interface TechniqueKit {
   // aura refinement (src/combat/field.ts, issue #4). It is not how strong
   // the Technique is.
   breadth: number;
+  // The sound word lettered over its heavy hits, as a manga panel would.
+  sfx: string;
   resource: { name: string; max: number; regen: number; startsFull: boolean; free?: AbilityKind[] };
   // `short` is the HUD's few words on what a key does, in sentence case.
   primitive: { name: string; short: string; description: string };

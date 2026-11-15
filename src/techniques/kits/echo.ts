@@ -20,12 +20,12 @@ const catalogue: Pact[] = [
 // closing on the caster, a low wide as the whole floor rings, and a crane
 // up over everything still shaking.
 const cutscene: CutsceneDef = {
-  id: 'max-echo', title: { jp: '大聖堂共鳴', en: 'Cathedral Resonance' }, color: COLOR, pull: 4, reach: 14,
+  id: 'max-echo', title: { jp: '大聖堂共鳴', en: 'Cathedral Resonance' }, color: COLOR, pull: 4, reach: 14, word: 'ゴォォォン',
   shots: [
     { duration: 1.05, timeScale: 0.03, from: { pos: [0.95, 1.4, 1.95], look: [0, 1.3, 0], fov: 38 }, to: { pos: [0.65, 1.38, 1.5], fov: 31, roll: 0.04 }, events: opening('phaserUp3', 0.4) },
-    { duration: 0.5, timeScale: 0.03, from: { rel: 'mid', pos: [0, 8, -0.8], look: [0, 0.4, 0], fov: 56 }, to: { pos: [0, 6, -0.6], fov: 50 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'impactBell_heavy_000', pitch: 0.3, volume: 0.4 }] },
-    { duration: 0.95, timeScale: 0.3, from: { pos: [-4.2, 0.45, 3.2], look: [0, 1.4, 0], lookRel: 'mid', fov: 70, roll: 0.1 }, to: { pos: [-5.2, 0.6, 4.2], fov: 80, roll: 0.04 }, events: [...blow(0, 'impactBell_heavy_000', 0.4, 1)] },
-    { duration: 0.75, timeScale: 0.5, from: { rel: 'mid', pos: [3, 6, -5], look: [0, 0.5, 0], fov: 60 }, to: { pos: [3.5, 7.6, -6], fov: 62 }, ease: 'inOut' },
+    { duration: 0.5, timeScale: 0.03, from: { rel: 'mid', pos: [0, 8, -0.8], look: [0, 0.4, 0], fov: 56 }, to: { pos: [0, 6, -0.6], fov: 50 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'impactBell_heavy_000', pitch: 0.3, volume: 0.4 }] , page: { look: 'wash' } },
+    { duration: 0.95, timeScale: 0.3, from: { pos: [-4.2, 0.45, 3.2], look: [0, 1.4, 0], lookRel: 'mid', fov: 70, roll: 0.1 }, to: { pos: [-5.2, 0.6, 4.2], fov: 80, roll: 0.04 }, events: [...blow(0, 'impactBell_heavy_000', 0.4, 1)] , page: { look: 'wash', lines: 'focus' } },
+    { duration: 0.75, timeScale: 0.5, from: { rel: 'mid', pos: [3, 6, -5], look: [0, 0.5, 0], fov: 60 }, to: { pos: [3.5, 7.6, -6], fov: 62 }, ease: 'inOut' , page: { look: 'wash' } },
   ],
 };
 
@@ -42,7 +42,7 @@ function resonate(ctx: Parameters<TechniqueKit['effects']['cast']>[0], e: import
 }
 
 export const echo: TechniqueKit = {
-  id: 'echo', name: 'Echo', glyph: '響', color: COLOR, type: 'Manipulation',
+  id: 'echo', name: 'Echo', glyph: '響', color: COLOR, type: 'Manipulation', sfx: 'ゴォン',
   blurb: 'Manipulate mechanical vibration through connected matter. Air is matter too. The strongest effects come from resonance.',
   breadth: 4,
   resource: { name: 'Phase', max: 100, regen: 12, startsFull: true },

@@ -6,11 +6,17 @@
 // runs with the frame limiter off, so the number shows the headroom and not
 // only the 60 fps cap. The courtyard and the hall are measured the same way, and an Aura Clash
 // against the Master in the hall.
-// Usage: node tools/perf-rooftop.mjs [url] [--url http://localhost:4173/] [--port 4173]
+// --size 1920x1080 --dpr 1 --quality medium measure another window, density
+// or preset (a mid laptop at 1080p is --size 1920x1080 --dpr 1).
+// Usage: node tools/perf-rooftop.mjs [url] [--url http://localhost:4173/] [--port 4173] [--size WxH] [--dpr N] [--quality high|medium|low]
 import { chromium } from 'playwright';
 import { resolveTarget } from './lib/target.mjs';
 
 const { url, args, stop } = await resolveTarget();
+const [vw, vh] = (args.size ?? '1440x900').split('x').map(Number);
+const dpr = Number(args.dpr ?? 2);
+const quality = args.quality ?? 'high';
+console.log(`${vw}x${vh} at DPR ${dpr}, ${quality} preset`);
 
 
 const measure = (page, label) => page.evaluate(async (label) => {
@@ -28,13 +34,13 @@ const measure = (page, label) => page.evaluate(async (label) => {
 for (const uncapped of [false, true]) {
   const flags = ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist', ...(uncapped ? ['--disable-frame-rate-limit', '--disable-gpu-vsync'] : [])];
   const browser = await chromium.launch({ channel: 'chrome', headless: true, args: flags });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+  const page = await browser.newPage({ viewport: { width: vw, height: vh }, deviceScaleFactor: dpr });
   const errs = [];
   page.on('pageerror', (e) => errs.push(e.message));
   await page.goto(`${url}?debug`);
   await page.waitForFunction(() => window.game?.game?.ready, null, { timeout: 120000 });
   console.log(uncapped ? '\nframe limiter off' : 'vsync (60 Hz cap)');
-  await page.evaluate(() => { const g = window.game; g.technique('recoil'); g.game.renderer.setQuality('high'); g.god(true); g.game.startRun({ skipTutorial: true }); g.teleport('courtyard'); g.camera('top'); });
+  await page.evaluate((q) => { const g = window.game; g.technique('recoil'); g.game.renderer.setQuality(q); g.god(true); g.game.startRun({ skipTutorial: true }); g.teleport('courtyard'); g.camera('top'); }, quality);
   console.log(await measure(page, 'courtyard, top    '));
   await page.evaluate(() => { const g = window.game; g.teleport('hall'); g.camera('top'); });
   console.log(await measure(page, 'hall, top         '));

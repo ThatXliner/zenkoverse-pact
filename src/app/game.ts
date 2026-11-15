@@ -395,6 +395,8 @@ export class Game {
     if (zone?.id !== hud.zone.value?.id) hud.zone.value = zone;
     this.updateInteract();
     this.renderer.setChroma(this.combat.chromaAmount());
+    // A dash draws speed lines along it, as a panel would.
+    if (this.player.dashTimer > 0) this.renderer.speed(this.player.velocity, 0.75, 0.18);
   }
 
   // Top-down aim: the cursor cast onto a plane at the player's chest height,

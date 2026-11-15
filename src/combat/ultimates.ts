@@ -24,24 +24,24 @@ const KURODA = 0xff5a1a;
 // Five Thousand Years: the Master's sign close, the player small over her
 // shoulder, the cut from behind the player as the rings come, and a crane.
 const fiveThousandYears: CutsceneDef = {
-  id: 'boss-ancient', title: { jp: '五千年', en: 'Five Thousand Years' }, color: MASTER, pull: 5, reach: 22,
+  id: 'boss-ancient', title: { jp: '五千年', en: 'Five Thousand Years' }, color: MASTER, pull: 5, reach: 22, word: 'ズゥン',
   shots: [
     { duration: 1.05, timeScale: 0.03, from: { pos: [-0.95, 1.4, 1.9], look: [0, 1.32, 0], fov: 36 }, to: { pos: [-0.66, 1.4, 1.45], fov: 30, roll: -0.04 }, events: opening('phaserUp3', 0.35) },
-    { duration: 0.5, timeScale: 0.03, from: { pos: [-0.65, 1.75, -1.3], look: [0, 1.2, 0], lookRel: 'target', fov: 48 }, to: { pos: [-0.55, 1.7, -1.0], fov: 42 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'impactBell_heavy_002', pitch: 0.4 }] },
-    { duration: 0.95, timeScale: 0.3, from: { rel: 'target', pos: [0.9, 1.4, 2.4], look: [0, 1.3, 0], lookRel: 'caster', fov: 60, roll: -0.08 }, to: { pos: [1.2, 1.6, 3.4], fov: 74 }, events: [...blow(0, 'impactBell_heavy_000', 0.35, 1)] },
-    { duration: 0.75, timeScale: 0.5, from: { rel: 'mid', pos: [-5, 5.5, -2], look: [0, 0.6, 0], fov: 58 }, to: { pos: [-6, 7, -2.5], fov: 62 }, ease: 'inOut' },
+    { duration: 0.5, timeScale: 0.03, from: { pos: [-0.65, 1.75, -1.3], look: [0, 1.2, 0], lookRel: 'target', fov: 48 }, to: { pos: [-0.55, 1.7, -1.0], fov: 42 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'impactBell_heavy_002', pitch: 0.4 }] , page: { look: 'wash' } },
+    { duration: 0.95, timeScale: 0.3, from: { rel: 'target', pos: [0.9, 1.4, 2.4], look: [0, 1.3, 0], lookRel: 'caster', fov: 60, roll: -0.08 }, to: { pos: [1.2, 1.6, 3.4], fov: 74 }, events: [...blow(0, 'impactBell_heavy_000', 0.35, 1)] , page: { look: 'wash', lines: 'focus' } },
+    { duration: 0.75, timeScale: 0.5, from: { rel: 'mid', pos: [-5, 5.5, -2], look: [0, 0.6, 0], fov: 58 }, to: { pos: [-6, 7, -2.5], fov: 62 }, ease: 'inOut' , page: { look: 'wash' } },
   ],
 };
 
 // Flashpoint: the Enforcer's sign, the sheen spreading under the player's
 // feet, the cut low and wide as it lights, and a wide of the burning ground.
 const flashpoint: CutsceneDef = {
-  id: 'boss-kuroda', title: { jp: '引火', en: 'Flashpoint' }, color: KURODA, pull: 4, reach: 20,
+  id: 'boss-kuroda', title: { jp: '引火', en: 'Flashpoint' }, color: KURODA, pull: 4, reach: 20, word: 'ゴオッ',
   shots: [
     { duration: 1.05, timeScale: 0.03, from: { pos: [-1.0, 1.62, 2.05], look: [0, 1.5, 0], fov: 36 }, to: { pos: [-0.7, 1.6, 1.55], fov: 30, roll: -0.04 }, events: opening('spaceTrash1', 0.6) },
     { duration: 0.5, timeScale: 0.03, from: { rel: 'target', pos: [1.3, 0.22, -1.3], look: [0, 0.3, 0], fov: 50, roll: 0.08 }, to: { pos: [1.5, 0.25, -1.6], fov: 46 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'spaceTrash1', pitch: 0.4 }] },
-    { duration: 0.95, timeScale: 0.3, from: { rel: 'mid', pos: [4.6, 0.7, 0.5], look: [0, 1.0, 0], fov: 64, roll: 0.1 }, to: { pos: [5.6, 0.9, 0.8], fov: 76, roll: 0.03 }, events: [...blow(0, 'impactMining_000', 0.7), { at: 0.03, kind: 'sfx', id: 'impactMetal_heavy_000', pitch: 0.6 }] },
-    { duration: 0.75, timeScale: 0.5, from: { rel: 'mid', pos: [-4.5, 2.2, -1], look: [0, 0.8, 0], fov: 56 }, to: { pos: [-5.2, 2.8, -1.4], fov: 60 }, ease: 'inOut' },
+    { duration: 0.95, timeScale: 0.3, from: { rel: 'mid', pos: [4.6, 0.7, 0.5], look: [0, 1.0, 0], fov: 64, roll: 0.1 }, to: { pos: [5.6, 0.9, 0.8], fov: 76, roll: 0.03 }, events: [...blow(0, 'impactMining_000', 0.7), { at: 0.03, kind: 'sfx', id: 'impactMetal_heavy_000', pitch: 0.6 }] , page: { lines: 'focus' } },
+    { duration: 0.75, timeScale: 0.5, from: { rel: 'mid', pos: [-4.5, 2.2, -1], look: [0, 0.8, 0], fov: 56 }, to: { pos: [-5.2, 2.8, -1.4], fov: 60 }, ease: 'inOut' , page: { look: 'watercolor' } },
   ],
 };
 

@@ -9,7 +9,7 @@ import type { Input } from '../app/input';
 import type { TechniqueKit } from '../techniques/kit';
 import type { Assets } from '../app/assets';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { toon, addInkHulls, inkHullMaterial } from '../render/materials';
+import { toon } from '../render/materials';
 import { PLAYER_SUIT } from '../character/avatar';
 
 // Each hand is a spring (src/hands/performer.ts) run through its own
@@ -38,7 +38,6 @@ const VIEW = {
   offset: new THREE.Vector3(0, 0.13, 0),
 };
 const FLIP = new THREE.Quaternion(0, 1, 0, 0);
-const INK_WIDTH = 0.0035;
 
 // The sleeve shell stops a few centimetres short of the wrist with a bare
 // cut. A cuff finishes it: a hem turned back over the shell's end, covering
@@ -64,10 +63,8 @@ function addCuff(arm: Arm, material: THREE.Material): void {
   geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), toWrist.clone().normalize()));
   geo.translate(toWrist.x, toWrist.y, toWrist.z);
   const cuff = new THREE.Mesh(geo, material);
-  const ink = new THREE.Mesh(geo, inkHullMaterial(INK_WIDTH));
   cuff.name = `cuff_${arm.side}`;
-  ink.name = `cuff_${arm.side}_ink`;
-  arm.fore.bone.add(cuff, ink);
+  arm.fore.bone.add(cuff);
 }
 
 export class Hands {
@@ -102,13 +99,12 @@ export class Hands {
 
   constructor(scene: THREE.Scene, private camera: THREE.PerspectiveCamera, assets: Assets) {
     this.rig = new ArmRig(assets.model('characters/human'));
-    // The same flat skin and suit the third-person body wears, with an ink
-    // hull: the player's own hands are drawn like everyone else's.
+    // The same flat skin and suit the third-person body wears, inked by the
+    // post effect: the player's own hands are drawn like everyone else's.
     const skin = toon(0xf7d9bf);
     for (const m of this.rig.skinMeshes) m.material = skin;
     const sleeve = toon(PLAYER_SUIT, { side: THREE.DoubleSide });
     for (const m of this.rig.sleeveMeshes) m.material = sleeve;
-    addInkHulls(this.rig.object, INK_WIDTH);
     for (const arm of [this.rig.arms.r, this.rig.arms.l]) addCuff(arm, sleeve);
     this.clawMat = new THREE.MeshStandardMaterial({ color: 0xd8f4ff, roughness: 0.3, emissive: 0x9fe8ff, emissiveIntensity: 0.4 });
 

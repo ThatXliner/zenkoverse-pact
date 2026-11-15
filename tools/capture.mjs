@@ -3,7 +3,7 @@
 // `?debug` hooks to fixed scenarios and saves screenshots and short frame
 // sequences per piece. Usage:
 //   node tools/capture.mjs [url] [--out captures] [--only hands,district] [--url http://...] [--port 4173] [--gpu]
-// Pieces: ui, hud, hands, variants, sign, poses, third-person, views, compound, vfx, encounters, roles, workshop, tutorial, drill, perf.
+// Pieces: ui, hud, hands, variants, sign, poses, third-person, views, compound, vfx, style, encounters, roles, workshop, tutorial, drill, perf.
 // Without a URL it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -255,6 +255,90 @@ if (run('vfx')) {
     await api((g) => g.game.cutscenes.skip());
     await step(20);
   }
+}
+
+// The look, at 1920x1080, from every camera: the courtyard and the hall, a
+// fight, each Technique's casts at a dummy, and every Maximum Output at its
+// beats (the sign, the card, the impact frame, the blow, the aftermath and the
+// cut back to the view it started from). Before/after frames for a restyle.
+// --techs recoil,ancient and --views top narrow it; --scenes false skips the
+// places and the fight.
+const VIEWS = (args.views ?? 'top,third,first').split(',');
+const STYLE_TECHS = (args.techs ?? [...TECHS, 'ancient', 'kuroda'].join(',')).split(',');
+if (run('style')) {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await settle(200);
+  await startRun('recoil');
+  const face = (view, yaw, pitch) => api((g, v, y, p) => {
+    g.camera(v); g.look(y, p);
+    // Top-down aims with the cursor: put it up the screen, at what the camera faces.
+    g.game.input.mouse.x = 0; g.game.input.mouse.y = 0.3;
+  }, view, yaw, pitch);
+  for (const [name, where, yaw, pitch] of args.scenes === 'false' ? [] : [['courtyard', 'courtyard', 0, -0.1], ['hall', 'hall', Math.PI, -0.05], ['pond', 'pond', 2.3, -0.2]]) {
+    for (const view of VIEWS) {
+      await api((g, w) => g.teleport(w), where);
+      await face(view, yaw, pitch);
+      // Long enough for a roof over the player to fade out from the top-down camera.
+      await step(90);
+      await shot('style', `${name}-${view}`);
+    }
+  }
+  if (args.scenes !== 'false') await api((g) => { g.god(true); g.encounter('sparring'); });
+  await step(60);
+  for (const view of args.scenes === 'false' ? [] : VIEWS) {
+    await api((g, v) => { const e = g.game.encounters.enemies[0]; const p = g.game.player.position; if (e) g.look(Math.atan2(-(e.position.x - p.x), -(e.position.z - p.z)), -0.08); g.camera(v); }, view);
+    await step(50);
+    await shot('style', `fight-${view}`);
+    await api((g) => g.cast('primary'));
+    await step(14);
+    await shot('style', `fight-${view}-cast`);
+    await step(30);
+  }
+  await api((g) => { g.god(false); g.game.encounters.reset(); });
+  for (const t of TECHS.filter((x) => STYLE_TECHS.includes(x))) {
+    for (const view of VIEWS) {
+      await startRun(t);
+      await api((g) => {
+        const game = g.game, V = game.player.position.constructor;
+        g.teleport([-8, 0, 12]);
+        const e = game.encounters.spawn('dummy', new V(-8, 0, 6.5));
+        e.yaw = 0; e.frozen = 1e6;
+      });
+      await face(view, 0, -0.06);
+      await step(30);
+      await api((g) => g.cast('primary'));
+      for (const f of [8, 16]) { await step(8); await shot('style', `${t}-${view}-primary-f${f}`); }
+      await step(50);
+      await api((g) => g.hold('secondary', true));
+      await api((g) => g.cast('secondary'));
+      for (const f of [10, 22]) { await step(f === 10 ? 10 : 12); await shot('style', `${t}-${view}-secondary-f${f}`); }
+      await api((g) => g.hold('secondary', false));
+      await step(50);
+      await playMax(`${t}-${view}-max`, (g, id) => g.cutscene(id), `max-${t}`);
+    }
+  }
+  for (const [enc, id] of [['ancient', 'boss-ancient'], ['kuroda', 'boss-kuroda']].filter(([e]) => STYLE_TECHS.includes(e))) {
+    await startRun('recoil');
+    await api((g, e) => { g.god(false); g.teleport([-8, 0, 12]); g.camera('top'); g.encounter(e); }, enc);
+    await step(20);
+    await playMax(`${enc}-ultimate`, (g) => { const b = g.game.encounters.enemies.find((e) => e.isBoss); g.game.encounters.bossUltimate(b); }, id);
+  }
+  await page.setViewportSize({ width: 1280, height: 720 });
+}
+
+// One Maximum Output frame by frame, shot at its beats.
+async function playMax(label, start, id) {
+  const d = (await api((g) => g.cutscenes())).defs[id];
+  await api(start, id);
+  const want = [['sign', 0.45], ['title', 0.75], ['wind', d.beat - 0.15], ['impact-frame', d.beat], ['impact', d.beat + 0.08], ['bloom', d.beat + 0.4], ['after', d.total - 0.3]];
+  for (let n = 0; n < 600; n++) {
+    const v = await api((g) => { const tl = g.game.cutscenes.timeline; return { t: tl?.t ?? null, active: g.game.cutscenes.active }; });
+    if (!v.active) break;
+    while (want.length && v.t >= want[0][1]) { const [name] = want.shift(); await shot('style', `${label}-${name}`); }
+    await step(1);
+  }
+  await step(40);
+  await shot('style', `${label}-back`);
 }
 
 if (run('encounters')) {

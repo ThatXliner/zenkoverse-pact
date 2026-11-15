@@ -21,10 +21,12 @@ export const combatUi = {
   wagerArmed: signal(false),
   eye: signal<EyeId | null>(null),
   boss: signal<{ name: string; frac: number; color: number } | null>(null),
-  numbers: signal<{ id: number; x: number; y: number; text: string; color: string; big: boolean }[]>([]),
+  // Damage numbers, and sound words lettered over heavy hits (`word`).
+  numbers: signal<FloatText[]>([]),
 };
 
-interface FloatNum { id: number; pos: THREE.Vector3; text: string; color: string; life: number; big: boolean }
+export interface FloatText { id: number; x: number; y: number; text: string; color: string; big: boolean; word: boolean; tilt: number }
+interface FloatNum { id: number; pos: THREE.Vector3; text: string; color: string; life: number; big: boolean; word: boolean; tilt: number }
 
 // Player vitals, damage exchange, Wagers, Maximum Output charge, Eyes, and
 // the feel layer on big hits: hit-stop, impact frames, shake, chroma.
@@ -40,6 +42,7 @@ export class Combat {
   eye: EyeId | null = null;
   private nums: FloatNum[] = [];
   private numId = 0;
+  private lastWord = -1;
   wagersWon = 0;
   wagersLost = 0;
 
@@ -89,7 +92,13 @@ export class Combat {
     if (this.eye === 'thread') this.threadSplash(e, final * 0.35);
     e.hurt(final, { from: opts.from, knock: opts.knock, lift: opts.lift, stagger: opts.stagger });
     this.number(e.center(), String(final), this.wagerSlot ? '#ffd34d' : m > 1.1 ? '#ffb0ff' : '#f3eee4', final >= 40);
-    if (opts.heavy || final >= 40) { g.clock.hitStop(final >= 80 ? 0.11 : 0.06); g.cam.shake(0.35); g.renderer.impactFrame(final >= 80 ? 3 : 1, new THREE.Color(g.techniques.def.color)); }
+    if (opts.heavy || final >= 40) {
+      g.clock.hitStop(final >= 80 ? 0.11 : 0.06);
+      g.cam.shake(0.35);
+      g.renderer.impactFrame(final >= 80 ? 3 : 1, new THREE.Color(g.techniques.def.color), e.center());
+      // A cutscene letters its own word over its blow.
+      if (!g.cutscenes.active) this.letter(e.center().add(new THREE.Vector3(0, 0.9, 0)), g.techniques.def.sfx, g.techniques.def.color, final >= 80);
+    }
     else g.cam.shake(0.12);
     g.mastery.gain(g.techniqueId, 'output', 0.0015);
     if (e.isBoss) combatUi.boss.value = { name: e.def.title ?? e.def.name, frac: Math.max(0, e.hp / e.maxHp), color: e.def.emissive ?? 0xff6a1a };
@@ -153,22 +162,32 @@ export class Combat {
   }
 
   number(pos: THREE.Vector3, text: string, color: string, big: boolean): void {
-    this.nums.push({ id: ++this.numId, pos: pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.4, 0.4, 0)), text, color, life: 0.9, big });
+    this.nums.push({ id: ++this.numId, pos: pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.4, 0.4, 0)), text, color, life: 0.9, big, word: false, tilt: 0 });
+  }
+
+  // A sound word over a hit, as a manga panel letters it: one at a time, so a
+  // flurry of hits reads as one word and not a pile of them.
+  letter(pos: THREE.Vector3, text: string, color: number, big: boolean): void {
+    const now = this.game.clock.time;
+    if (!big && now - this.lastWord < 0.45) return;
+    this.lastWord = now;
+    const css = '#' + new THREE.Color(color).getHexString();
+    this.nums.push({ id: ++this.numId, pos: pos.clone(), text, color: css, life: big ? 1.1 : 0.7, big, word: true, tilt: (Math.random() - 0.5) * 22 });
   }
 
   update(dt: number): void {
     this.invuln = Math.max(0, this.invuln - dt);
     this.wagerCd = Math.max(0, this.wagerCd - dt);
     const cam = this.game.renderer.camera;
-    const out: { id: number; x: number; y: number; text: string; color: string; big: boolean }[] = [];
+    const out: FloatText[] = [];
     for (let i = this.nums.length - 1; i >= 0; i--) {
       const n = this.nums[i]!;
       n.life -= dt;
-      n.pos.y += dt * 0.9;
+      if (!n.word) n.pos.y += dt * 0.9;
       if (n.life <= 0) { this.nums.splice(i, 1); continue; }
       const v = n.pos.clone().project(cam);
       if (v.z > 1) continue;
-      out.push({ id: n.id, x: (v.x * 0.5 + 0.5) * 100, y: (-v.y * 0.5 + 0.5) * 100, text: n.text, color: n.color, big: n.big });
+      out.push({ id: n.id, x: (v.x * 0.5 + 0.5) * 100, y: (-v.y * 0.5 + 0.5) * 100, text: n.text, color: n.color, big: n.big, word: n.word, tilt: n.tilt });
     }
     if (out.length || combatUi.numbers.value.length) combatUi.numbers.value = out;
     const boss = this.game.encounters.enemies.find((e) => e.isBoss && e.alive);

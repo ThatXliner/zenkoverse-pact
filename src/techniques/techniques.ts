@@ -272,7 +272,7 @@ export class Techniques {
     const pact = c.ctx.pact;
     if (r) {
       if (r.hitStop) g.clock.hitStop(r.hitStop);
-      if (r.impactFrame) g.renderer.impactFrame(r.impactFrame, new THREE.Color(this.def.color));
+      if (r.impactFrame) g.renderer.impactFrame(r.impactFrame, new THREE.Color(this.def.color), c.ctx.aim ?? undefined);
       if (r.cameraKick) g.cam.kick(r.cameraKick);
       if (r.rooted) g.player.rooted = Math.max(g.player.rooted, r.rooted);
       if (r.moveLock) g.player.moveLock = Math.max(g.player.moveLock, r.moveLock);

@@ -21,12 +21,12 @@ const catalogue: Pact[] = [
 // hands come down, a high cut as the glacier erupts under the target, and
 // a low close-up of the target held in the ice.
 const cutscene: CutsceneDef = {
-  id: 'max-rime', title: { jp: '十指氷河', en: 'Tenfold Glacier' }, color: COLOR, pull: 4, reach: 12,
+  id: 'max-rime', title: { jp: '十指氷河', en: 'Tenfold Glacier' }, color: COLOR, pull: 4, reach: 12, word: 'パキィィン',
   shots: [
     { duration: 1.05, timeScale: 0.03, from: { pos: [0.9, 1.35, 1.9], look: [0, 1.25, 0], fov: 38 }, to: { pos: [0.62, 1.32, 1.45], fov: 31, roll: -0.05 }, events: opening('highUp', 0.5) },
     { duration: 0.5, timeScale: 0.03, from: { pos: [-1.5, 0.18, 1.0], look: [0, 0.7, 0], fov: 60, roll: 0.16 }, to: { pos: [-1.7, 0.15, 1.3], fov: 56, roll: 0.12 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'impactSoft_heavy_001', pitch: 0.6, volume: 0.6 }] },
-    { duration: 0.95, timeScale: 0.3, from: { rel: 'mid', pos: [4.6, 4.2, -2.8], look: [0, 0.4, 0], fov: 58, roll: -0.06 }, to: { pos: [5.6, 5.2, -3.6], fov: 68 }, events: [...blow(0, 'impactGlass_heavy_000', 0.6, 0.8), { at: 0.03, kind: 'sfx', id: 'impactMining_000', pitch: 1.1 }] },
-    { duration: 0.75, timeScale: 0.4, from: { rel: 'target', pos: [1.5, 0.55, -1.7], look: [0, 1.0, 0], fov: 50 }, to: { pos: [1.7, 0.7, -2.1], fov: 46 }, ease: 'inOut' },
+    { duration: 0.95, timeScale: 0.3, from: { rel: 'mid', pos: [4.6, 4.2, -2.8], look: [0, 0.4, 0], fov: 58, roll: -0.06 }, to: { pos: [5.6, 5.2, -3.6], fov: 68 }, events: [...blow(0, 'impactGlass_heavy_000', 0.6, 0.8), { at: 0.03, kind: 'sfx', id: 'impactMining_000', pitch: 1.1 }] , page: { look: 'watercolor' } },
+    { duration: 0.75, timeScale: 0.4, from: { rel: 'target', pos: [1.5, 0.55, -1.7], look: [0, 1.0, 0], fov: 50 }, to: { pos: [1.7, 0.7, -2.1], fov: 46 }, ease: 'inOut' , page: { look: 'watercolor' } },
   ],
 };
 
@@ -96,7 +96,7 @@ function freezeArea(g: import('../../app/game').Game, center: THREE.Vector3, rad
 }
 
 export const rime: TechniqueKit = {
-  id: 'rime', name: 'Rime', glyph: '霜', color: COLOR, type: 'Generation, Manipulation',
+  id: 'rime', name: 'Rime', glyph: '霜', color: COLOR, type: 'Generation, Manipulation', sfx: 'パキィン',
   blurb: 'Nucleate water through your fingernails. The koi pond in the yard is a great deal of water.',
   breadth: 2,
   resource: { name: 'Warmth', max: 100, regen: 9, startsFull: true },

@@ -299,7 +299,7 @@ export class Enemy {
       g.vfx.patch(at, 2.6, 'burn', 20);
       g.vfx.ring(at.clone().add(new THREE.Vector3(0, 0.1, 0)), 0xff6a1a, 0.3, 3.2, 0.5);
       g.audio.play('impactMining_000', 0.8, 0.7);
-      g.renderer.impactFrame(2, new THREE.Color(0xff6a1a));
+      g.renderer.impactFrame(2, new THREE.Color(0xff6a1a), at.clone().add(new THREE.Vector3(0, 1, 0)));
       if (g.player.position.distanceTo(at) < 2.6) g.combat.hurtPlayer(this.dmg * 1.6, { from: at, kinetic: false });
       for (const e of g.encounters.enemies) if (e !== this && e.alive && e.position.distanceTo(at) < 2.6) e.hurt(20, { from: at, knock: 3 });
     } else if (this.def.ai === 'ancient') {

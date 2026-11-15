@@ -35,7 +35,9 @@ const cutscene: CutsceneDef = {
 // Shift translates horizontally toward the aim and lands on whatever ground is
 // below the arrival point, so aiming at the horizon or the sky still moves you.
 // An occupied or groundless arrival walks back along the line until a standing
-// capsule fits.
+// capsule fits. So does one far below the start: Shift crosses walls, not
+// drops, so it cannot carry you off a roof.
+const MAX_DROP = 2.0;
 function freeDestination(ctx: { game: import('../../app/game').Game }, from: THREE.Vector3, to: THREE.Vector3): THREE.Vector3 {
   const g = ctx.game;
   const down = new THREE.Vector3(0, -1, 0);
@@ -44,7 +46,7 @@ function freeDestination(ctx: { game: import('../../app/game').Game }, from: THR
   for (let i = 0; i < steps; i++) {
     const p = to.clone().lerp(from, i / steps);
     const ground = g.physics.castRay(new THREE.Vector3(p.x, top, p.z), down, top - from.y + 6, GROUP_WORLD);
-    if (!ground || ground.point.y > from.y + 3.5) continue;
+    if (!ground || ground.point.y > from.y + 3.5 || ground.point.y < from.y - MAX_DROP) continue;
     const feet = ground.point;
     const clear = !g.physics.castRay(feet.clone().add(new THREE.Vector3(0, 0.05, 0)), new THREE.Vector3(0, 1, 0), 1.8, GROUP_WORLD)
       && !g.physics.castRay(feet.clone().add(new THREE.Vector3(0, 0.5, 0)), new THREE.Vector3(1, 0, 0), 0.35, GROUP_WORLD)

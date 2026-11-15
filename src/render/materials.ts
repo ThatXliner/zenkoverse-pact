@@ -85,7 +85,8 @@ export function paintedSign(text: string, opts: { width?: number; vertical?: boo
   const h = vertical ? w * 4 : w / 4;
   const g = new THREE.Group();
   const face = new THREE.Mesh(new THREE.PlaneGeometry(w, h), opts.emissive ? new THREE.MeshBasicMaterial({ map: tex }) : toon(0xffffff, { map: tex }));
-  face.position.z = 0.03;
+  // Just proud of the board's face (0.03), or the two fight for the same depth.
+  face.position.z = 0.034;
   const board = new THREE.Mesh(new THREE.BoxGeometry(w + 0.12, h + 0.12, 0.06), toon(0x6b4a33));
   board.castShadow = true;
   g.add(board, face);

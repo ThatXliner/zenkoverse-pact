@@ -63,6 +63,9 @@ export class Renderer {
   // A world point the screen patterns are pinned to, so they slide with the
   // world rather than stay on the glass. Re-pinned when it leaves the view.
   private anchor: THREE.Vector3 | null = null;
+  // The camera's facing last frame and how strongly the tones print now.
+  private lastDir = new THREE.Vector3();
+  private toneK = 1;
   private size = new THREE.Vector2();
   overlayVisible = true;
 
@@ -186,6 +189,15 @@ export class Renderer {
 
     // Pin the screen patterns to the world.
     cam.getWorldDirection(v3);
+    // The dots are a screen pattern pinned to one point; a sharp turn drags
+    // them across surfaces at other depths and they crawl. While the camera
+    // swings fast the tones ease off to flat cel colour, and come back as it
+    // settles (and a pattern re-pinned off screen jumps unseen).
+    const turn = dt > 0 && this.lastDir.lengthSq() > 0 ? this.lastDir.angleTo(v3) / dt : 0;
+    this.lastDir.copy(v3);
+    const want = 1 - 0.85 * THREE.MathUtils.smoothstep(turn, 0.9, 3.0);
+    this.toneK += (want - this.toneK) * (1 - Math.exp(-(want < this.toneK ? 22 : 5) * dt));
+    MANGA.tone.value = this.toneK;
     if (this.anchor) {
       const s = this.anchor.clone().project(cam);
       const behind = this.anchor.clone().sub(cam.position).dot(v3) < 1;

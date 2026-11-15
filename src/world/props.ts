@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Assets } from '../app/assets';
 import { Physics, RAPIER, GROUP_PROP } from '../physics/world';
+import { toon, toonify } from '../render/materials';
 
 export type PropTrait = 'freezable' | 'resonant' | 'flammable' | 'porous' | 'kinetic-source' | 'fragile' | 'metal' | 'wood';
 
@@ -12,6 +13,8 @@ export interface PropDef {
   breakable?: { hp: number; pieces: number };
   surface?: string;
   yOffset?: number;
+  // Built in code instead of loaded (`model` is then only its name).
+  build?: () => THREE.Object3D;
 }
 
 export const PROPS: Record<string, PropDef> = {
@@ -30,7 +33,7 @@ export const PROPS: Record<string, PropDef> = {
   pot: { model: 'props/pot-stew', mass: 5, scale: 2.4, traits: ['metal', 'resonant'] },
   stool: { model: 'props/furn-stoolBar', mass: 5, scale: 1.0, traits: ['wood'] },
   chair: { model: 'props/furn-chair', mass: 6, scale: 1.0, traits: ['wood', 'flammable'] },
-  dummy: { model: 'props/furn-coatRackStanding', mass: 40, scale: 1.1, traits: ['wood', 'resonant'] },
+  dummy: { model: 'built/wooden-dummy', build: woodenDummy, mass: 40, scale: 1.0, traits: ['wood', 'resonant'] },
 };
 
 export interface PropInstance {
@@ -64,20 +67,13 @@ export class PropSystem {
     const c = this.cache.get(key);
     if (c) return c;
     const def = PROPS[key]!;
-    const src = this.assets.model(def.model).scene;
-    const t = src.clone(true);
+    const t = def.build ? def.build() : this.assets.model(def.model).scene.clone(true);
     t.scale.setScalar(def.scale);
+    // Painted like the rest of the compound: flat toon colour and screentone.
+    if (!def.build) toonify(t);
     t.updateMatrixWorld(true);
     t.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh) {
-        const m = o as THREE.Mesh;
-        m.castShadow = true;
-        m.receiveShadow = true;
-        const mat = (m.material as THREE.MeshStandardMaterial).clone();
-        mat.roughness = Math.min(mat.roughness, 0.7);
-        mat.envMapIntensity = 0.7;
-        m.material = mat;
-      }
+      if ((o as THREE.Mesh).isMesh) { (o as THREE.Mesh).castShadow = true; (o as THREE.Mesh).receiveShadow = true; }
     });
     const box = new THREE.Box3().setFromObject(t);
     const half = box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
@@ -164,4 +160,25 @@ export class PropSystem {
     p.body.setBodyType(RAPIER.RigidBodyType.Fixed, true);
     p.frozen = seconds;
   }
+}
+
+// A wooden training dummy (mook jong): a post on a low foot with two arms
+// at chest height, one lower arm and a bent leg, worn pale where it is struck.
+function woodenDummy(): THREE.Object3D {
+  const g = new THREE.Group();
+  const wood = toon(0x8a5a3a), worn = toon(0xc49a66), dark = toon(0x4e3024);
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, rx = 0, rz = 0): void => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.rotation.set(rx, 0, rz);
+    g.add(m);
+  };
+  add(new THREE.BoxGeometry(0.7, 0.12, 0.7), dark, 0, 0.06, 0);
+  add(new THREE.CylinderGeometry(0.17, 0.19, 1.55, 10), wood, 0, 0.9, 0);
+  add(new THREE.CylinderGeometry(0.175, 0.175, 0.4, 10), worn, 0, 1.25, 0);
+  for (const side of [-1, 1]) add(new THREE.CylinderGeometry(0.035, 0.045, 0.5, 6), worn, side * 0.12, 1.38, 0.3, Math.PI / 2 - 0.15, side * 0.35);
+  add(new THREE.CylinderGeometry(0.035, 0.045, 0.5, 6), worn, 0, 1.06, 0.3, Math.PI / 2 + 0.15);
+  add(new THREE.CylinderGeometry(0.04, 0.05, 0.6, 6), wood, 0, 0.45, 0.28, Math.PI / 2 - 0.7);
+  add(new THREE.CylinderGeometry(0.19, 0.17, 0.08, 10), dark, 0, 1.69, 0);
+  return g;
 }

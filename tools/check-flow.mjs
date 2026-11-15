@@ -145,7 +145,7 @@ check((await book()).preview === null, 'reopening the Workshop ends the trial');
 await page.getByRole('button', { name: 'Discard draft' }).click();
 await page.keyboard.press('Escape');
 
-console.log('a Wager is written inside a Pact: declaration, reward, forfeit');
+console.log('a Wager is written inside a Pact and tuned: the call, what it pays, what it puts up');
 await page.waitForFunction(() => window.game.state() !== 'workshop', null, { timeout: 4000 }).catch(() => undefined);
 await page.waitForTimeout(200);
 await page.keyboard.press('Tab');
@@ -155,7 +155,12 @@ await page.getByLabel('Pact name').fill('Gamble');
 await page.locator('.chip', { hasText: 'a wager, to bet on each cast' }).click();
 {
   const panel = page.locator('.ws-panel');
-  check(await panel.locator('.chip', { hasText: 'it lands' }).isVisible() && await panel.locator('.opt', { hasText: 'Harder strike' }).isVisible() && await panel.locator('.opt', { hasText: 'sealed 5 s' }).isVisible(), 'the panel offers a declaration, a reward and a forfeit');
+  const slider = (name) => panel.getByRole('slider', { name, exact: true });
+  const value = async (name) => (await slider(name).locator('xpath=..').locator('.v').innerText()).trim();
+  const stake = async () => Number((/Stake (\d+\.\d)/.exec(await panel.locator('.wg-read').innerText()) ?? [])[1]);
+  // Keys move a slider, as a thumb would: Home to its first stop, Right one stop on.
+  const setTo = async (name, steps) => { await slider(name).focus(); await page.keyboard.press('Home'); for (let i = 0; i < steps; i++) await page.keyboard.press('ArrowRight'); };
+  check(await panel.locator('.chip', { hasText: 'it lands' }).isVisible() && await slider('Harder strike').isVisible() && /sealed 5 s/.test(await value('Seal')), 'the panel offers a call, rewards to pay and forfeits to put up');
   const give = await page.locator('.ws-trade .give').innerText();
   const get = await page.locator('.ws-trade .get').innerText();
   check(/Wager: it lands/.test(give) && /Called wrong, your Technique seals/.test(give), `the cost names the declaration and the forfeit: ${give.replace(/\s+/g, ' ').slice(-110)}`);
@@ -163,22 +168,49 @@ await page.locator('.chip', { hasText: 'a wager, to bet on each cast' }).click()
   check(/"Shockline" already wagers on this outcome/.test(give) && /a right call pays nothing/.test(get), 'a second Pact betting the same outcome stakes nothing and pays nothing');
   check(/Wager: each cast declares that it lands/.test(await page.locator('.ws-sentence').innerText()), 'the sentence reads the Wager back');
   await panel.locator('.chip', { hasText: 'it strikes two or more' }).click();
-  check(await panel.locator('.opt', { hasText: 'Harder strike' }).isDisabled(), 'a harder strike is offered only on "it lands", where the impact settles the call');
+  check(await slider('Harder strike').isDisabled(), 'a harder strike is offered only on "it lands", where the impact settles the call');
   const ring = Number((/Called right: \+(\d+)% ring/.exec(await page.locator('.ws-trade .get').innerText()) ?? [])[1]);
   check(ring >= 10, `a real doubt with a real forfeit pays: +${ring}% Maximum Output`);
+  // The call's setting: a harder call moves the odds, read from this player's own record at that setting.
+  const at2 = await value('How many');
+  await slider('How many').focus();
+  await page.keyboard.press('ArrowRight');
+  const at3 = await value('How many');
+  const odds = (t) => Number((/true (\d+)%/.exec(t) ?? [])[1]);
+  check(/3 bodies/.test(at3) && odds(at3) < odds(at2) && await panel.locator('.chip.on', { hasText: 'it strikes three or more' }).count() === 1, `striking three is a harder call than two: ${at2} → ${at3}`);
+  const recorded = await page.evaluate(() => { const r = window.game.game.book.telemetry.odds.reach; return Math.round(Math.min(...[0, 1, 2].map((k) => r.yes[k] / r.n[k])) * 100); });
+  check(odds(at3) === recorded, `the odds at three are the record at three (${recorded}%)`);
+  await page.keyboard.press('ArrowLeft');
   await shot('06b-wager-panel');
-  await panel.locator('.opt', { hasText: 'slowed 6 s' }).click();
-  const slow = Number((/Stake (\d+\.\d)/.exec(await panel.locator('.wg-read').innerText()) ?? [])[1]);
-  await panel.locator('.opt', { hasText: 'sealed 5 s' }).click();
-  const seal = Number((/Stake (\d+\.\d)/.exec(await panel.locator('.wg-read').innerText()) ?? [])[1]);
+  // What it puts up: a heavier forfeit stakes more, and two forfeits add up.
+  await setTo('Seal', 0);
+  await setTo('Heavy legs', 3);
+  const slow = await stake();
+  await setTo('Heavy legs', 0);
+  await setTo('Seal', 3);
+  const seal = await stake();
   check(seal > slow, `a heavier forfeit stakes more: sealed ${seal} against slowed ${slow}`);
-  // A call this player nearly always gets right stakes almost nothing.
-  await page.evaluate(() => { window.game.game.book.telemetry.multiTargetFraction = 0.99; });
-  await panel.locator('.opt', { hasText: 'slowed 6 s' }).click();
-  await panel.locator('.opt', { hasText: 'sealed 5 s' }).click();
+  await setTo('Blood', 1);
+  const both = await stake();
+  check(both > seal && /sealed 5 s and −5% health/.test(await panel.locator('.wg-read').innerText()), `two forfeits add up their loss: ${both}`);
+  await setTo('Blood', 0);
+  // What it pays: the stake splits between the rewards.
+  await setTo('Resource', 1);
+  const split = [await value('Output ring'), await value('Resource')];
+  check(split.every((v) => /^50% · \+\d+%/.test(v)), `the stake splits between two rewards: ${split.join(' / ')}`);
+  check(/\+\d+% ring, \+\d+% resource/.test(await page.locator('.ws-trade .get').innerText()), 'the trade names both rewards');
+  await setTo('Resource', 0);
+  // Up and Down move between the sliders, Left and Right stay with the one in hand.
+  await slider('Seal').focus();
+  await page.keyboard.press('ArrowDown');
+  check(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')) === 'Blood', 'Down moves from one slider to the next');
+  // A call this player nearly always gets right stakes almost nothing, however much is put up.
+  await page.evaluate(() => { const r = window.game.game.book.telemetry.odds.reach; window.__reach = structuredClone(r); r.yes[0] = r.n[0]; r.yes[1] = r.n[1] * 0.99; });
+  await setTo('Seal', 5);
+  await setTo('Blood', 5);
   const read = await panel.locator('.wg-read').innerText();
   check(/Stake 0\.\d/.test(read) && /almost every time/.test(read), `a near-certain call stakes almost nothing: ${read}`);
-  await page.evaluate(() => { window.game.game.book.telemetry.multiTargetFraction = 0.4; });
+  await page.evaluate(() => { window.game.game.book.telemetry.odds.reach = window.__reach; });
 }
 await page.getByRole('button', { name: 'Discard draft' }).click();
 await page.keyboard.press('Escape');

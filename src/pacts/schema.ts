@@ -4,7 +4,7 @@
 // engine derives every number from a parsed Pact.
 
 import { SLOTS, slotAccepts, slotDef, type AbilitySlot, type AbilityKind } from './slots';
-import { DECLARATIONS, REWARDS, FORFEITS, rewardFits, type WagerTerms } from './wager';
+import { DECLARATIONS, DECLARE, REWARDS, FORFEITS, FORFEIT, MAX_PARTS, wagerError, upgradeWager, type WagerTerms } from './wager';
 
 export type TechniqueId = 'recoil' | 'shift' | 'rime' | 'blink' | 'echo';
 export type Param = 'direction' | 'range' | 'target' | 'trigger' | 'duration' | 'resource' | 'body';
@@ -33,7 +33,7 @@ export type Clause =
   | { kind: 'restrict'; restriction: Restriction }
   | { kind: 'sunset'; term: { seconds: number } | { encounters: number } }
   | { kind: 'risk'; beyond: Param; cost: RiskCost }
-  // A Declaration, a Reward and a Forfeit, all written by the player (src/pacts/wager.ts).
+  // A Declaration at a setting, the Rewards it pays and the Forfeits it risks, all written by the player (src/pacts/wager.ts).
   | ({ kind: 'wager' } & WagerTerms)
   | { kind: 'program'; when: TriggerValue; then: ProgramThen };
 
@@ -139,14 +139,7 @@ function validateClause(c: unknown): string | null {
       if (!RISK_COSTS.includes(r.cost!)) return 'risk.cost must be health, exhaustion or seal';
       return null;
     }
-    case 'wager': {
-      const w = c as Partial<WagerTerms>;
-      if (!DECLARATIONS.includes(w.declare!)) return 'wager.declare is unknown';
-      if (!REWARDS.includes(w.reward!)) return 'wager.reward is unknown';
-      if (!FORFEITS.includes(w.forfeit!)) return 'wager.forfeit is unknown';
-      if (!rewardFits(w.declare!, w.reward!)) return 'a harder strike pays only on a wager that the strike lands';
-      return null;
-    }
+    case 'wager': return wagerError(c as Partial<WagerTerms>);
     case 'program': {
       const pr = c as { when?: TriggerValue; then?: ProgramThen };
       if (!PARAM_VALUES.trigger.includes(pr.when!)) return 'program.when must be a trigger';
@@ -184,24 +177,27 @@ export const PACT_SCHEMA = {
         { type: 'object', required: ['kind', 'restriction'], additionalProperties: false, properties: { kind: { const: 'restrict' }, restriction: { $ref: '#/$defs/restriction' } } },
         { type: 'object', required: ['kind', 'term'], additionalProperties: false, properties: { kind: { const: 'sunset' }, term: { oneOf: [{ type: 'object', required: ['seconds'], properties: { seconds: { type: 'number', minimum: 5, maximum: 600 } } }, { type: 'object', required: ['encounters'], properties: { encounters: { type: 'integer', minimum: 1, maximum: 10 } } }] } } },
         { type: 'object', required: ['kind', 'beyond', 'cost'], additionalProperties: false, properties: { kind: { const: 'risk' }, beyond: enumOf(Object.keys(PARAM_VALUES)), cost: enumOf(RISK_COSTS) } },
-        { type: 'object', required: ['kind', 'declare', 'reward', 'forfeit'], additionalProperties: false, properties: { kind: { const: 'wager' }, declare: enumOf(DECLARATIONS), reward: enumOf(REWARDS), forfeit: enumOf(FORFEITS) } },
+        {
+          type: 'object', required: ['kind', 'declare', 'pays', 'risks'], additionalProperties: false,
+          properties: {
+            kind: { const: 'wager' }, declare: enumOf(DECLARATIONS),
+            at: { enum: [...new Set(DECLARATIONS.flatMap((d) => DECLARE[d].steps ?? []))] },
+            pays: { type: 'object', additionalProperties: false, properties: Object.fromEntries(REWARDS.map((r) => [r, { type: 'integer', minimum: 1, maximum: MAX_PARTS }])) },
+            risks: { type: 'object', additionalProperties: false, properties: Object.fromEntries(FORFEITS.map((f) => [f, { enum: [...FORFEIT[f].steps] }])) },
+          },
+        },
         { type: 'object', required: ['kind', 'when', 'then'], additionalProperties: false, properties: { kind: { const: 'program' }, when: enumOf(PARAM_VALUES.trigger), then: enumOf(['activate', 'suppress', 'prefer']) } },
       ],
     },
   },
 } as const;
 
-// A save from before Wagers had terms held only a prediction; it carried a
-// tripled strike and a sealed Technique, so it keeps those.
+// A save from before Wagers were tuned (or before they had terms at all)
+// keeps what it meant; see `upgradeWager`.
 export function upgradePact<T>(p: T): T {
   const q = p as { clauses?: unknown };
   if (!Array.isArray(q.clauses)) return p;
-  const clauses = q.clauses.map((c: { kind?: string; predict?: string }) => {
-    if (c?.kind !== 'wager' || !('predict' in c)) return c;
-    const declare = c.predict === 'kill' || c.predict === 'untouched' ? c.predict : 'hit';
-    return { kind: 'wager', declare, reward: declare === 'hit' ? 'output' : 'charge', forfeit: 'seal' };
-  });
-  return { ...p, clauses };
+  return { ...p, clauses: q.clauses.map((c: { kind?: string }) => (c?.kind === 'wager' ? upgradeWager(c as never) : c)) };
 }
 
 export function wagerOf(p: Pact): Extract<Clause, { kind: 'wager' }> | null {

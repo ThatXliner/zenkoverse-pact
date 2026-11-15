@@ -6,12 +6,12 @@ import { toast } from '../app/game';
 import { type Pact, type Clause, type Param, type Restriction, PARAM_VALUES, RISK_COSTS, validatePact, restrictions } from '../pacts/schema';
 import { SLOTS, slotAccepts, slotDef, slotFor, type AbilitySlot } from '../pacts/slots';
 import { keyLabel } from '../app/keymap';
-import { readback, readbackSegments, slotWords, riskCost, triggerWords, type Focus as ReadbackFocus } from '../pacts/readback';
+import { readback, readbackSegments, slotWords, riskCost, triggerWords, wagerRisks, type Focus as ReadbackFocus } from '../pacts/readback';
 import { lineFor, type ResolveEstimate } from '../pacts/resolve';
 import { KITS } from '../techniques/techniques';
 import { tutorialUi } from '../tutorial/tutorial';
 import { TermPicker, PARAM_WORDS, PARAM_COLOR, Worth } from './pickers';
-import { DECLARATIONS, REWARDS, FORFEITS, DECLARE, REWARD, FORFEIT, rewardFits, stakeOf, wagerTag, type WagerTerms, type Stake } from '../pacts/wager';
+import { DECLARATIONS, REWARDS, FORFEITS, DECLARE, REWARD, FORFEIT, MAX_PARTS, NEW_WAGER, rewardFits, stakeOf, wagerTag, callWords, settingOf, paysShort, type WagerTerms, type WagerContext, type Stake } from '../pacts/wager';
 
 // The readback sentence is the editor (issue #29). Every phrase the universe
 // will enforce is a button; the panel under the sentence shows that term's
@@ -89,6 +89,7 @@ export function Workshop({ game }: { game: Game }) {
   // Trying a draft that gives something up is the tutorial's Pact step.
   const tryIt = (p: Pact) => { if (restrictions(p).length) game.tutorial.notify('tried'); game.tryDraft(p); };
   const counted = pact ? book.counted(pact) : new Map<string, string>();
+  const wagerCtx: WagerContext = { telemetry: book.telemetry, restrictions: pact ? restrictions(pact) : [], potency: est?.potency ?? 0, raw: !!pact && slotDef(pact.slot).raw !== null };
   const weigh = (param: Param) => (value: string) => lineFor({ param, value } as Restriction, counted, book.telemetry);
   const boundTo = (p: Pact) => p.slot !== 'passive' && book.binding(p.slot) === p.id;
   const kindsOf = (p: Pact) => kit.shapes[p.grant.shape]?.kinds ?? [];
@@ -192,7 +193,7 @@ export function Workshop({ game }: { game: Game }) {
                           <span class="chips-l">Or attach a clause</span>
                           {!pact.clauses.some((c) => c.kind === 'sunset') && <button class="chip" onClick={() => addClause(SUNSETS[0]!)}>a sunset, so the term ends</button>}
                           {restrictions(pact).length > 0 && <button class="chip" onClick={() => addClause({ kind: 'risk', beyond: restrictions(pact)[0]!.param, cost: 'health' })}>a risk, to push past a limit</button>}
-                          {!pact.clauses.some((c) => c.kind === 'wager') && <button class="chip" onClick={() => addClause({ kind: 'wager', declare: 'hit', reward: 'output', forfeit: 'seal' })}>a wager, to bet on each cast</button>}
+                          {!pact.clauses.some((c) => c.kind === 'wager') && <button class="chip" onClick={() => addClause({ kind: 'wager', ...structuredClone(NEW_WAGER) })}>a wager, to bet on each cast</button>}
                           <button class="chip" onClick={() => addClause({ kind: 'program', when: 'struck', then: 'activate' })}>a program, so it fires itself</button>
                         </div>
                       </>}
@@ -200,7 +201,7 @@ export function Workshop({ game }: { game: Game }) {
                         <PanelHead title={PARAM_WORDS[focus.param].title} hint={PARAM_WORDS[focus.param].hint} onBack={() => setFocus({ kind: 'add' })} />
                         <TermPicker param={focus.param} technique={game.techniqueId} value={undefined} weigh={weigh(focus.param)} onPick={(v) => setTerm(focus.param!, v)} />
                       </>}
-                      {focus.kind === 'clause' && pact.clauses[focus.index] && <ClausePanel c={pact.clauses[focus.index]!} stake={(w) => stakeOf(w, book.telemetry, counted.get(wagerTag(w)))} restricted={restrictions(pact).map((r) => r.param)} onChange={(c) => setClause(focus.index, c)} onRemove={() => removeClause(focus.index)} />}
+                      {focus.kind === 'clause' && pact.clauses[focus.index] && <ClausePanel c={pact.clauses[focus.index]!} stake={(w) => stakeOf(w, wagerCtx, counted.get(wagerTag(w)))} online={!!game.net} restricted={restrictions(pact).map((r) => r.param)} onChange={(c) => setClause(focus.index, c)} onRemove={() => removeClause(focus.index)} />}
                     </div>
                   )}
                   <Trade est={est} power={power(game, pact)} kit={kit.name} onFocus={(f) => isDraft && setFocus(f)} />
@@ -291,7 +292,7 @@ function Guide({ drafts, pact }: { drafts: Pact[]; pact: Pact | null }) {
   );
 }
 
-function ClausePanel({ c, stake, restricted, onChange, onRemove }: { c: Clause; stake: (w: WagerTerms) => Stake; restricted: Param[]; onChange: (c: Clause) => void; onRemove: () => void }) {
+function ClausePanel({ c, stake, online, restricted, onChange, onRemove }: { c: Clause; stake: (w: WagerTerms) => Stake; online: boolean; restricted: Param[]; onChange: (c: Clause) => void; onRemove: () => void }) {
   if (c.kind === 'sunset') {
     const same = (a: Extract<Clause, { kind: 'sunset' }>) => JSON.stringify(a.term) === JSON.stringify(c.term);
     return <>
@@ -304,7 +305,7 @@ function ClausePanel({ c, stake, restricted, onChange, onRemove }: { c: Clause; 
     <div class="chips"><span class="chips-l">Past the</span>{restricted.map((p) => <button key={p} class={`chip ${c.beyond === p ? 'on' : ''}`} onClick={() => onChange({ ...c, beyond: p })}>{PARAM_WORDS[p].title.toLowerCase()} limit</button>)}</div>
     <div class="opts tiles four">{RISK_COSTS.map((k) => <button key={k} class={`opt ${c.cost === k ? 'on' : ''}`} onClick={() => onChange({ ...c, cost: k })}><span class="l">{k === 'health' ? 'Pay in health' : k === 'exhaustion' ? 'Pay in exhaustion' : 'Pay with a seal'}</span><span class="w">{riskCost(k)}</span></button>)}</div>
   </>;
-  if (c.kind === 'wager') return <WagerPanel c={c} stake={stake} onChange={onChange} onRemove={onRemove} />;
+  if (c.kind === 'wager') return <WagerPanel c={c} stake={stake} online={online} onChange={onChange} onRemove={onRemove} />;
   if (c.kind !== 'program') return null;
   return <>
     <PanelHead title="Program" hint="an IF/THEN rule over this Pact" onRemove={onRemove} />
@@ -313,42 +314,70 @@ function ClausePanel({ c, stake, restricted, onChange, onRemove }: { c: Clause; 
   </>;
 }
 
-// A Wager's three parts, each chosen against what it does to the stake: the
-// Declaration (and how often this player calls it right), the Reward a right
-// call pays, and the Forfeit a wrong one lands. The stake only grows with
-// real doubt and real loss, and the reward is sized by it.
-function WagerPanel({ c, stake, onChange, onRemove }: { c: Extract<Clause, { kind: 'wager' }>; stake: (w: WagerTerms) => Stake; onChange: (c: Clause) => void; onRemove: () => void }) {
+// A Wager's three parts, each tuned against what it does to the stake: the
+// call and its setting (and how often this player makes it true there), the
+// rewards a right call splits the stake between, and the forfeits a wrong
+// one lands, each at a size. The stake only grows with real doubt and real
+// loss, and every number here moves with the slider.
+function WagerPanel({ c, stake, online, onChange, onRemove }: { c: Extract<Clause, { kind: 'wager' }>; stake: (w: WagerTerms) => Stake; online: boolean; onChange: (c: Clause) => void; onRemove: () => void }) {
   const now = stake(c);
   const set = (w: Partial<WagerTerms>) => {
     const next = { ...c, ...w };
-    if (!rewardFits(next.declare, next.reward)) next.reward = 'charge';
+    const d = DECLARE[next.declare];
+    if (!d.steps) delete next.at;
+    else if (!d.steps.includes(next.at!)) next.at = d.at;
+    // The harder strike leaves with a call it cannot ride on, and its parts go to the ring.
+    if (!rewardFits(next.declare, 'output') && next.pays.output) {
+      const { output, ...rest } = next.pays;
+      next.pays = { ...rest, charge: Math.min(MAX_PARTS, (rest.charge ?? 0) + output) };
+    }
     onChange(next);
   };
+  const steps = DECLARE[c.declare].steps;
+  const at = settingOf(c);
+  const pctOf = (w: WagerTerms) => `${Math.round(stake(w).odds * 100)}%`;
+  const share = (r: (typeof REWARDS)[number]) => now.payouts.find((p) => p.reward === r);
   return <>
-    <PanelHead title="Wager" hint="every cast declares it; you write what a right call pays and a wrong one costs" onRemove={onRemove} />
-    <div class="chips" data-row><span class="chips-l">Each cast declares that</span>{DECLARATIONS.map((d) => (
-      <button key={d} class={`chip ${c.declare === d ? 'on' : ''}`} aria-pressed={c.declare === d} onClick={() => set({ declare: d })}>{DECLARE[d].words} <small>· true {Math.round(stake({ ...c, declare: d }).odds * 100)}% of the time</small></button>
-    ))}</div>
+    <PanelHead title="Wager" hint="every cast declares it; you set what a right call pays and a wrong one costs" onRemove={onRemove} />
+    <div class="chips" data-row><span class="chips-l">Each cast declares that</span>{DECLARATIONS.map((d) => {
+      const n = c.declare === d ? at : DECLARE[d].at;
+      return <button key={d} class={`chip ${c.declare === d ? 'on' : ''}`} aria-pressed={c.declare === d} onClick={() => set({ declare: d })}>{DECLARE[d].words(n)} <small>· true {pctOf({ ...c, declare: d, at: n })} of the time</small></button>;
+    })}</div>
+    {steps && <Tune class="wg-call" label={c.declare === 'multi' ? 'How many' : c.declare === 'kill' ? 'How soon' : 'How long'} min={0} max={steps.length - 1} value={steps.indexOf(at)}
+      text={`${DECLARE[c.declare].short(at)} · true ${pctOf(c)}`} onChange={(i) => set({ at: steps[i] })} />}
     <div class="wg-cols">
       <div class="wg-col">
         <span class="chips-l">Called right, it pays</span>
-        <div class="opts list">{REWARDS.map((r) => (
-          <button key={r} class={`opt line ${c.reward === r ? 'on' : ''}`} aria-pressed={c.reward === r} disabled={!rewardFits(c.declare, r)} onClick={() => set({ reward: r })}>
-            <span class="l">{REWARD[r].title}</span><span class="w">{rewardFits(c.declare, r) ? REWARD[r].short(REWARD[r].amount(now.stake)) : 'only on "it lands"'}</span>
-          </button>
-        ))}</div>
+        {REWARDS.map((r) => {
+          const fits = rewardFits(c.declare, r), p = share(r);
+          const text = !fits ? 'only on "it lands"' : !p ? 'off' : r === 'mend' && online ? 'not online' : `${now.payouts.length > 1 ? `${Math.round(p.share * 100)}% · ` : ''}${REWARD[r].short(p.amount)}`;
+          return <Tune key={r} label={REWARD[r].title} min={0} max={MAX_PARTS} value={c.pays[r] ?? 0} disabled={!fits} text={text}
+            onChange={(n) => { const { [r]: _, ...rest } = c.pays; set({ pays: n ? { ...rest, [r]: n } : rest }); }} />;
+        })}
       </div>
       <div class="wg-col">
         <span class="chips-l">Called wrong, it costs</span>
-        <div class="opts list">{FORFEITS.map((f) => (
-          <button key={f} class={`opt line ${c.forfeit === f ? 'on' : ''}`} aria-pressed={c.forfeit === f} onClick={() => set({ forfeit: f })}>
-            <span class="l">{FORFEIT[f].short}</span><span class="w">stake {stake({ ...c, forfeit: f }).stake.toFixed(1)}</span>
-          </button>
-        ))}</div>
+        {FORFEITS.map((f) => {
+          const def = FORFEIT[f], n = c.risks[f];
+          return <Tune key={f} label={def.title} min={0} max={def.steps.length} value={n ? def.steps.indexOf(n) + 1 : 0} text={n ? def.short(n) : 'off'}
+            onChange={(i) => { const { [f]: _, ...rest } = c.risks; set({ risks: i ? { ...rest, [f]: def.steps[i - 1] } : rest }); }} />;
+        })}
       </div>
     </div>
     <p class={`wg-read ${now.stake < 0.5 ? 'warn' : ''}`}>Stake {now.stake.toFixed(1)}: {now.reason}.</p>
   </>;
+}
+
+// One tuned part of a Wager: its name, a slider over its settings, and what
+// it reads at the setting it is on. Left and Right move it from the keyboard.
+function Tune({ label, value, min, max, text, disabled, onChange, class: cls = '' }: { label: string; value: number; min: number; max: number; text: string; disabled?: boolean; onChange: (v: number) => void; class?: string }) {
+  return (
+    <label class={`wg-tune ${cls} ${value > 0 ? 'on' : ''} ${disabled ? 'off' : ''}`}>
+      <span class="l">{label}</span>
+      <input type="range" min={min} max={max} step={1} value={value} disabled={disabled} aria-label={label} aria-valuetext={text} onInput={(e) => onChange(Number((e.target as HTMLInputElement).value))} />
+      <span class="v">{text}</span>
+    </label>
+  );
 }
 
 // What the Pact would hit with, against the raw Technique and against the
@@ -393,8 +422,8 @@ function Trade({ est, power: p, kit, onFocus }: { est: ResolveEstimate; power: P
             </li>
           ))}</ul>}
         {w && <div class="wg-line">
-          <span class="l">賭 Wager: {DECLARE[w.declare].words}</span>
-          <span class="why">Called wrong, {FORFEIT[w.forfeit].words}. {cap(w.reason)}.</span>
+          <span class="l">賭 Wager: {callWords(w)}</span>
+          <span class="why">Called wrong, {wagerRisks(w)}. {cap(w.reason)}.</span>
         </div>}
       </section>
       <section class="get" aria-label="What it pays back">
@@ -408,7 +437,7 @@ function Trade({ est, power: p, kit, onFocus }: { est: ResolveEstimate; power: P
         ))}</ul>
         <p class="note">Every hit, push and catch this key makes scales with it.</p>
         {w && <div class="wg-line pay">
-          <span class="l">賭 Called right: {REWARD[w.reward].short(w.amount)}</span>
+          <span class="l">賭 Called right: {paysShort(w)}</span>
           <span class="why">{w.stake > 0 ? `About ${Math.round(w.odds * 100)}% of casts, at stake ${w.stake.toFixed(1)}.` : 'Nothing is at stake, so a right call pays nothing.'}</span>
         </div>}
       </section>

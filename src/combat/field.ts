@@ -133,6 +133,27 @@ export class AuraField {
     return true;
   }
 
+  // A Wager's reward: `share` of a pool refills, or an open field holds that
+  // share of its time longer (never past what it held when it opened).
+  fill(share: number): void {
+    if (this.open) { this.left = Math.min(this.holds, this.left + share * this.holds); return; }
+    if (this.state !== 'recovering') return;
+    this.pool = Math.min(1, this.pool + share);
+    if (this.pool >= 1) this.state = 'ready';
+  }
+
+  // A Wager's forfeit: `share` of the pool is lost, or of an open field's
+  // time; a field with no time left is spent.
+  lose(share: number): void {
+    if (this.open) {
+      this.left -= share * this.holds;
+      if (this.left <= 1e-3) this.end('spent');
+      return;
+    }
+    if (this.state === 'ready') { this.state = 'recovering'; this.ended = 'spent'; }
+    this.pool = Math.max(0, this.pool - share);
+  }
+
   // Back to a full pool and no field, for a new scene.
   reset(): void {
     this.state = 'ready';

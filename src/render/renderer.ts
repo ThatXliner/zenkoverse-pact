@@ -16,7 +16,7 @@ const POOL: Record<Quality, PoolSize> = {
 // get) and the dry-brush, paper fibre and painted looks. Low keeps the tones
 // and a plain ink line.
 const INK: Record<Quality, InkQuality> = {
-  high: { radius: 3, detail: true },
+  high: { radius: 2, detail: true },
   medium: { radius: 2, detail: true },
   low: { radius: 1, detail: false },
 };

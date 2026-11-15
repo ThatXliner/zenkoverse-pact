@@ -6,9 +6,11 @@ import * as THREE from 'three';
 //   - full sun: the flat colour;
 //   - where the light turns away: a halftone screen, dots that grow until
 //     they close into the shade colour;
-//   - over a shadow: the shade colour under a fine dot screen of a deeper shade;
-//   - in the core of a form shadow (the side turned from the sun): hatching
-//     toward ink, crossed where it is darkest.
+//   - over a shadow: the shade colour under a faint dot screen of a deeper
+//     shade.
+// It stays a light touch: mostly flat cel colour, the tone only at the turn
+// and as a faint screen in shadow. Hatching every form shadow buried the
+// characters in pen lines.
 // The patterns are in screen pixels, as a printed tone is on the page, but
 // slide with the world (`origin`), so a pan does not drag the world under
 // fixed dots.
@@ -45,35 +47,19 @@ float mangaDots( vec2 px, float cover, float pitch ) {
   return 1.0 - clamp( ( r - d ) / ( 2.0 * aa ) + 0.5, 0.0, 1.0 ) * min( 1.0, r / aa );
 }
 
-// Parallel pen lines, a little uneven, as drawn with a ruler-less hand.
-float mangaHatch( vec2 px, float cover, float pitch, float angle ) {
-  vec2 dir = vec2( cos( angle ), sin( angle ) );
-  float along = dot( px, vec2( -dir.y, dir.x ) );
-  float t = dot( px, dir ) / pitch + 0.18 * sin( along * 0.045 + floor( dot( px, dir ) / pitch ) * 1.7 );
-  float d = abs( fract( t ) - 0.5 );
-  float w = cover * 0.5 * ( 0.8 + 0.2 * sin( along * 0.11 + t * 3.1 ) );
-  float aa = 0.8 / pitch;
-  return clamp( ( w - d ) / ( 2.0 * aa ) + 0.5, 0.0, 1.0 ) * min( 1.0, w / aa );
-}
-
 // lit: the colour in full sun. shade: the colour in shade. v: the sun's reach,
-// 0 to 1. facing: N.L toward the sun, for the form shadow's core.
+// 0 to 1. facing: N.L toward the sun (unused since the hatching went).
 vec3 mangaPaint( vec3 lit, vec3 shade, float v, float facing ) {
   vec2 px = gl_FragCoord.xy - mangaOrigin;
   float pitch = mangaPitch;
   // The turn: a graded halftone between lit and shade.
-  float turn = 1.0 - smoothstep( 0.1, 0.9, v );
+  float turn = 1.0 - smoothstep( 0.3, 0.7, v );
   float dots = mangaDots( px, turn, pitch );
   vec3 col = mix( lit, shade, mix( step( 0.5, turn ), dots, mangaTone ) );
   // The shadow's own screen: fine dots of a deeper shade.
   float inShade = smoothstep( 0.55, 0.95, turn );
   float screen = mangaDots( px + vec2( pitch * 0.25 ), 0.22, pitch * 0.72 );
-  col = mix( col, shade * vec3( 0.7, 0.72, 0.82 ), screen * inShade * 0.85 * mangaTone );
-  // The core of the form shadow: hatching toward ink, crossed where darkest.
-  float core = smoothstep( -0.12, -0.55, facing ) * inShade;
-  float hatch = mangaHatch( px, 0.36 * core, pitch * 1.25, 1.05 );
-  hatch = max( hatch, mangaHatch( px, 0.26 * smoothstep( 0.85, 1.0, core ), pitch * 1.25, -0.6 ) );
-  col = mix( col, shade * vec3( 0.5, 0.48, 0.58 ), hatch * 0.85 * mangaTone );
+  col = mix( col, shade * vec3( 0.82, 0.84, 0.9 ), screen * inShade * 0.3 * mangaTone );
   return col;
 }
 `;

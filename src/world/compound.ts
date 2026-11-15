@@ -4,6 +4,10 @@ import { Physics, RAPIER } from '../physics/world';
 import { toon, toonify, emissive, paintedSign, faceted } from '../render/materials';
 import type { PropSystem } from './props';
 import type { LightPool } from '../render/lightPool';
+import { mangaShading } from '../render/tone';
+import { flagstones, planks, kawara, ashlar, boxUV } from './textures';
+import { bakeStatic, mergeMeshes } from './batch';
+import { dressCompound } from './dressing';
 
 // One walled dojo compound, 48 by 40 metres inside the walls, every surface
 // hand placed. North is -z. The training hall fills the north side and its
@@ -36,7 +40,7 @@ export const PALETTE = {
   paving: 0xcdbb9c, pavingLine: 0xb7a486, sand: 0xe6d3ad, grass: 0x8fae58, grassFar: 0x6a8f52, path: 0xc8ad86,
   plaster: 0xf3e9d8, plasterShade: 0xe3d5c0, plinth: 0x6b6f72, stone: 0xa3a7a8, stoneDark: 0x7c8284,
   wood: 0x7a4b34, woodDark: 0x4e3024, woodLight: 0xc49a66, floor: 0xcfa875, deck: 0xa08a6c, deckLine: 0x7a6650,
-  tile: 0x4b6080, tileEdge: 0x33425a, gateWood: 0x5a3a2a, iron: 0x2a2528, water: 0x3f86b6, waterLight: 0x8ad0ea,
+  tile: 0x55688a, tileLight: 0x7f92b0, tileEdge: 0x33425a, gateWood: 0x5a3a2a, iron: 0x2a2528, water: 0x3f86b6, waterLight: 0x8ad0ea,
   lantern: 0xffb36b, mark: 0xff9a3c, hill: 0x6f93a4, hillFar: 0x8fb0bf,
 } as const;
 
@@ -68,49 +72,6 @@ export const STORE = { x0: 17.4, x1: 24, z0: -9, z1: -1, wallTop: 3.8, deckY: 4.
 export const WALK_Y = 2.6;
 export const GATE = { x0: -4.2, x1: 4.2, z0: 17.8, z1: 20.8, roofY: 3.9 };
 export const POND = { center: new THREE.Vector3(11, 0, 11), radius: 2.75, surfaceY: -0.15, floorY: -0.9, hole: 2.6 };
-
-// A canvas of flagstones: flat cells of two close tones with a thin dark joint.
-function flagstones(a: number, b: number, line: number, cells = 4): THREE.CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = c.height = 256;
-  const g = c.getContext('2d')!;
-  const ca = new THREE.Color(a), cb = new THREE.Color(b);
-  const size = 256 / cells;
-  for (let y = 0; y < cells; y++) for (let x = 0; x < cells; x++) {
-    const t = ((x * 7 + y * 13) % 5) / 5;
-    g.fillStyle = '#' + ca.clone().lerp(cb, t).getHexString();
-    g.fillRect(x * size, y * size, size, size);
-  }
-  g.strokeStyle = '#' + new THREE.Color(line).getHexString();
-  g.lineWidth = 3;
-  for (let i = 0; i <= cells; i++) { g.beginPath(); g.moveTo(i * size, 0); g.lineTo(i * size, 256); g.stroke(); g.beginPath(); g.moveTo(0, i * size); g.lineTo(256, i * size); g.stroke(); }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.anisotropy = 4;
-  return t;
-}
-
-// Planks: long boards with a dark seam, for the hall floor and the roof decks.
-function planks(a: number, b: number, line: number, boards = 6): THREE.CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = c.height = 256;
-  const g = c.getContext('2d')!;
-  const ca = new THREE.Color(a), cb = new THREE.Color(b);
-  const w = 256 / boards;
-  for (let i = 0; i < boards; i++) {
-    g.fillStyle = '#' + ca.clone().lerp(cb, ((i * 5) % 4) / 4).getHexString();
-    g.fillRect(i * w, 0, w, 256);
-    g.fillStyle = '#' + new THREE.Color(line).getHexString();
-    g.fillRect(i * w, 0, 2, 256);
-    g.fillRect(i * w, (i * 97) % 256, w, 2);
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.anisotropy = 4;
-  return t;
-}
 
 const waterVert = /* glsl */ `varying vec2 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }`;
 const waterFrag = /* glsl */ `uniform float time; uniform vec3 deep; uniform vec3 light; varying vec2 vW;
@@ -144,7 +105,8 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   const wood = toon(PALETTE.wood);
   const woodDark = toon(PALETTE.woodDark);
   const woodLight = toon(PALETTE.woodLight);
-  const tile = toon(PALETTE.tile);
+  // Roof tile reads as tile from above: channels down the slope, tiled in metres.
+  const tile = toon(0xffffff, { map: kawara(PALETTE.tile, PALETTE.tileLight, PALETTE.tileEdge) });
   const tileEdge = toon(PALETTE.tileEdge);
   const gateWood = toon(PALETTE.gateWood);
   const iron = toon(PALETTE.iron);
@@ -157,8 +119,10 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
 
   const tag = (col: RAPIER.Collider, surface: string): RAPIER.Collider => { (col as RAPIER.Collider & { surfaceTag?: string }).surfaceTag = surface; return col; };
   // A box with a matching collider. `y` is the centre.
-  const slab = (mat: THREE.Material, x: number, y: number, z: number, w: number, h: number, d: number, opts: { rotY?: number; rotX?: number; rotZ?: number; surface?: string; shadow?: boolean; collide?: boolean; occluder?: boolean | string; receive?: boolean } = {}): THREE.Mesh => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  const slab = (mat: THREE.Material, x: number, y: number, z: number, w: number, h: number, d: number, opts: { rotY?: number; rotX?: number; rotZ?: number; surface?: string; shadow?: boolean; collide?: boolean; occluder?: boolean | string; ghost?: boolean; receive?: boolean; uv?: number; uvSwap?: boolean } = {}): THREE.Mesh => {
+    const geo = new THREE.BoxGeometry(w, h, d);
+    if (opts.uv) boxUV(geo, opts.uv, opts.uvSwap);
+    const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
     m.rotation.set(opts.rotX ?? 0, opts.rotY ?? 0, opts.rotZ ?? 0);
     m.receiveShadow = opts.receive ?? true;
@@ -170,11 +134,32 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
     }
     // A wall in the way stays as a faint ghost; a roof slab hides outright,
     // since even a faint one over the whole room buries everyone under it.
-    if (opts.occluder) onRoof(m, typeof opts.occluder === 'string' ? opts.occluder : '', opts.occluder === true);
+    // A named wall (`ghost` with a name) fades whole, its boarding and posts with it.
+    if (opts.occluder) onRoof(m, typeof opts.occluder === 'string' ? opts.occluder : '', opts.ghost ?? opts.occluder === true);
     return m;
   };
   // A ghost stays faintly drawn when faded; everything else hides outright.
-  const onRoof = (m: THREE.Mesh, roof: string, ghost = false): void => { m.material = (m.material as THREE.Material).clone(); m.userData.cutaway = roof; m.userData.ghost = ghost; occluders.push(m); };
+  // The pieces of one named roof fade together, so they share one copy of
+  // each material (and are merged into one mesh per material at the end);
+  // an unnamed piece fades alone and gets its own.
+  const roofMats = new Map<string, THREE.Material>();
+  const onRoof = (m: THREE.Mesh, roof: string, ghost = false): void => {
+    const src = m.material as THREE.Material;
+    const key = `${roof}|${src.uuid}`;
+    let mat = roof ? roofMats.get(key) : undefined;
+    if (!mat) {
+      mat = src.clone();
+      // A clone loses the manga paint (onBeforeCompile is not copied).
+      if ((mat as THREE.MeshToonMaterial).isMeshToonMaterial) mangaShading(mat as THREE.MeshToonMaterial);
+      // Compiled as transparent from the start: three bakes 'opaque' into the
+      // program at first draw and does not recompile when the cutaway later
+      // flips the flag, so a wall compiled opaque would never fade.
+      mat.transparent = true;
+      if (roof) roofMats.set(key, mat);
+    }
+    m.material = mat;
+    m.userData.cutaway = roof; m.userData.ghost = ghost; occluders.push(m);
+  };
   // Collision only: the tall rails that keep everyone on the roofs and inside the walls.
   const rail = (x: number, y: number, z: number, w: number, h: number, d: number): void => { physics.staticBox(new THREE.Vector3(x, y, z), new THREE.Vector3(w / 2, h / 2, d / 2)); };
   // A box spanning two corners.
@@ -226,43 +211,85 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   void grassFar;
 
   // ---------------------------------------------------------------- walls
-  // Plaster walls on a dark plinth, capped with tile. An invisible rail
-  // above each wall keeps a jump or a knock-back inside.
-  const wallRun = (x0: number, x1: number, z0: number, z1: number, occluder: boolean): void => {
-    span(plinth, x0, x1, 0, 0.55, z0, z1, { collide: false });
-    span(plaster, x0 + 0.05, x1 - 0.05, 0.55, WALL_H, z0 + 0.05, z1 - 0.05, { occluder });
+  // Plaster walls on a dark plinth, capped with tile, with a band of dark
+  // boarding along the foot and a post every few metres, so a long wall
+  // reads as built and not as one flat plane. An invisible rail above each
+  // wall keeps a jump or a knock-back inside. `faces` are the runs of
+  // boarding: which face (-1 the low side, 1 the high side) and from where
+  // to where along the wall. A named wall fades whole in the cutaway.
+  const wallBoard = toon(0xffffff, { map: planks(0x5b4030, 0x4d3527, 0x2e1f18, 8) });
+  const wallRun = (x0: number, x1: number, z0: number, z1: number, name: string | null, faces: [number, number, number][]): void => {
+    const occ = name ? { occluder: name, ghost: true } : {};
+    span(plinth, x0, x1, 0, 0.55, z0, z1, { collide: false, uv: 1, ...occ });
+    span(plaster, x0 + 0.05, x1 - 0.05, 0.55, WALL_H, z0 + 0.05, z1 - 0.05, occ);
     const alongX = x1 - x0 > z1 - z0;
-    span(tile, x0 - (alongX ? 0 : 0.25), x1 + (alongX ? 0 : 0.25), WALL_H, WALL_H + 0.34, z0 - (alongX ? 0.25 : 0), z1 + (alongX ? 0.25 : 0), { collide: false, occluder });
-    span(tileEdge, x0 - (alongX ? 0 : 0.3), x1 + (alongX ? 0 : 0.3), WALL_H + 0.3, WALL_H + 0.42, z0 - (alongX ? 0.3 : 0), z1 + (alongX ? 0.3 : 0), { collide: false, shadow: false });
+    span(tile, x0 - (alongX ? 0 : 0.25), x1 + (alongX ? 0 : 0.25), WALL_H, WALL_H + 0.34, z0 - (alongX ? 0.25 : 0), z1 + (alongX ? 0.25 : 0), { collide: false, uv: 1.2, uvSwap: !alongX, ...occ });
+    // The ridge: a narrow dark cap down the middle, so from above the tile shows either side of it.
+    const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+    span(tileEdge, alongX ? x0 : mx - 0.13, alongX ? x1 : mx + 0.13, WALL_H + 0.3, WALL_H + 0.46, alongX ? mz - 0.13 : z0, alongX ? mz + 0.13 : z1, { collide: false, shadow: false, ...occ });
+    span(tileEdge, x0 - (alongX ? 0 : 0.3), x1 + (alongX ? 0 : 0.3), WALL_H, WALL_H + 0.08, z0 - (alongX ? 0.3 : 0), z1 + (alongX ? 0.3 : 0), { collide: false, shadow: false, ...occ });
     rail((x0 + x1) / 2, WALL_H + 5, (z0 + z1) / 2, x1 - x0, 10, z1 - z0);
+    for (const [side, a, b] of faces) {
+      const f = alongX ? (side < 0 ? z0 : z1) : (side < 0 ? x0 : x1);
+      const t0 = f, t1 = f + side * 0.07, p0 = f, p1 = f + side * 0.12;
+      const opts = { collide: false, shadow: false, ...occ };
+      const box = (m: THREE.Material, a0: number, a1: number, y0: number, y1: number, c0: number, c1: number, uv?: number): void => {
+        if (alongX) span(m, a0, a1, y0, y1, Math.min(c0, c1), Math.max(c0, c1), { ...opts, uv });
+        else span(m, Math.min(c0, c1), Math.max(c0, c1), y0, y1, a0, a1, { ...opts, uv });
+      };
+      box(wallBoard, a, b, 0.55, 1.5, t0, t1, 1.6);
+      box(woodDark, a, b, 1.5, 1.58, t0, f + side * 0.1);
+      box(woodDark, a, b, WALL_H - 0.14, WALL_H, t0, f + side * 0.09);
+      const n = Math.max(1, Math.round((b - a) / 3.6));
+      for (let i = 0; i <= n; i++) { const c = a + ((b - a) * i) / n; box(woodDark, Math.max(a, c - 0.1), Math.min(b, c + 0.1), 0.55, WALL_H, p0, p1); }
+    }
   };
   const wx0 = -HX - WALL_T, wx1 = HX + WALL_T, wz0 = -HZ - WALL_T, wz1 = HZ + WALL_T;
-  wallRun(wx0, wx1, wz0, -HZ, false);
-  wallRun(wx0, -HX, -HZ, HZ, true);
-  wallRun(HX, wx1, -HZ, HZ, true);
-  wallRun(wx0, GATE.x0, HZ, wz1, true);
-  wallRun(GATE.x1, wx1, HZ, wz1, true);
+  // North: behind the hall, seen only from outside. West: the whole inner
+  // face. East: inside only north of the storehouse (the wall walk covers
+  // the rest). South: inside only west of the gate (the walk covers the east).
+  wallRun(wx0, wx1, wz0, -HZ, null, [[-1, wx0, wx1]]);
+  wallRun(wx0, -HX, -HZ, HZ, 'wall-w', [[-1, -HZ, HZ], [1, -HZ, HZ]]);
+  wallRun(HX, wx1, -HZ, HZ, 'wall-e', [[1, -HZ, HZ], [-1, -HZ, STORE.z0]]);
+  wallRun(wx0, GATE.x0, HZ, wz1, 'wall-sw', [[1, wx0, GATE.x0], [-1, -HX, GATE.x0]]);
+  wallRun(GATE.x1, wx1, HZ, wz1, 'wall-se', [[1, GATE.x1, wx1]]);
   // Corner posts, a little taller than the wall.
   for (const [cx, cz] of [[wx0 + 0.3, wz0 + 0.3], [wx1 - 0.3, wz0 + 0.3], [wx0 + 0.3, wz1 - 0.3], [wx1 - 0.3, wz1 - 0.3]]) {
     slab(plinth, cx!, WALL_H / 2 + 0.1, cz!, 1.0, WALL_H + 0.2, 1.0, { collide: false });
-    slab(tile, cx!, WALL_H + 0.55, cz!, 1.4, 0.3, 1.4, { collide: false });
+    slab(tile, cx!, WALL_H + 0.55, cz!, 1.4, 0.3, 1.4, { collide: false, uv: 1.2 });
   }
 
   // ---------------------------------------------------------------- gate
   // Two pillars, a lintel, closed double doors and a tiled roof over them.
   const G = GATE;
-  for (const px of [G.x0 + 0.4, G.x1 - 0.4]) slab(woodDark, px, 2.0, HZ + 0.3, 0.7, 4.0, 0.9);
-  slab(woodDark, 0, 3.55, HZ + 0.3, G.x1 - G.x0, 0.35, 1.0, { collide: false });
+  // The gateway fades with its roof (as a ghost) when the player is in or just inside it.
+  const gg = { occluder: 'gate', ghost: true };
+  for (const px of [G.x0 + 0.4, G.x1 - 0.4]) slab(woodDark, px, (G.roofY - 0.3) / 2, HZ + 0.3, 0.7, G.roofY - 0.3, 0.9, gg);
+  slab(woodDark, 0, 3.55, HZ + 0.3, G.x1 - G.x0, 0.35, 1.0, { collide: false, ...gg });
   for (const side of [-1, 1]) {
-    const door = slab(gateWood, side * (G.x1 - 0.8) / 2, 1.65, HZ + 0.3, (G.x1 - 0.8) - 0.05, 3.3, 0.22, { surface: 'wood' });
+    const door = slab(gateWood, side * (G.x1 - 0.8) / 2, 1.65, HZ + 0.3, (G.x1 - 0.8) - 0.05, 3.3, 0.22, { surface: 'wood', ...gg });
     door.castShadow = true;
-    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) slab(iron, side * (G.x1 - 0.8) / 2 - 1.2 + c * 1.2, 0.6 + r * 1.0, HZ + 0.17, 0.14, 0.14, 0.06, { collide: false, shadow: false });
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) slab(iron, side * (G.x1 - 0.8) / 2 - 1.2 + c * 1.2, 0.6 + r * 1.0, HZ + 0.17, 0.14, 0.14, 0.06, { collide: false, shadow: false, ...gg });
   }
-  span(tile, G.x0 - 0.9, G.x1 + 0.9, G.roofY - 0.3, G.roofY, G.z0 - 0.9, G.z1 + 0.9, { occluder: 'gate' });
-  span(tileEdge, G.x0 - 1.0, G.x1 + 1.0, G.roofY - 0.3, G.roofY - 0.18, G.z0 - 1.0, G.z1 + 1.0, { collide: false, shadow: false });
-  slab(tileEdge, 0, G.roofY + 0.25, (G.z0 + G.z1) / 2, G.x1 - G.x0 - 1.5, 0.5, 0.5, { collide: false });
+  // The gate roof: a walkable tiled top (the channels run north and south,
+  // down from the ridge), tile eaves hanging over the yard and the road, a
+  // ridge with raised end tiles, and the whole of it one group in the cutaway.
+  const gr = { occluder: 'gate' };
+  span(tile, G.x0 - 0.9, G.x1 + 0.9, G.roofY - 0.3, G.roofY, G.z0 - 0.9, G.z1 + 0.9, { ...gr, uv: 1.2 });
+  span(tileEdge, G.x0 - 1.0, G.x1 + 1.0, G.roofY - 0.3, G.roofY - 0.18, G.z0 - 1.0, G.z1 + 1.0, { collide: false, shadow: false, ...gr });
+  // Boarded underside, for whoever stands in the gateway.
+  span(deckMat, G.x0 - 0.85, G.x1 + 0.85, G.roofY - 0.34, G.roofY - 0.3, G.z0 - 0.85, G.z1 + 0.85, { collide: false, shadow: false, ...gr });
+  for (const side of [-1, 1]) {
+    const edgeZ = side < 0 ? G.z0 - 0.9 : G.z1 + 0.9, reach = 1.1, tilt = 0.42;
+    slab(tile, 0, G.roofY - 0.3 - Math.sin(tilt) * reach / 2, edgeZ + side * Math.cos(tilt) * reach / 2, G.x1 - G.x0 + 2.0, 0.12, reach, { rotX: side * tilt, collide: false, uv: 1.2, ...gr });
+    slab(tileEdge, 0, G.roofY - 0.3 - Math.sin(tilt) * reach, edgeZ + side * Math.cos(tilt) * reach, G.x1 - G.x0 + 2.0, 0.2, 0.16, { collide: false, shadow: false, ...gr });
+  }
+  const ridgeZ = (G.z0 + G.z1) / 2;
+  slab(tileEdge, 0, G.roofY + 0.22, ridgeZ, G.x1 - G.x0 - 1.5, 0.44, 0.5, { collide: false, ...gr });
+  slab(plaster, 0, G.roofY + 0.36, ridgeZ, G.x1 - G.x0 - 1.5, 0.06, 0.52, { collide: false, shadow: false, ...gr });
+  for (const side of [-1, 1]) slab(tileEdge, side * (G.x1 - G.x0 - 1.5) / 2, G.roofY + 0.42, ridgeZ, 0.4, 0.84, 0.62, { collide: false, ...gr });
   // Low rail around the gate roof; the tall rail is on the outer edge only.
-  for (const [x0, x1, z0, z1] of [[G.x0 - 0.9, G.x1 + 0.9, G.z0 - 0.9, G.z0 - 0.78], [G.x0 - 0.9, G.x0 - 0.78, G.z0 - 0.9, G.z1 + 0.9]] as const) span(woodDark, x0, x1, G.roofY, G.roofY + 0.9, z0, z1);
+  for (const [x0, x1, z0, z1] of [[G.x0 - 0.9, G.x1 + 0.9, G.z0 - 0.9, G.z0 - 0.78], [G.x0 - 0.9, G.x0 - 0.78, G.z0 - 0.9, G.z1 + 0.9]] as const) span(woodDark, x0, x1, G.roofY, G.roofY + 0.9, z0, z1, gr);
   rail(0, G.roofY + 5, G.z1 + 0.9, G.x1 - G.x0 + 2, 10, 0.2);
   lanternAt(G.x0 - 1.3, 2.4, HZ - 0.9);
   lanternAt(G.x1 + 1.3, 2.4, HZ - 0.9);
@@ -275,8 +302,10 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   // ---------------------------------------------------------------- wall walk
   // A ledge along the inside of the east and south walls, chest high to the
   // courtyard, with a low wooden rail on its inner edge.
-  span(stoneDark, HX - 1.6, HX, 0, WALK_Y, STORE.z1, HZ, { surface: 'stone' });
-  span(stoneDark, G.x1 + 0.9, HX, 0, WALK_Y, HZ - 1.6, HZ, { surface: 'stone' });
+  // Dressed stone in courses, so the long faces over the pond read as built.
+  const walkStone = toon(0xffffff, { map: ashlar(0x8f9596, 0x7d8486, 0x5c6264) });
+  span(walkStone, HX - 1.6, HX, 0, WALK_Y, STORE.z1, HZ, { surface: 'stone', uv: 2 });
+  span(walkStone, G.x1 + 0.9, HX - 1.6, 0, WALK_Y, HZ - 1.6, HZ, { surface: 'stone', uv: 2 });
   span(woodDark, HX - 1.65, HX - 1.55, WALK_Y, WALK_Y + 0.9, STORE.z1, HZ - 1.6);
   span(woodDark, G.x1 + 0.9, HX - 1.55, WALK_Y, WALK_Y + 0.9, HZ - 1.65, HZ - 1.55);
   for (let z = STORE.z1 + 1; z < HZ - 1.6; z += 2) slab(woodDark, HX - 1.6, WALK_Y + 0.45, z, 0.16, 0.9, 0.16, { collide: false });
@@ -318,7 +347,7 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
     for (const lx of [-0.75, -0.25, 0.25, 0.75]) span(woodDark, x + lx - 0.03, x + lx + 0.03, H.floorY, H.wallTop - 0.3, H.z1 - 0.37, H.z1 - 0.27, { collide: false, shadow: false });
     for (let y = H.floorY; y <= H.wallTop - 0.3; y += 0.7) span(woodDark, x - 0.78, x + 0.78, y, y + 0.05, H.z1 - 0.37, H.z1 - 0.27, { collide: false, shadow: false });
   }
-  span(woodDark, H.x0, H.x1, H.wallTop - 0.3, H.wallTop + 0.3, H.z1 - 0.5, H.z1, { collide: false });
+  span(woodDark, H.x0, H.x1, H.wallTop - 0.3, H.wallTop + 0.3, H.z1 - 0.5, H.z1, { collide: false, occluder: true });
   // The roof deck with tile eaves on three sides (the back sits on the wall).
   const dx0 = H.x0 - H.overhang, dx1 = H.x1 + H.overhang, dz0 = H.z0 - 0.5, dz1 = H.z1 + H.overhang;
   span(deckMat, dx0, dx1, H.deckY - 0.3, H.deckY, dz0, dz1, { surface: 'wood', occluder: 'hall' });
@@ -329,16 +358,8 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   const name = paintedSign('道場', { width: 2.6 });
   name.position.set(0, H.wallTop - 0.1, H.z1 + 0.15);
   g.add(name);
-  // Furniture: the Architect's desk, bookcases, a rug, lamps, and dummies at the back.
-  place('props/furn-desk', -10, H.floorY, -17.6, Math.PI);
+  // The Architect's desk (its collider; the desk itself is dressing).
   physics.staticBox(new THREE.Vector3(-10, H.floorY + 0.45, -17.6), new THREE.Vector3(0.9, 0.45, 0.5));
-  place('props/furn-radio', -9.2, H.floorY + 0.56, -17.8);
-  place('props/furn-lampSquareFloor', -12.6, H.floorY, -18.4);
-  place('props/furn-bookcaseOpen', -13.1, H.floorY, -14, Math.PI / 2);
-  place('props/furn-bookcaseOpen', -13.1, H.floorY, -11.6, Math.PI / 2);
-  place('props/furn-rugRectangle', -6, H.floorY + 0.01, -12, 0, 2.6);
-  place('props/furn-pottedPlant', 12.8, H.floorY, -6.2);
-  place('props/furn-pottedPlant', -12.8, H.floorY, -6.2);
   for (let i = 0; i < 3; i++) props.spawn('dummy', new THREE.Vector3(5 + i * 3, H.floorY, -18));
   zones.push({ id: 'hall', min: new THREE.Vector3(H.x0, -1, H.z0), max: new THREE.Vector3(H.x1, H.wallTop, H.z1), indoors: true, label: 'Training hall' });
   footprints.push({ x: 0, z: (H.z0 + H.z1) / 2, w: hallW, d: H.z1 - H.z0, y: H.deckY });
@@ -356,8 +377,9 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
 
   // ---------------------------------------------------------------- storehouse
   const S = STORE;
-  span(plinth, S.x0, S.x1, 0, 0.6, S.z0, S.z1, { collide: false });
-  span(plaster, S.x0, S.x1, 0, S.wallTop, S.z0, S.z1, { occluder: true });
+  const sw = { occluder: 'store-wall', ghost: true };
+  span(plinth, S.x0, S.x1, 0, 0.6, S.z0, S.z1, { collide: false, ...sw });
+  span(plaster, S.x0, S.x1, 0, S.wallTop, S.z0, S.z1, sw);
   span(woodDark, S.x0 - 0.04, S.x0 + 0.04, 0.6, S.wallTop - 0.4, S.z0 + 0.3, S.z1 - 0.3, { collide: false, shadow: false });
   span(gateWood, S.x0 - 0.08, S.x0, 0.6, 2.9, -6.0, -4.0, { collide: false });
   span(iron, S.x0 - 0.1, S.x0 - 0.08, 1.2, 1.3, -5.6, -4.4, { collide: false, shadow: false });
@@ -411,12 +433,14 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   const water = new THREE.Mesh(new THREE.CircleGeometry(P.radius + 0.5, 48), waterMat);
   water.rotation.x = -Math.PI / 2;
   water.position.set(P.center.x, P.surfaceY, P.center.z);
+  water.userData.keep = true;
   g.add(water);
   animated.push({ update: (t) => { waterMat.uniforms.time!.value = t; } });
   for (const [x, z, s] of [[P.center.x - 1.2, P.center.z + 0.6, 0.5], [P.center.x + 0.9, P.center.z - 1.1, 0.4]] as const) { const koi = new THREE.Mesh(new THREE.SphereGeometry(0.22 * s * 2, 8, 6), toon(0xff7a4a)); koi.scale.set(1.6, 0.4, 0.8); koi.position.set(x, P.surfaceY - 0.08, z); g.add(koi); }
-  tree(P.center.x + 4.8, P.center.z + 3.4, 'maple', 1.1, 3);
-  tree(-20, 13.5, 'gold', 1.25, 5);
-  tree(20.6, 16.2, 'pine', 1.0, 9);
+  // The yard's trees fade like a wall when one stands between the camera and the player.
+  tree(P.center.x + 4.8, P.center.z + 3.4, 'maple', 1.1, 3, 'tree-maple');
+  tree(-20, 13.5, 'gold', 1.25, 5, 'tree-gold');
+  tree(20.6, 16.2, 'pine', 1.0, 9, 'tree-pine');
   place('props/planter', -21.6, 0, -16, 0, 5);
   place('props/planter', -21.6, 0, -13.2, 0, 5);
   place('props/furn-bench', -22.6, 0, 6, Math.PI / 2, 1.2);
@@ -427,9 +451,6 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   props.spawn('dummy', new THREE.Vector3(-21.5, 0, 9.5));
   for (const [x, z] of [[-4.6, H.z1 + 2.2], [4.6, H.z1 + 2.2]] as const) { stoneLantern(x, z); point(PALETTE.lantern, 7, 7, x, 1.7, z); }
   stoneLantern(R.x + 7.4, R.z + 5.2);
-  // Weapon rack against the west wall.
-  span(woodDark, -23.7, -23.4, 0, 1.9, -8, -3);
-  for (let i = 0; i < 6; i++) slab(woodLight, -23.3, 1.0, -7.6 + i * 0.85, 0.08, 1.9, 0.08, { collide: false, rotZ: 0.12 });
   zones.push({ id: 'courtyard', min: new THREE.Vector3(-HX, -2, -HZ), max: new THREE.Vector3(HX, 2.3, HZ), label: 'Courtyard' });
 
   // ---------------------------------------------------------------- crane
@@ -445,6 +466,7 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   const hookMesh = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.05, 8, 16), iron);
   hook.add(cable, hookMesh);
   hook.position.set(cx, 6, cz + 4.6);
+  hook.userData.keep = true;
   g.add(hook);
   for (let i = 0; i < 4; i++) props.spawn('crate', new THREE.Vector3(cx - 3.2 + (i % 2) * 1.2, 0.05, cz + 7 + Math.floor(i / 2) * 1.2));
 
@@ -474,6 +496,7 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
     stand.add(post, board, glyph);
     stand.position.set(...p.pos);
     stand.rotation.y = p.rot ?? 0;
+    stand.userData.keep = true;
     g.add(stand);
     plaques.push({ id: p.id, title: p.title, body: p.body, position: new THREE.Vector3(...p.pos), mesh: stand, found: false });
   }
@@ -525,7 +548,7 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
     const tilt = 0.5, drop = Math.sin(tilt) * reach, out = Math.cos(tilt) * reach;
     const e = (cx2: number, cz2: number, len: number, alongX: boolean, sign: number): void => {
       if (len < 0.05) return;
-      const m = new THREE.Mesh(new THREE.BoxGeometry(alongX ? len : reach, 0.14, alongX ? reach : len), tile);
+      const m = new THREE.Mesh(boxUV(new THREE.BoxGeometry(alongX ? len : reach, 0.14, alongX ? reach : len), 1.2, !alongX), tile);
       m.position.set(cx2, y - drop / 2 + 0.02, cz2);
       if (alongX) m.rotation.x = sign * tilt; else m.rotation.z = -sign * tilt;
       m.castShadow = true;
@@ -564,7 +587,7 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
 
   // A stylized tree: a trunk and a faceted crown. Maples are orange, golds
   // yellow, pines a stack of green cones. `seed` varies the lean and the crown.
-  function tree(x: number, z: number, kind: 'maple' | 'gold' | 'pine', scale: number, seed: number): void {
+  function tree(x: number, z: number, kind: 'maple' | 'gold' | 'pine', scale: number, seed: number, cutaway?: string): void {
     const t = new THREE.Group();
     const trunkH = (kind === 'pine' ? 1.6 : 2.4) * scale;
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16 * scale, 0.26 * scale, trunkH, 7), woodDark);
@@ -594,8 +617,25 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
     t.position.set(x, 0, z);
     t.rotation.set(0, seed, (seed % 3 - 1) * 0.03);
     g.add(t);
+    if (cutaway) for (const c of t.children) onRoof(c as THREE.Mesh, cutaway, true);
     physics.staticBox(new THREE.Vector3(x, trunkH / 2, z), new THREE.Vector3(0.3 * scale, trunkH / 2, 0.3 * scale));
   }
+
+  dressCompound({ g, physics, lights, onRoof, mats: { wood, woodDark, woodLight, stone, stoneDark, plaster, iron, tile, tileEdge, lantern: lanternMat } });
+
+  // Bake: each named roof (and named wall) into one mesh per material, then
+  // everything else that never moves into one mesh per material.
+  const roofGroups = new Map<string, THREE.Mesh[]>();
+  for (const m of occluders) {
+    if (!m.userData.cutaway) continue;
+    const key = `${m.userData.cutaway}|${(m.material as THREE.Material).uuid}|${m.castShadow ? 1 : 0}|${m.userData.ghost ? 1 : 0}`;
+    const list = roofGroups.get(key);
+    if (list) list.push(m); else roofGroups.set(key, [m]);
+  }
+  g.updateMatrixWorld(true);
+  const merged = [...occluders.filter((m) => !m.userData.cutaway), ...[...roofGroups.values()].map((list) => mergeMeshes(list, g))];
+  occluders.splice(0, occluders.length, ...merged);
+  bakeStatic(g, new Set(occluders));
 
   const roofZone: Zone = { id: 'roof', min: new THREE.Vector3(-HX - 2, 2.3, -HZ - 2), max: new THREE.Vector3(HX + 2, 40, HZ + 2), label: 'Rooftops' };
   zones.push(roofZone);

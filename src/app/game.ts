@@ -279,9 +279,11 @@ export class Game {
     this.requestLock();
   }
 
-  // Try a draft before inscribing it: the draft defines its key until the
-  // Workshop opens again, and the dummies are the place to swing it.
+  // Try a draft before inscribing it: the draft defines its key in the dummy
+  // room, until the Workshop opens again or the player leaves the room.
   tryDraft(p: Pact): void {
+    // Only on the dummies: a draft never goes into a real fight.
+    if (appState.value.kind === 'workshop' && appState.value.resume.kind === 'encounter' && !this.encounters.inDummyRoom) { toast('Finish this fight before trying a draft.', 'bad'); return; }
     this.closeWorkshop();
     this.book.preview.value = p;
     if (appState.value.kind !== 'encounter') this.encounters.begin('dummy-room', true);

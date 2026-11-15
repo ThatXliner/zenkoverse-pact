@@ -143,6 +143,8 @@ export class Encounters {
     for (const e of this.enemies) if (e.alive) e.die();
     combatUi.boss.value = null;
     g.book.endEncounter();
+    // A draft is only ever tried on the dummies: leaving the room takes it off its key.
+    if (d.id === 'dummy-room') g.book.preview.value = null;
     if (victory && d.id !== 'dummy-room') {
       this.done.add(d.id);
       banner('勝利', `${d.title} cleared.`);

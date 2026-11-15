@@ -21,11 +21,11 @@ const catalogue: Pact[] = [
 // target, then the cut to the caster already through it, low and side-on
 // with the line behind, and a hero shot with the target reeling beyond.
 const cutscene: CutsceneDef = {
-  id: 'max-shift', title: { jp: '長距離転移', en: 'Long Translation' }, color: COLOR, pull: 7, reach: 20,
+  id: 'max-shift', title: { jp: '長距離転移', en: 'Long Translation' }, color: COLOR, pull: 7, reach: 20, word: 'シュバッ',
   shots: [
     { duration: 1.05, timeScale: 0.03, from: { pos: [-1.05, 1.5, 1.95], look: [0, 1.38, 0], fov: 36 }, to: { pos: [-0.7, 1.48, 1.5], fov: 30, roll: 0.04 }, events: opening('phaseJump3', 0.6) },
-    { duration: 0.5, timeScale: 0.03, from: { pos: [0.55, 0.75, -2.0], look: [0, 1.1, 0], lookRel: 'target', fov: 46 }, to: { pos: [0.45, 0.85, -1.4], fov: 38 }, ease: 'in', events: [{ at: 0.1, kind: 'sfx', id: 'phaserUp3', pitch: 0.9 }] },
-    { duration: 0.95, timeScale: 0.3, from: { pos: [2.4, 0.6, 0.8], look: [0, 1.1, -2], fov: 60, roll: -0.12 }, to: { pos: [2.9, 0.7, 1.2], fov: 70, roll: -0.04 }, events: [...blow(0, 'zapTwoTone', 0.75, 0.6), { at: 0.03, kind: 'sfx', id: 'impactMining_000', pitch: 0.9 }] },
+    { duration: 0.5, timeScale: 0.03, from: { pos: [0.55, 0.75, -2.0], look: [0, 1.1, 0], lookRel: 'target', fov: 46 }, to: { pos: [0.45, 0.85, -1.4], fov: 38 }, ease: 'in', events: [{ at: 0.1, kind: 'sfx', id: 'phaserUp3', pitch: 0.9 }] , page: { lines: 'rush' } },
+    { duration: 0.95, timeScale: 0.3, from: { pos: [2.4, 0.6, 0.8], look: [0, 1.1, -2], fov: 60, roll: -0.12 }, to: { pos: [2.9, 0.7, 1.2], fov: 70, roll: -0.04 }, events: [...blow(0, 'zapTwoTone', 0.75, 0.6), { at: 0.03, kind: 'sfx', id: 'impactMining_000', pitch: 0.9 }] , page: { lines: 'rush' } },
     { duration: 0.75, timeScale: 0.55, from: { pos: [1.3, 1.45, 2.4], look: [0, 1.3, -4], fov: 44 }, to: { pos: [1.1, 1.5, 2.0], fov: 40 }, ease: 'inOut' },
   ],
 };
@@ -57,7 +57,7 @@ function freeDestination(ctx: { game: import('../../app/game').Game }, from: THR
 }
 
 export const shift: TechniqueKit = {
-  id: 'shift', name: 'Shift', glyph: '転', color: COLOR, type: 'Spatial',
+  id: 'shift', name: 'Shift', glyph: '転', color: COLOR, type: 'Spatial', sfx: 'シュン',
   blurb: 'Translate your body through whatever lies between. Momentum and orientation are preserved, so every use is geometry.',
   breadth: 3,
   resource: { name: 'Focus', max: 100, regen: 14, startsFull: true },
@@ -94,6 +94,7 @@ export const shift: TechniqueKit = {
         const from = g.player.position.clone();
         const dest = freeDestination(ctx, from, from.clone().addScaledVector(flat, step));
         g.vfx.afterimage(g.avatar.model, COLOR, 0.4);
+        g.renderer.speed(flat, 0.7, 0.22);
         g.player.displace(dest.clone().sub(from));
         const momentum = ctx.behaviors.includes('momentum') ? 1 + g.player.planarSpeed.value / 6 : 1;
         const hits = hitCone({ ...ctx, origin: g.player.eye() }, 3.0, 1.0, 34 * ctx.potency * momentum, { knock: 4, lift: 1.5, kind: 'cut', heavy: momentum > 1.5 });
@@ -118,6 +119,7 @@ export const shift: TechniqueKit = {
         for (const e of g.techniques.enemiesInSphere(dest, 2.0)) { g.combat.hitEnemy(e, 30 * ctx.potency, { from: dest, knock: 7, lift: 3, kind: 'cut' }); hits++; }
         for (const p of g.props.instances) if (p.mesh.position.distanceTo(dest) < 1.4) g.props.push(p, p.mesh.position.clone().sub(dest).setY(0.5).normalize().multiplyScalar(p.def.mass * 5));
         g.vfx.afterimage(g.avatar.model, COLOR, 0.45);
+        g.renderer.speed(flat, 0.9, 0.3);
         g.vfx.ring(from.clone().add(new THREE.Vector3(0, 1, 0)), COLOR, 0.3, 1.6, 0.35, flat);
         g.player.displace(dest.clone().sub(from));
         g.vfx.ring(dest.clone().add(new THREE.Vector3(0, 1, 0)), COLOR, 1.6, 0.2, 0.3, flat);

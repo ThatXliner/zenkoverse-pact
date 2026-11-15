@@ -6,6 +6,7 @@ import { settings, type CutscenePlay } from '../app/settings';
 import type { Avatar } from '../character/avatar';
 import type { Enemy } from '../combat/enemies';
 import { GROUP_WORLD } from '../physics/world';
+import type { LookId } from '../render/manga';
 
 // Maximum Output cutscenes (issue #27), in the manner of a fighting game's
 // ultimate: a hard cut to a close-up of the full hand sign, the title card,
@@ -44,6 +45,11 @@ export type CutEvent =
 // Effects the player draws itself, in the cutscene's colour, around the caster.
 export type CutVfx = 'charge' | 'aura' | 'flash';
 
+// How the page draws a shot (src/render/manga.ts): a whole-frame look (sumi-e
+// ink wash, watercolour, a negative) and staging lines held for the shot,
+// focus lines converging on the target or lines rushing into the frame.
+export interface ShotPage { look?: LookId; lines?: 'focus' | 'rush' }
+
 export interface CutShot {
   // Seconds, real time.
   duration: number;
@@ -54,6 +60,7 @@ export interface CutShot {
   to?: Partial<CamKey>;
   ease?: Ease;
   events?: CutEvent[];
+  page?: ShotPage;
 }
 
 export interface CutsceneDef {
@@ -65,6 +72,8 @@ export interface CutsceneDef {
   pull: number | null;
   // How far away a target can be and still be pulled in.
   reach: number;
+  // The sound word lettered over the blow, as a manga panel would.
+  word: string;
   shots: CutShot[];
 }
 
@@ -366,10 +375,19 @@ export class Cutscenes {
       roll: (t) => THREE.MathUtils.lerp(a.roll ?? 0, b.roll ?? 0, ease(t)),
     });
     this.game.cam.showCut();
+    this.stagePage(s);
+  }
+
+  private stagePage(s: CutShot): void {
+    const l = this.live!, r = this.game.renderer, color = new THREE.Color(l.run.def.color);
+    r.look(s.page?.look ?? 'manga', color);
+    if (s.page?.lines === 'focus') r.focus(l.aim.clone().add(new THREE.Vector3(0, 1.1, 0)), 0.7, s.duration);
+    else if (s.page?.lines === 'rush') r.speed(null, 0.8, s.duration);
   }
 
   private stopPresenting(l: Live): void {
     l.presenting = false;
+    this.game.renderer.look('manga');
     this.game.cam.cutBack();
     cutsceneUi.active.value = false;
     cutsceneUi.title.value = null;
@@ -423,8 +441,11 @@ export class Cutscenes {
     switch (e.kind) {
       case 'gesture': r.gesture(l.beat !== null ? Math.max(0.4, l.beat - l.t) : 1.4); break;
       case 'title': if (l.presenting) cutsceneUi.title.value = { ...r.def.title, sub: r.sub, color, id: ++this.titleN }; break;
-      case 'resolveHit': if (!l.resolved) { l.resolved = true; r.resolve(); } break;
-      case 'impactFrame': g.renderer.impactFrame(e.frames, new THREE.Color(color)); break;
+      case 'resolveHit':
+        if (!l.resolved) { l.resolved = true; r.resolve(); }
+        if (l.presenting) g.combat.letter(l.aim.clone().add(new THREE.Vector3(0, 1.6, 0)), r.def.word, color, true);
+        break;
+      case 'impactFrame': g.renderer.impactFrame(e.frames, new THREE.Color(color), l.aim.clone().add(new THREE.Vector3(0, 1.1, 0))); break;
       case 'hitStop': l.hold = e.seconds; if (!g.net) g.clock.hitStop(e.seconds); break;
       case 'shake': g.cam.shake(e.amount); break;
       case 'sfx': g.audio.play(e.id, e.volume ?? 0.6, e.pitch ?? 1); break;

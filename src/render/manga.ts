@@ -251,6 +251,14 @@ vec3 strokes( vec2 uv, float len ) {
 }
 #endif
 
+// How much a colour is the Technique's own: same hue, and saturated. The
+// painted looks keep it as their one accent and let everything else go to ink.
+float accentMatch( vec3 c ) {
+  vec3 pc = c - vec3( luminance( c ) ), ac = accent - vec3( luminance( accent ) );
+  float sat = max( c.r, max( c.g, c.b ) ) - min( c.r, min( c.g, c.b ) );
+  return smoothstep( 0.8, 0.96, dot( normalize( pc + 1e-5 ), normalize( ac + 1e-5 ) ) ) * smoothstep( 0.12, 0.3, sat );
+}
+
 // Lines converging on a point, thick at the frame's edge and tapering in.
 float focusLines( vec2 frag, vec2 at, float k ) {
   vec2 d = frag - at;
@@ -296,20 +304,28 @@ void mainImage( const in vec4 inputColor, const in vec2 uv, out vec4 outputColor
     float lv = floor( dens * 3.0 + 0.35 ) / 3.0;
     dens = mix( dens, lv, 0.75 );
     vec3 w = mix( paper, ink, dens * 0.92 );
-    float sat = max( p.r, max( p.g, p.b ) ) - min( p.r, min( p.g, p.b ) );
-    w = mix( w, accent, smoothstep( 0.22, 0.5, sat ) * smoothstep( 0.25, 0.7, v ) * 0.85 );
+    w = mix( w, accent, accentMatch( p ) * 0.7 );
     col = mix( col, w, wash );
     lineScale += wash * 0.7;
   }
   if ( water > 0.001 ) {
     // Watercolour: colour bled along strokes, pooled darker at its edges,
     // lifted toward the paper, the paper's tooth showing through.
-    vec3 p = strokes( uv, 3.2 );
-    float pool = clamp( length( col - p ) * 2.2, 0.0, 1.0 );
-    vec3 w = mix( p, p * p, 0.35 ) * ( 1.0 - 0.45 * pool );
-    w = mix( paper, w, 0.82 );
-    w *= 0.9 + 0.1 * mnoise( frag / ( 2.5 * stride ) );
-    w = mix( w, w * mix( vec3( 1.0 ), accent * 1.6, 0.35 ), 0.5 );
+    vec3 b = col * 0.2;
+    for ( int k = 0; k < 8; k ++ ) {
+      float a = float( k ) * 0.7854 + 0.4;
+      b += texture2D( inputBuffer, uv + vec2( cos( a ), sin( a ) ) * texelSize * stride * 3.5 ).rgb * 0.1;
+    }
+    vec3 p = mix( b, strokes( uv, 1.3 ), 0.5 );
+    // Pigment pools darker where one colour meets another.
+    float pool = smoothstep( 0.03, 0.25, length( col - b ) );
+    vec3 w = p * ( 1.0 - 0.32 * pool );
+    // It settles in the paper's tooth, and the lightest washes are the paper.
+    float tooth = mnoise( frag / ( 1.8 * stride ) ) * 0.6 + mnoise( frag / ( 7.0 * stride ) ) * 0.4;
+    w *= 0.88 + 0.16 * tooth;
+    w = mix( w, paper, smoothstep( 0.62, 0.95, luminance( w ) ) * 0.6 );
+    // A wash of the Technique's colour over everything.
+    w = mix( w, w * ( 0.5 + 0.65 * accent ), 0.4 );
     col = mix( col, w, water );
     lineScale -= water * 0.35;
   }
@@ -340,7 +356,12 @@ void mainImage( const in vec4 inputColor, const in vec2 uv, out vec4 outputColor
     if ( impactFlip > 0.5 ) two = paper + ink - two;
     col = mix( col, two, impact );
   }
-  col = mix( col, paper + ink - col, negative );
+  // The negative: light goes to ink and dark to paper, the accent kept.
+  if ( negative > 0.0 ) {
+    vec3 neg = mix( paper, ink, smoothstep( 0.08, 0.8, luminance( col ) ) );
+    neg = mix( neg, accent, accentMatch( col ) * 0.8 );
+    col = mix( col, neg, negative );
+  }
 
   // The panel: paper margin and a hand-ruled border.
   if ( panel > 0.0 ) {

@@ -22,17 +22,17 @@ const catalogue: Pact[] = [
 // shoulder onto the target, then from in front of the target as the pulse
 // comes straight down the lens, and a wide side-on of the aftermath.
 const cutscene: CutsceneDef = {
-  id: 'max-blink', title: { jp: '閉眼', en: 'Eyes Shut' }, color: COLOR, pull: 4.5, reach: 12,
+  id: 'max-blink', title: { jp: '閉眼', en: 'Eyes Shut' }, color: COLOR, pull: 4.5, reach: 12, word: 'キィィン',
   shots: [
     { duration: 1.05, timeScale: 0.03, from: { pos: [0.42, 1.55, 1.05], look: [0, 1.5, 0], fov: 34 }, to: { pos: [0.28, 1.53, 0.78], fov: 26, roll: -0.03 }, events: opening('powerUp9', 0.6) },
     { duration: 0.5, timeScale: 0.03, from: { pos: [0.55, 1.8, -1.1], look: [0, 1.35, 0], lookRel: 'target', fov: 50 }, to: { pos: [0.45, 1.75, -0.8], fov: 42 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'phaserUp3', pitch: 0.6 }] },
-    { duration: 0.95, timeScale: 0.3, from: { rel: 'target', pos: [-1.3, 1.45, 2.6], look: [0, 1.45, 0], lookRel: 'mid', fov: 64 }, to: { pos: [-1.8, 1.6, 3.8], fov: 84, roll: 0.06 }, events: [...blow(0, 'impactBell_heavy_002', 0.5)] },
+    { duration: 0.95, timeScale: 0.3, from: { rel: 'target', pos: [-1.3, 1.45, 2.6], look: [0, 1.45, 0], lookRel: 'mid', fov: 64 }, to: { pos: [-1.8, 1.6, 3.8], fov: 84, roll: 0.06 }, events: [...blow(0, 'impactBell_heavy_002', 0.5)] , page: { look: 'negative' } },
     { duration: 0.75, timeScale: 0.5, from: { rel: 'mid', pos: [6, 1.8, -0.5], look: [0, 1.0, 0.5], fov: 56 }, to: { pos: [6.6, 2.3, -1], fov: 52 }, ease: 'inOut' },
   ],
 };
 
 export const blink: TechniqueKit = {
-  id: 'blink', name: 'Blink', glyph: '瞬', color: COLOR, type: 'Manifestation',
+  id: 'blink', name: 'Blink', glyph: '瞬', color: COLOR, type: 'Manifestation', sfx: 'キィン',
   blurb: 'Close both eyes and a concussive pulse leaves your tear ducts. It cannot curve and it cannot fire anywhere but forward.',
   breadth: 1,
   resource: { name: 'Tears', max: 100, regen: 9, startsFull: true },

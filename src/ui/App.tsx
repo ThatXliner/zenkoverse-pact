@@ -186,7 +186,9 @@ function Hud({ game }: { game: Game }) {
       {title && <CutTitle key={title.id} title={title} />}
       {cine && <div class="skip">{keyLabel('jump').toUpperCase()} · SKIP</div>}
       <div style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none">
-        {combatUi.numbers.value.map((n) => <span key={n.id} style={{ position: 'absolute', left: `${n.x}%`, top: `${n.y}%`, transform: 'translate(-50%,-50%)', color: n.color, fontFamily: 'var(--serif)', fontSize: n.big ? '34px' : '20px', fontWeight: 700, textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>{n.text}</span>)}
+        {combatUi.numbers.value.map((n) => n.word
+          ? <span key={n.id} class={`sfx-word${n.big ? ' big' : ''}`} style={{ left: `${n.x}%`, top: `${n.y}%`, '--tilt': `${n.tilt}deg`, '--word-color': n.color }}>{n.text}</span>
+          : <span key={n.id} class={`dmg-num${n.big ? ' big' : ''}`} style={{ left: `${n.x}%`, top: `${n.y}%`, color: n.color }}>{n.text}</span>)}
       </div>
     </div>
   );

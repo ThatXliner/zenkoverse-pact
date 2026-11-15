@@ -75,11 +75,11 @@ function releaseHeld(ctx: AbilityContext): number {
 // with the target beyond, a hard cut wide as every stored joule leaves at
 // once, and a crane up over the wreck.
 const cutscene: CutsceneDef = {
-  id: 'max-recoil', title: { jp: '零時', en: 'Zero Hour' }, color: COLOR, pull: 3.4, reach: 12,
+  id: 'max-recoil', title: { jp: '零時', en: 'Zero Hour' }, color: COLOR, pull: 3.4, reach: 12, word: 'ドゴォン',
   shots: [
     { duration: 1.05, timeScale: 0.03, from: { pos: [1.05, 1.5, 2.0], look: [0, 1.38, 0], fov: 36 }, to: { pos: [0.72, 1.48, 1.5], fov: 30, roll: -0.04 }, events: opening('powerUp3', 0.7) },
-    { duration: 0.5, timeScale: 0.03, from: { pos: [-1.3, 0.25, -1.0], look: [0, 1.3, 0], lookRel: 'mid', fov: 60, roll: 0.14 }, to: { pos: [-1.0, 0.3, -0.6], fov: 54, roll: 0.1 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'phaserUp3', pitch: 0.5 }] },
-    { duration: 0.95, timeScale: 0.35, from: { rel: 'mid', pos: [5.2, 1.8, 1.0], look: [0, 1.0, 0], fov: 62, roll: -0.1 }, to: { pos: [6.4, 2.4, 1.6], fov: 76, roll: -0.03 }, events: [...blow(0, 'impactMining_000', 0.55), { at: 0.03, kind: 'sfx', id: 'impactBell_heavy_000', pitch: 0.6 }] },
+    { duration: 0.5, timeScale: 0.03, from: { pos: [-1.3, 0.25, -1.0], look: [0, 1.3, 0], lookRel: 'mid', fov: 60, roll: 0.14 }, to: { pos: [-1.0, 0.3, -0.6], fov: 54, roll: 0.1 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'phaserUp3', pitch: 0.5 }] , page: { lines: 'rush' } },
+    { duration: 0.95, timeScale: 0.35, from: { rel: 'mid', pos: [5.2, 1.8, 1.0], look: [0, 1.0, 0], fov: 62, roll: -0.1 }, to: { pos: [6.4, 2.4, 1.6], fov: 76, roll: -0.03 }, events: [...blow(0, 'impactMining_000', 0.55), { at: 0.03, kind: 'sfx', id: 'impactBell_heavy_000', pitch: 0.6 }] , page: { lines: 'focus' } },
     { duration: 0.75, timeScale: 0.55, from: { rel: 'mid', pos: [-2.5, 6.5, -5.5], look: [0, 0.4, 0], fov: 58 }, to: { pos: [-3, 8.2, -6.8], fov: 62 }, ease: 'inOut' },
   ],
 };
@@ -113,7 +113,7 @@ const drill: DrillDef = {
 };
 
 export const recoil: TechniqueKit = {
-  id: 'recoil', name: 'Recoil', glyph: '反', color: COLOR, type: 'Manipulation, Energy family',
+  id: 'recoil', name: 'Recoil', glyph: '反', color: COLOR, type: 'Manipulation, Energy family', sfx: 'ドンッ',
   blurb: 'Take in kinetic energy, store it, release it later as motion. Energy never disappears: every softened blow is a debt.',
   breadth: 2,
   resource: { name: 'Reserve', max: 100, regen: 7, startsFull: false, free: ['primary', 'secondary'] },

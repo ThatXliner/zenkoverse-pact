@@ -1,6 +1,6 @@
 # Zenkoverse: Pact
 
-A proof of concept of the Zenkoverse power system as a game: one cel-shaded dojo compound at dusk, seen top-down, over the shoulder or in first person. You carry one Technique, train it, and write Pacts in the Workshop to shape it into Abilities. Every Pact is a sacrifice the universe reads back to you before you inscribe it.
+A proof of concept of the Zenkoverse power system as a game: one dojo compound at dusk, drawn as a living manga panel, seen top-down, over the shoulder or in first person. You carry one Technique, train it, and write Pacts in the Workshop to shape it into Abilities. Every Pact is a sacrifice the universe reads back to you before you inscribe it.
 
 **Play it:** https://zenkoverse.bryanhu.com/
 
@@ -14,7 +14,7 @@ A proof of concept of the Zenkoverse power system as a game: one cel-shaded dojo
 - **Three camera views**: top-down by default (you move with the screen and aim with the cursor), over the shoulder (the camera follows the mouse and you aim at the crosshair), and first person. V cycles them; Settings keeps the choice.
 - **Online rooms**: up to eight players in the compound, live, each with their own Technique and Pacts. Hit each other, go down, get back up, and watch the scoreboard.
 - **Aura Expansion** on F, anywhere: it spends your whole aura on a field around you, where your Techniques are sharper and others are slowed. F again retracts it, with nothing refunded. Two fields that touch become an **Aura Clash**: a short side-on cutscene of quick push, hold or feint exchanges against the Ancient Echo Master or another player. The loser's field collapses and their guard breaks; nobody is hurt by the clash. Refinement, trained at the listening stone in the yard, sets how dense your field is, up to a potential that a broader Technique and more Pacts lower.
-- **The look**: anime-leaning cel shading. Flat fills over one light ramp, hard shadows, ink lines from the depth buffer and an inverted hull on every character, stylized proportions, a late-afternoon sun. Characters and world are drawn the same way.
+- **The look**: a coloured manga page in motion. Flat colour with screentone dots where the light turns, dot screens over shadows and hatching in the darkest shade; brush ink lines that swell toward the camera and split dry at their ends; warm paper inside a ruled panel border. Big hits get focus lines, ink impact frames and a lettered sound word; dashes get speed lines. Some Maximum Outputs change the whole page for a shot: sumi-e ink wash for Echo and the Master, watercolour for Rime, a negative for Blink. Characters, world and your own arms are drawn by the same hand. The Low quality preset keeps the tones and a plain ink line and drops the dry brush, paper fibre and painted looks.
 
 ## Play online
 
@@ -115,7 +115,7 @@ Every `npm run check:*` script and `node tools/check-flow.mjs` drives the built 
 
 ```
 src/app         state machine, settings, input, asset loader, clock, game loop, debug hooks
-src/render      renderer and post stack, the ink line effect, toon materials, the sky and sun
+src/render      renderer and post stack, screentone materials, the page (brush ink, paper, staging lines, painted looks), brush textures, the sky and sun
 src/physics     Rapier world and queries
 src/player      character controller, camera rig
 src/character   human avatar: looks, locomotion blend at measured clip speeds, gesture layer on the arms

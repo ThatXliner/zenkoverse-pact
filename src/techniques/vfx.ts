@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import type { LightPool, PointSource } from '../render/lightPool';
+import { ensoTexture, strokeTexture } from '../render/brush';
 
 interface Particle { mesh: THREE.Object3D; vel: THREE.Vector3; spin: THREE.Vector3; life: number; max: number; kind: 'debris' | 'spark' | 'shard'; gravity: number; scaleEnd: number }
 interface Ring { mesh: THREE.Mesh; life: number; max: number; from: number; to: number; mat: THREE.MeshBasicMaterial }
-interface Trail { mesh: THREE.Mesh; points: THREE.Vector3[]; life: number; mat: THREE.MeshBasicMaterial; width: number }
+interface Trail { mesh: THREE.Mesh; points: THREE.Vector3[]; life: number; mat: THREE.MeshBasicMaterial; width: number; peak: number }
 interface Flash { light: PointSource; life: number; max: number; peak: number }
 interface Patch { mesh: THREE.Mesh; life: number; max: number; mat: THREE.MeshPhysicalMaterial }
 interface Timer { left: number; fire(): void }
@@ -25,7 +26,8 @@ export class Vfx {
   private debrisGeo = new THREE.BoxGeometry(0.12, 0.08, 0.1);
   private shardGeo = new THREE.ConeGeometry(0.05, 0.28, 5);
   private sparkGeo = new THREE.SphereGeometry(0.03, 6, 4);
-  private ringGeo = new THREE.RingGeometry(0.9, 1, 64);
+  // A shock ring is an ensō, a smear is a dry-brush stroke (src/render/brush.ts).
+  private ringGeo = new THREE.PlaneGeometry(2.2, 2.2);
   private patchGeo = new THREE.CircleGeometry(1, 32);
   private debrisMat = new THREE.MeshStandardMaterial({ color: 0x5a4a3a, roughness: 0.9 });
   private metalMat = new THREE.MeshStandardMaterial({ color: 0x888c92, roughness: 0.4, metalness: 0.9 });
@@ -73,10 +75,12 @@ export class Vfx {
   }
 
   ring(center: THREE.Vector3, color: number, from: number, to: number, life = 0.45, normal?: THREE.Vector3): void {
-    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
+    const mat = new THREE.MeshBasicMaterial({ color, map: ensoTexture(), transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false });
     const mesh = new THREE.Mesh(this.ringGeo, mat);
     mesh.position.copy(center);
     if (normal) mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal); else mesh.rotation.x = -Math.PI / 2;
+    // Each ring is its own stroke: the brush starts somewhere else round it.
+    mesh.rotateZ(Math.random() * Math.PI * 2);
     mesh.scale.setScalar(from);
     this.scene.add(mesh);
     this.rings.push({ mesh, life, max: life, from, to, mat });
@@ -110,10 +114,10 @@ export class Vfx {
   trail(points: THREE.Vector3[], color: number, width = 0.25, life = 0.18): void {
     if (points.length < 2) return;
     const geo = ribbon(points, width);
-    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
+    const mat = new THREE.MeshBasicMaterial({ color, map: strokeTexture(), transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false });
     const mesh = new THREE.Mesh(geo, mat);
     this.scene.add(mesh);
-    this.trails.push({ mesh, points, life, mat, width });
+    this.trails.push({ mesh, points, life, mat, width, peak: 0.9 });
   }
 
   patch(center: THREE.Vector3, radius: number, kind: 'frost' | 'burn' | 'fuel', life = 12): THREE.Mesh {
@@ -162,7 +166,7 @@ export class Vfx {
     this.scene.add(group);
     const mat = (group.children[0] as THREE.Mesh | undefined)?.material as THREE.MeshBasicMaterial | undefined;
     if (!mat) return;
-    this.trails.push({ mesh: group as unknown as THREE.Mesh, points: [], life, mat, width: 0 });
+    this.trails.push({ mesh: group as unknown as THREE.Mesh, points: [], life, mat, width: 0, peak: 0.55 });
   }
 
   update(dt: number): void {
@@ -190,13 +194,13 @@ export class Vfx {
       const u = 1 - r.life / r.max;
       const e = 1 - Math.pow(1 - u, 3);
       r.mesh.scale.setScalar(THREE.MathUtils.lerp(r.from, r.to, e));
-      r.mat.opacity = (1 - u) * 0.9;
+      r.mat.opacity = Math.min(1, (1 - u) * 1.6) * 0.95;
       if (r.life <= 0) { this.scene.remove(r.mesh); r.mat.dispose(); this.rings.splice(i, 1); }
     }
     for (let i = this.trails.length - 1; i >= 0; i--) {
       const t = this.trails[i]!;
       t.life -= dt;
-      t.mat.opacity = Math.max(0, t.life * 4) * 0.75;
+      t.mat.opacity = Math.min(1, Math.max(0, t.life * 4)) * t.peak;
       if (t.mesh instanceof THREE.Group) for (const c of t.mesh.children) ((c as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = t.mat.opacity;
       if (t.life <= 0) { this.dropTrail(t); this.trails.splice(i, 1); }
     }
@@ -228,17 +232,20 @@ export class Vfx {
 function ribbon(points: THREE.Vector3[], width: number): THREE.BufferGeometry {
   const n = points.length;
   const pos = new Float32Array(n * 2 * 3);
+  const uv = new Float32Array(n * 2 * 2);
   const up = new THREE.Vector3(0, 1, 0);
   for (let i = 0; i < n; i++) {
     const p = points[i]!;
     const dir = (i < n - 1 ? points[i + 1]!.clone().sub(p) : p.clone().sub(points[i - 1]!)).normalize();
     const side = new THREE.Vector3().crossVectors(dir, up).normalize().multiplyScalar(width * 0.5 * (1 - i / n));
     pos.set([p.x + side.x, p.y + side.y, p.z + side.z, p.x - side.x, p.y - side.y, p.z - side.z], i * 6);
+    uv.set([i / (n - 1), 0, i / (n - 1), 1], i * 4);
   }
   const idx: number[] = [];
   for (let i = 0; i < n - 1; i++) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   g.setIndex(idx);
   return g;
 }

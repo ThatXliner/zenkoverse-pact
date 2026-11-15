@@ -375,3 +375,18 @@ button.ph.on { background: var(--c); color: var(--ink); border-bottom-color: tra
 @media (max-width: 1100px) { .xs { grid-template-columns: repeat(2, 169px); } .vitals { width: 240px; } .ab { width: 190px; } .ab .what { display: none; } }
 @media (max-width: 900px) { .ab { width: 170px; } }
 @media (max-width: 1100px) { .ws { grid-template-columns: 1fr; } .ws-sheet > header { grid-template-columns: 1fr; } .ws-sheet > header .lede { justify-self: start; text-align: left; } .cards { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); } }
+
+/* Damage numbers and sound words (combatUi.numbers): lettered like a manga
+   panel, in ink-outlined type. A sound word slams in, holds and fades. */
+.dmg-num { position: absolute; transform: translate(-50%, -50%); font-family: var(--serif); font-size: 20px; font-weight: 800; -webkit-text-stroke: 4px #14101c; paint-order: stroke fill; }
+.dmg-num.big { font-size: 34px; -webkit-text-stroke: 6px #14101c; }
+.sfx-word { position: absolute; transform: translate(-50%, -50%) rotate(var(--tilt)); font-family: 'Dela Gothic One', var(--serif); font-size: 46px; line-height: 1; white-space: nowrap; letter-spacing: -0.04em; color: var(--word-color); -webkit-text-stroke: 7px #14101c; paint-order: stroke fill; text-shadow: 5px 5px 0 #14101c; animation: sfx-in 0.7s cubic-bezier(0.2, 0.9, 0.3, 1) forwards; }
+.sfx-word.big { font-size: 92px; -webkit-text-stroke: 11px #14101c; text-shadow: 8px 8px 0 #14101c; animation-duration: 1.1s; }
+@keyframes sfx-in {
+  0% { scale: 1.9; opacity: 0; }
+  10% { scale: 0.94; opacity: 1; }
+  20% { scale: 1; }
+  78% { opacity: 1; }
+  100% { scale: 1.05; opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .sfx-word { animation: none; } }

@@ -261,7 +261,10 @@ if (run('vfx')) {
 // fight, each Technique's casts at a dummy, and every Maximum Output at its
 // beats (the sign, the card, the impact frame, the blow, the aftermath and the
 // cut back to the view it started from). Before/after frames for a restyle.
-const VIEWS = ['top', 'third', 'first'];
+// --techs recoil,ancient and --views top narrow it; --scenes false skips the
+// places and the fight.
+const VIEWS = (args.views ?? 'top,third,first').split(',');
+const STYLE_TECHS = (args.techs ?? [...TECHS, 'ancient', 'kuroda'].join(',')).split(',');
 if (run('style')) {
   await page.setViewportSize({ width: 1920, height: 1080 });
   await settle(200);
@@ -271,7 +274,7 @@ if (run('style')) {
     // Top-down aims with the cursor: put it up the screen, at what the camera faces.
     g.game.input.mouse.x = 0; g.game.input.mouse.y = 0.3;
   }, view, yaw, pitch);
-  for (const [name, where, yaw, pitch] of [['courtyard', 'courtyard', 0, -0.1], ['hall', 'hall', Math.PI, -0.05], ['pond', 'pond', 2.3, -0.2]]) {
+  for (const [name, where, yaw, pitch] of args.scenes === 'false' ? [] : [['courtyard', 'courtyard', 0, -0.1], ['hall', 'hall', Math.PI, -0.05], ['pond', 'pond', 2.3, -0.2]]) {
     for (const view of VIEWS) {
       await api((g, w) => g.teleport(w), where);
       await face(view, yaw, pitch);
@@ -279,9 +282,9 @@ if (run('style')) {
       await shot('style', `${name}-${view}`);
     }
   }
-  await api((g) => { g.god(true); g.encounter('sparring'); });
+  if (args.scenes !== 'false') await api((g) => { g.god(true); g.encounter('sparring'); });
   await step(60);
-  for (const view of VIEWS) {
+  for (const view of args.scenes === 'false' ? [] : VIEWS) {
     await api((g, v) => { const e = g.game.encounters.enemies[0]; const p = g.game.player.position; if (e) g.look(Math.atan2(-(e.position.x - p.x), -(e.position.z - p.z)), -0.08); g.camera(v); }, view);
     await step(50);
     await shot('style', `fight-${view}`);
@@ -291,7 +294,7 @@ if (run('style')) {
     await step(30);
   }
   await api((g) => { g.god(false); g.game.encounters.reset(); });
-  for (const t of TECHS) {
+  for (const t of TECHS.filter((x) => STYLE_TECHS.includes(x))) {
     for (const view of VIEWS) {
       await startRun(t);
       await api((g) => {
@@ -313,7 +316,7 @@ if (run('style')) {
       await playMax(`${t}-${view}-max`, (g, id) => g.cutscene(id), `max-${t}`);
     }
   }
-  for (const [enc, id] of [['ancient', 'boss-ancient'], ['kuroda', 'boss-kuroda']]) {
+  for (const [enc, id] of [['ancient', 'boss-ancient'], ['kuroda', 'boss-kuroda']].filter(([e]) => STYLE_TECHS.includes(e))) {
     await startRun('recoil');
     await api((g, e) => { g.god(false); g.teleport([-8, 0, 12]); g.camera('top'); g.encounter(e); }, enc);
     await step(20);

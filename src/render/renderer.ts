@@ -57,7 +57,8 @@ export class Renderer {
   private speedT = 0;
   private speedMax = 1;
   private speedPeak = 0;
-  private speedWorld = new THREE.Vector3();
+  // Null: straight into the frame.
+  private speedWorld: THREE.Vector3 | null = null;
   private lookId: LookId = 'manga';
   // A world point the screen patterns are pinned to, so they slide with the
   // world rather than stay on the glass. Re-pinned when it leaves the view.
@@ -133,10 +134,10 @@ export class Renderer {
     this.page.u('seed').value = Math.floor(Math.random() * 97);
   }
 
-  // Speed lines for a body moving fast along `dir` (world units per second):
-  // streaks across the frame, converging lines when it moves into the screen.
-  speed(dir: THREE.Vector3, strength: number, seconds: number): void {
-    this.speedWorld.copy(dir);
+  // Speed lines for a body moving fast along `dir`: streaks across the frame,
+  // lines rushing in when it moves into the screen (or `dir` is null).
+  speed(dir: THREE.Vector3 | null, strength: number, seconds: number): void {
+    this.speedWorld = dir ? dir.clone() : null;
     this.speedPeak = strength;
     this.speedT = this.speedMax = seconds;
   }
@@ -173,7 +174,7 @@ export class Renderer {
     this.speedT = Math.max(0, this.speedT - dt);
     const k = this.speedPeak * Math.min(1, (this.speedT / this.speedMax) * 2);
     // The motion seen from the camera: across the frame streaks, into it converges.
-    v3.copy(this.speedWorld).transformDirection(cam.matrixWorldInverse);
+    if (this.speedWorld) v3.copy(this.speedWorld).transformDirection(cam.matrixWorldInverse); else v3.set(0, 0, -1);
     const across = Math.hypot(v3.x, v3.y), into = Math.max(0, -v3.z);
     const total = across + into + 1e-6;
     (p.u('speedDir').value as THREE.Vector2).set(v3.x, v3.y).normalize();

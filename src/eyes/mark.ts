@@ -19,8 +19,8 @@ function glint(side: number): THREE.BufferGeometry {
     const base = pts.length / 3;
     for (let i = 0; i <= N; i++) {
       const t = i / N;
-      const x = side * (0.05 + t * 0.14), y = 0.006 + t * 0.02, z = -0.01 + t * 0.1;
-      const w = 0.011 * (1 - t) ** 1.2 + 0.0015;
+      const x = side * (0.05 + t * 0.1), y = 0.006 + t * 0.018, z = -0.01 + t * 0.1;
+      const w = 0.009 * (1 - t) ** 1.3 + 0.001;
       if (upright) pts.push(x, y - w, z, x, y + w, z);
       else pts.push(x - side * w * 0.4, y, z - w, x + side * w * 0.4, y, z + w);
       if (i < N) { const a = base + i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }

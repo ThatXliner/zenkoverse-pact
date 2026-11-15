@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 import { signal } from '@preact/signals';
 import type { Game } from '../app/game';
-import { hud, toast, banner } from '../app/game';
+import { hud, banner } from '../app/game';
 import { setState } from '../app/state';
-import { KEY_SLOTS } from '../pacts/slots';
 import type { Enemy } from './enemies';
 import { AURA } from './field';
 
@@ -18,7 +17,6 @@ export const EYES: Record<EyeId, { name: string; jp: string; color: number; text
 
 export const combatUi = {
   hp: signal(1),
-  wagerArmed: signal(false),
   eye: signal<EyeId | null>(null),
   boss: signal<{ name: string; frac: number; color: number } | null>(null),
   // Damage numbers, and sound words lettered over heavy hits (`word`).
@@ -34,15 +32,13 @@ export class Combat {
   hp = 100;
   maxHp = 100;
   god = false;
-  wagerArmed = false;
-  private wagerCd = 0;
-  private wagerSlot: string | null = null;
   invuln = 0;
   flags = { overextension: false, bloodDraw: false };
   eye: EyeId | null = null;
   private nums: FloatNum[] = [];
   private numId = 0;
   private lastWord = -1;
+  // Counted by src/techniques/wagers.ts, read by the rooftop's score.
   wagersWon = 0;
   wagersLost = 0;
 
@@ -50,10 +46,8 @@ export class Combat {
 
   resetPlayer(): void {
     this.hp = this.maxHp = 100;
-    this.wagerArmed = false;
     this.invuln = 0;
     combatUi.hp.value = 1;
-    combatUi.wagerArmed.value = false;
   }
 
   chromaAmount(): number {
@@ -61,29 +55,11 @@ export class Combat {
     return Math.max(0, low - 0.6) * 0.012 + (this.game.clock.frozen ? 0.004 : 0);
   }
 
-  armWager(): void {
-    if (this.wagerArmed || this.wagerCd > 0 || this.game.techniques.sealed > 0 || this.game.techniques.signing) return;
-    const pact = KEY_SLOTS.map((s) => this.game.book.bound(s)).find((p) => p?.clauses.some((c) => c.kind === 'wager'));
-    this.wagerArmed = true;
-    combatUi.wagerArmed.value = true;
-    this.game.audio.play('wager.arm');
-    toast(pact ? `Wager declared: ${pact.name} will connect` : 'Wager declared: the next strike connects', 'info');
-    this.game.tutorial.notify('wager');
-  }
-
-  wagerCommitted(slot: string): void { this.wagerSlot = slot; this.wagerArmed = false; combatUi.wagerArmed.value = false; this.wagerCd = 4; }
-
-  resolveWager(hit: boolean): void {
-    this.wagerSlot = null;
-    if (hit) { this.wagersWon++; banner('的中', 'Wager won. The universe pays out.'); this.game.audio.play('wager.won'); this.game.techniques.charge = Math.min(1, this.game.techniques.charge + 0.35); }
-    else { this.wagersLost++; banner('外れ', 'Wager lost. Your Technique seals.'); this.game.audio.play('wager.lost'); this.game.techniques.seal(4); }
-  }
-
-  get wagerMultiplier(): number { return this.wagerSlot ? 3 : 1; }
-
   hitEnemy(e: Enemy, amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number; kind?: 'kinetic' | 'cold' | 'pulse' | 'resonance' | 'cut'; heavy?: boolean; stagger?: boolean } = {}): number {
     const g = this.game;
-    let m = this.wagerMultiplier;
+    // A Wager's harder strike, on the blows of the cast that declared it (src/techniques/wagers.ts).
+    const wager = g.techniques.wagers.boost;
+    let m = wager;
     // A body in the player's open field, or one whose guard a clash broke, takes more.
     m *= g.aura.damageOn(e.position);
     if (e.guardBroken > 0) m *= 1 + AURA.guardBreak.taken;
@@ -92,7 +68,7 @@ export class Combat {
     if (this.eye === 'thread') this.threadSplash(e, final * 0.35);
     e.hurt(final, { from: opts.from, knock: opts.knock, lift: opts.lift, stagger: opts.stagger });
     g.audio.hit(final, e.center());
-    this.number(e.center(), String(final), this.wagerSlot ? '#ffd34d' : m > 1.1 ? '#ffb0ff' : '#f3eee4', final >= 40);
+    this.number(e.center(), String(final), wager > 1 ? '#ffd34d' : m > 1.1 ? '#ffb0ff' : '#f3eee4', final >= 40);
     if (opts.heavy || final >= 40) {
       g.clock.hitStop(final >= 80 ? 0.11 : 0.06);
       g.cam.shake(0.35);
@@ -183,7 +159,6 @@ export class Combat {
 
   update(dt: number): void {
     this.invuln = Math.max(0, this.invuln - dt);
-    this.wagerCd = Math.max(0, this.wagerCd - dt);
     const cam = this.game.renderer.camera;
     const out: FloatText[] = [];
     for (let i = this.nums.length - 1; i >= 0; i--) {

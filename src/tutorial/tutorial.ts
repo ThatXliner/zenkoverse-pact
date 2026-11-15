@@ -5,7 +5,7 @@ import { appState, setState, type TutorialStepId } from '../app/state';
 import { toast, banner } from '../app/game';
 import { techUi } from '../techniques/techniques';
 import { keyLabel, keyPhrase, keysLabel } from '../app/keymap';
-import { EXTRA_SLOTS } from '../pacts/slots';
+import { KEY_SLOTS } from '../pacts/slots';
 import { STAND } from '../drills/fieldReading';
 import type { PropInstance } from '../world/props';
 import { Beacon } from './beacon';
@@ -34,6 +34,8 @@ interface Step {
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const slot = (s: 'primary' | 'secondary') => techUi.slots.value[s];
+// The first key whose Pact holds a Wager.
+const wagerSlot = () => KEY_SLOTS.find((k) => !!techUi.slots.value[k].wager) ?? null;
 // The Technique stores what it absorbs instead of spending what it holds (Recoil).
 const stores = (g: Game) => !g.techniques.def.resource.startsFull;
 
@@ -69,15 +71,6 @@ const STEPS: Step[] = [
     done: (_g, ev) => ev.has('signed'),
   },
   {
-    id: 'art', title: 'More Abilities', jp: '術',
-    line: () => {
-      const slots = techUi.slots.value;
-      const first = EXTRA_SLOTS.find((s) => !slots[s].empty);
-      return first ? `${cap(keyLabel(first))} fires ${slots[first].name}: ${slots[first].what}.` : `${EXTRA_SLOTS.map(keyLabel).join(', ')} hold extra Abilities. Yours are empty for now.`;
-    },
-    done: (_g, ev) => EXTRA_SLOTS.some((s) => ev.has(s)) || EXTRA_SLOTS.every((s) => techUi.slots.value[s].empty),
-  },
-  {
     id: 'aura', title: 'Aura', jp: '気',
     line: () => `${keyLabel('aura')} opens your aura. Inside it you are quicker and others are slower.`,
     done: (_g, ev) => ev.has('aura'),
@@ -96,8 +89,16 @@ const STEPS: Step[] = [
   },
   {
     id: 'wager', title: 'Wager', jp: '賭',
-    line: () => `${keyLabel('wager')} bets that your next strike lands. Then land it.`,
-    done: (_g, ev) => ev.has('wager'),
+    // A Wager lives inside a Pact: the step fires the key whose Pact holds one (Shockline, for Recoil).
+    line: (_g, ev) => {
+      const s = wagerSlot();
+      if (!s) return 'A Wager is written into a Pact. None of yours holds one yet; the Workshop can add it.';
+      const l = techUi.slots.value[s];
+      if (ev.has('wager-lost')) return `Called wrong, and the forfeit landed. ${cap(keyLabel(s))} again once it clears.`;
+      return `${cap(keyLabel(s))} fires ${l.name}, whose Pact bets that ${l.wager}. Make it true.`;
+    },
+    // A right call ends it; so does a second wrong one, since both ends of the bet have then been felt.
+    done: (_g, ev) => ev.has('wager-won') || ev.has('wager-lost-again') || !wagerSlot(),
   },
   {
     id: 'max', title: 'Maximum Output', jp: '全力',
@@ -166,7 +167,10 @@ export class Tutorial {
     this.advance();
   }
 
-  notify(ev: string): void { this.events.add(ev); }
+  notify(ev: string): void {
+    if (ev === 'wager-lost' && this.events.has(ev)) this.events.add('wager-lost-again');
+    this.events.add(ev);
+  }
 
   private advance(): void {
     this.leave();

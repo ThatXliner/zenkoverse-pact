@@ -145,6 +145,107 @@ check((await book()).preview === null, 'reopening the Workshop ends the trial');
 await page.getByRole('button', { name: 'Discard draft' }).click();
 await page.keyboard.press('Escape');
 
+console.log('a Wager is written inside a Pact: declaration, reward, forfeit');
+await page.waitForFunction(() => window.game.state() !== 'workshop', null, { timeout: 4000 }).catch(() => undefined);
+await page.waitForTimeout(200);
+await page.keyboard.press('Tab');
+await page.locator('.ws-sheet').waitFor();
+await page.locator('.ws-book .bk.new').click();
+await page.getByLabel('Pact name').fill('Gamble');
+await page.locator('.chip', { hasText: 'a wager, to bet on each cast' }).click();
+{
+  const panel = page.locator('.ws-panel');
+  check(await panel.locator('.chip', { hasText: 'it lands' }).isVisible() && await panel.locator('.opt', { hasText: 'Harder strike' }).isVisible() && await panel.locator('.opt', { hasText: 'sealed 5 s' }).isVisible(), 'the panel offers a declaration, a reward and a forfeit');
+  const give = await page.locator('.ws-trade .give').innerText();
+  const get = await page.locator('.ws-trade .get').innerText();
+  check(/Wager: it lands/.test(give) && /Called wrong, your Technique seals/.test(give), `the cost names the declaration and the forfeit: ${give.replace(/\s+/g, ' ').slice(-110)}`);
+  // Shockline already wagers that its cast lands, so the same bet in a second Pact stakes nothing (anti-loophole).
+  check(/"Shockline" already wagers on this outcome/.test(give) && /a right call pays nothing/.test(get), 'a second Pact betting the same outcome stakes nothing and pays nothing');
+  check(/Wager: each cast declares that it lands/.test(await page.locator('.ws-sentence').innerText()), 'the sentence reads the Wager back');
+  await panel.locator('.chip', { hasText: 'it strikes two or more' }).click();
+  check(await panel.locator('.opt', { hasText: 'Harder strike' }).isDisabled(), 'a harder strike is offered only on "it lands", where the impact settles the call');
+  const ring = Number((/Called right: \+(\d+)% ring/.exec(await page.locator('.ws-trade .get').innerText()) ?? [])[1]);
+  check(ring >= 10, `a real doubt with a real forfeit pays: +${ring}% Maximum Output`);
+  await shot('06b-wager-panel');
+  await panel.locator('.opt', { hasText: 'slowed 6 s' }).click();
+  const slow = Number((/Stake (\d+\.\d)/.exec(await panel.locator('.wg-read').innerText()) ?? [])[1]);
+  await panel.locator('.opt', { hasText: 'sealed 5 s' }).click();
+  const seal = Number((/Stake (\d+\.\d)/.exec(await panel.locator('.wg-read').innerText()) ?? [])[1]);
+  check(seal > slow, `a heavier forfeit stakes more: sealed ${seal} against slowed ${slow}`);
+  // A call this player nearly always gets right stakes almost nothing.
+  await page.evaluate(() => { window.game.game.book.telemetry.multiTargetFraction = 0.99; });
+  await panel.locator('.opt', { hasText: 'slowed 6 s' }).click();
+  await panel.locator('.opt', { hasText: 'sealed 5 s' }).click();
+  const read = await panel.locator('.wg-read').innerText();
+  check(/Stake 0\.\d/.test(read) && /almost every time/.test(read), `a near-certain call stakes almost nothing: ${read}`);
+  await page.evaluate(() => { window.game.game.book.telemetry.multiTargetFraction = 0.4; });
+}
+await page.getByRole('button', { name: 'Discard draft' }).click();
+await page.keyboard.press('Escape');
+
+console.log('naming a Pact: the field invites a name, keeps its keys, and the name survives inscribing and a reload');
+await page.waitForFunction(() => window.game.state() !== 'workshop', null, { timeout: 4000 }).catch(() => undefined);
+await page.waitForTimeout(200);
+await page.keyboard.press('Tab');
+await page.locator('.ws-sheet').waitFor();
+await page.locator('.ws-book .bk.new').click();
+check(await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Pact name' && document.activeElement.selectionEnd - document.activeElement.selectionStart === document.activeElement.value.length, null, { timeout: 2000 }).then(() => true, () => false), 'a new draft opens with its name focused and selected');
+// Typed over the selection with real keys, including Q, E and arrows that the sheet otherwise takes.
+await page.keyboard.type('Quiet Edge');
+await page.keyboard.press('ArrowLeft');
+await page.keyboard.press('End');
+await page.keyboard.press('Enter');
+check((await state()) === 'workshop' && !(await page.locator('.confirm').count()), 'typing and Enter in the name stay in the field');
+check((await book()).drafts.some((p) => p.name === 'Quiet Edge'), 'the draft takes the typed name');
+await page.locator('.opt', { hasText: 'Trigger' }).click();
+await page.locator('.opt', { hasText: 'only while standing still' }).click();
+await page.getByRole('button', { name: 'Inscribe', exact: true }).click();
+{
+  const hold = page.getByRole('button', { name: 'Hold to inscribe' });
+  const bb = await hold.boundingBox();
+  await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2);
+  await page.mouse.down(); await page.waitForTimeout(1500); await page.mouse.up();
+}
+check((await book()).inscribed.some((p) => p.name === 'Quiet Edge'), 'the name survives inscribing');
+// An inscribed Pact can still be renamed: the name is a label, not a term.
+await page.getByLabel('Pact name').click();
+await page.keyboard.press('ControlOrMeta+a');
+await page.keyboard.type('Still Water');
+await page.keyboard.press('Escape');
+check((await state()) === 'workshop', 'Esc in the name leaves the field, not the Workshop');
+check((await book()).inscribed.some((p) => p.name === 'Still Water'), 'an inscribed Pact takes a new name');
+await page.keyboard.press('Escape');
+await ready();
+check(await page.evaluate(() => window.game.game.book.inscribed.value.some((p) => p.name === 'Still Water')), 'the new name survives a reload');
+await page.getByRole('button', { name: 'Begin', exact: true }).click();
+await page.locator('.card', { hasText: 'Recoil' }).click();
+await page.getByRole('button', { name: 'Skip tutorial' }).click();
+await waitState('explore');
+await page.keyboard.press('Tab');
+await page.locator('.ws-sheet').waitFor();
+check(await page.locator('.ws-book .bk', { hasText: 'Still Water' }).count() === 1, 'the Workshop lists it by its new name after the reload');
+await shot('06c-renamed');
+await page.keyboard.press('Escape');
+
+console.log('a named Pact is called out when cast, and costs no frames');
+await page.waitForFunction(() => window.game.state() === 'explore', null, { timeout: 4000 }).catch(() => undefined);
+await page.waitForTimeout(400);
+await page.mouse.move(640, 250);
+await clickCanvas('left');
+const callout = await page.waitForSelector('.declare', { timeout: 1500 }).then((el) => el.textContent(), () => '');
+check(callout === '「Still Water」', `casting the renamed Pact letters its name over the caster: ${callout}`);
+check(await page.evaluate(() => { const c = window.game.game.clock; return !c.frozen && c.slowMo === 1 && window.game.game.input.enabled; }), 'the callout holds no frames: no hit-stop, no slow motion, input live');
+await shot('06d-declared');
+await page.waitForTimeout(1700);
+check((await page.locator('.declare').count()) === 0, 'the callout fades on its own');
+await clickCanvas('left');
+await page.waitForTimeout(300);
+check((await page.locator('.declare').count()) === 0, 'casting it again straight away stays quiet');
+await page.keyboard.press('Digit1');
+await page.waitForTimeout(300);
+check(!(await page.locator('.declare').allTextContents()).some((t) => /Shockline/.test(t)), 'a catalogue Pact under its own name stays quiet');
+
+
 console.log('tutorial Pact step, following the card and the in-Workshop guide');
 await page.evaluate(() => localStorage.clear());
 await ready();
@@ -257,8 +358,6 @@ await shot('12-tutorial-sign');
 await page.keyboard.press('AltLeft');
 await page.waitForFunction(() => window.game.sign().kind === 'primed', null, { timeout: 4000 }).catch(() => undefined);
 await clickCanvas('left');
-await untilStep('art');
-await page.keyboard.press('Digit1');
 await untilStep('aura');
 await page.keyboard.press('KeyF');
 await untilStep('clash');
@@ -286,8 +385,33 @@ await page.locator('.opt', { hasText: 'Trigger' }).click();
 await page.locator('.opt', { hasText: 'only with feet on the ground' }).click();
 await page.getByRole('button', { name: 'Try it on the dummies' }).click();
 await untilStep('wager');
-await page.keyboard.press('KeyR');
-await untilStep('max');
+// The Wager step: 1 fires Shockline, whose Pact bets that it lands. Aim at the nearest dummy, cast, and read the call.
+check(/1 fires Shockline, whose Pact bets that it lands/.test(await page.locator('.objective .b').textContent()), `the Wager card names the Pact that holds it: ${await page.locator('.objective .b').textContent()}`);
+check(await page.locator('.x[data-slot="art1"] .bet').count() === 1, 'the key of a Pact with a Wager wears 賭');
+const aimAtDummy = async () => {
+  const at = await page.evaluate(() => {
+    const G = window.game.game, me = G.player.position;
+    const e = G.encounters.enemies.filter((x) => x.alive).sort((a, b) => a.position.distanceTo(me) - b.position.distanceTo(me))[0];
+    if (!e) return null;
+    const v = e.center().project(G.renderer.camera);
+    return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight];
+  });
+  if (at) await page.mouse.move(at[0], at[1], { steps: 4 });
+  await page.waitForTimeout(250);
+};
+let saw = { declared: false, settled: '' };
+for (let i = 0; i < 4 && (await stepId()) === 'wager'; i++) {
+  await aimAtDummy();
+  await page.keyboard.press('Digit1');
+  saw.declared ||= await page.waitForSelector('.wager-call.declared', { timeout: 1500 }).then(() => true, () => false);
+  const end = await page.waitForSelector('.wager-call.won, .wager-call.lost', { timeout: 3000 }).then((el) => el.getAttribute('class'), () => '');
+  saw.settled ||= end;
+  if (i === 0) await shot('14a-wager-call');
+  await page.waitForTimeout(/lost/.test(end) ? 5600 : 900);
+}
+check(saw.declared, 'casting the Pact declares its Wager over the player');
+check(/won|lost/.test(saw.settled), `the call settles visibly: ${saw.settled}`);
+await untilStep('max', 4000);
 await shot('14-tutorial-max');
 await page.keyboard.press('KeyQ');
 await untilStep('done', 14000);

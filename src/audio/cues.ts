@@ -164,7 +164,7 @@ export const CUES = {
   'cutscene.title': sfx([S(BELL, 0.3, { pitch: 1.6 }), Y('shimmer', { f: 1046.5, dur: 1.2 }, { gain: 0.1 }), Y('taiko', { f: 140, dur: 0.5 }, { gain: 0.35 })], { wet: 0.5 }),
 
   // ------------------------------------------------------------ aura
-  'aura.expand': sfx([Y('inhale', { dur: 0.18, f1: 4000 }, { gain: 0.35 }), Y('boom', { f0: 90, f1: 40, dur: 0.9 }, { gain: 0.8, at: 0.17 }), Y('whoosh', { dur: 0.7, f0: 200, f1: 2600, peak: 0.25 }, { gain: 0.6, at: 0.17 }), Y('shimmer', { f: 392, dur: 1.8 }, { gain: 0.18, at: 0.17 })], { wet: 0.6, net: true, duck: 0.4 }),
+  'aura.expand': sfx([Y('inhale', { dur: 0.3, f1: 4000 }, { gain: 0.45 }), Y('boom', { f0: 90, f1: 40, dur: 0.9 }, { gain: 0.85, at: 0.3 }), Y('whoosh', { dur: 0.7, f0: 200, f1: 2600, peak: 0.25 }, { gain: 0.6, at: 0.3 }), Y('shimmer', { f: 392, dur: 1.8 }, { gain: 0.18, at: 0.3 })], { wet: 0.6, net: true, duck: 0.4 }),
   'aura.retract': sfx([Y('whoosh', { dur: 0.6, f0: 2000, f1: 200, peak: 0.2 }, { gain: 0.85 }), Y('tone', { f: 392, glide: 130, dur: 0.6 }, { gain: 0.16 })], { net: true }),
   'aura.collapse': sfx([S(GLASS_H, 0.85, { pitch: 0.8 }), Y('crack', { dur: 0.12, hp: 1600 }, { gain: 0.6 }), Y('tinkle', { count: 20, spread: 0.9, lo: 1200 }, { gain: 0.8 }), Y('boom', { f0: 100, f1: 34, dur: 0.8 }, { gain: 0.7 })], { wet: 0.5, net: true, duck: 0.6 }),
   'aura.denied': ui([S('error_004', 0.25, { pitch: 0.8 })]),

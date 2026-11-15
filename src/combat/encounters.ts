@@ -24,7 +24,7 @@ interface EncounterDef {
 // back of the hall. `where` is where the player stands to start it.
 const DEFS: EncounterDef[] = [
   { id: 'sparring', title: 'The Sparring Ring', jp: '稽古場', where: new THREE.Vector3(-8, 0, 8), prompt: 'Call the sparring partners', spawns: [{ key: 'thug', offset: [-4.5, 0, -3] }, { key: 'thug', offset: [4.5, 0, -3] }, { key: 'bruiser', offset: [0, 0, -5] }], intro: 'Underworld hands, paid to spar. They want the Technique, not the lesson.' },
-  { id: 'kuroda', title: 'The Gate', jp: '門', where: new THREE.Vector3(0, 0, 12), prompt: 'Challenge the Kuroda Enforcer at the gate', spawns: [{ key: 'kuroda', offset: [0, 0, 5] }, { key: 'thug', offset: [-4, 0, 4] }], intro: 'Watch the ground. Their "fire" is fuel, and the sheen comes before the flame.' },
+  { id: 'kuroda', title: 'The Gate', jp: '門', where: new THREE.Vector3(0, 0, 12), prompt: 'Challenge the Kuroda Enforcer at the gate', spawns: [{ key: 'kuroda', offset: [0, 0, 5] }, { key: 'thug', offset: [-4, 0, 4] }], intro: 'A Kuroda enforcer holds the gate.' },
   { id: 'ancient', title: 'The Hall', jp: '道場', where: new THREE.Vector3(-4, 0.3, -9), prompt: 'Challenge the Master of the hall', spawns: [{ key: 'ancient', offset: [0, 0, -7] }], intro: 'Five thousand years of Technique. Press F to open your field against hers.' },
   { id: 'dummy-room', title: 'Dummy Room', jp: '稽古', where: new THREE.Vector3(8, 0.3, -12), prompt: 'Spar with training dummies', spawns: [{ key: 'dummy', offset: [-3, 0, 0] }, { key: 'dummy', offset: [0, 0, -1] }, { key: 'dummy', offset: [3, 0, 0] }] },
 ];
@@ -142,7 +142,6 @@ export class Encounters {
       g.audio.play('encounter.clear');
       g.mastery.gain(g.techniqueId, 'tolerance', 0.05);
       g.mastery.gain(g.techniqueId, 'control', 0.04);
-      if (d.id === 'kuroda') toast('The Kuroda "fire" was fuel all along. The codex remembers.', 'good');
       if (d.id === 'ancient') toast('Five thousand years, and she still bowed. Aurabending unlocked in the codex.', 'good');
     }
     if (appState.value.kind === 'encounter') setState({ kind: 'explore' });

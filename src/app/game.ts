@@ -134,6 +134,7 @@ export class Game {
     this.vfx = new Vfx(scene, this.renderer.lights);
     this.cam = new CameraRig(this.renderer.camera, this.physics);
     this.cam.snap(settings.value.camera);
+    this.vfx.viewer = { camera: this.renderer.camera, first: () => this.cam.isFirst && !this.cam.inShot };
     hud.camera.value = this.cam.mode;
     this.player = new PlayerController(this.physics, SPAWN.courtyard.clone(), {
       onStep: (speed, surface) => { this.audio.footstep(surface, speed); this.hands.step(speed); },

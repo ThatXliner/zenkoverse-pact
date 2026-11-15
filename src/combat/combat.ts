@@ -43,6 +43,7 @@ export class Combat {
   private nums: FloatNum[] = [];
   private numId = 0;
   private lastWord = -1;
+  private stopAt = -1;
   wagersWon = 0;
   wagersLost = 0;
 
@@ -93,10 +94,16 @@ export class Combat {
     e.hurt(final, { from: opts.from, knock: opts.knock, lift: opts.lift, stagger: opts.stagger });
     g.audio.hit(final, e.center());
     this.number(e.center(), String(final), this.wagerSlot ? '#ffd34d' : m > 1.1 ? '#ffb0ff' : '#f3eee4', final >= 40);
-    if (opts.heavy || final >= 40) {
-      g.clock.hitStop(final >= 80 ? 0.11 : 0.06);
-      g.cam.shake(0.35);
-      g.renderer.impactFrame(final >= 80 ? 3 : 1, new THREE.Color(g.techniques.def.color), e.center());
+    // Hit-stop by the blow's weight: a jab catches for a frame or two, a
+    // heavy blow holds long enough to see, and the heaviest holds an inked
+    // impact frame as well. Light catches are spaced out so a flurry does
+    // not stutter the whole fight.
+    const w = Math.min(1, final / 100);
+    const heavy = opts.heavy || final >= 40;
+    if (heavy || g.clock.time - this.stopAt > 0.15) { g.clock.hitStop(heavy ? 0.05 + 0.08 * w : 0.018 + 0.03 * w); this.stopAt = g.clock.time; }
+    if (heavy) {
+      g.cam.shake(0.25 + 0.2 * w);
+      g.renderer.impactFrame(final >= 80 ? 4 : 2, new THREE.Color(g.techniques.def.color), e.center());
       // A cutscene letters its own word over its blow.
       if (!g.cutscenes.active) this.letter(e.center().add(new THREE.Vector3(0, 0.9, 0)), g.techniques.def.sfx, g.techniques.def.color, final >= 80);
     }
@@ -131,6 +138,11 @@ export class Combat {
       if (opts.kinetic) g.player.shove(away.normalize().multiplyScalar(Math.min(5, 1.5 + a / 8)));
     }
     g.cam.shake(Math.min(0.8, a / 30));
+    // Taking a blow catches too, and a heavy one holds a frame in red ink.
+    if (!opts.self && !opts.cutscene) {
+      g.clock.hitStop(Math.min(0.09, 0.03 + a * 0.002));
+      if (a >= 20 && opts.kinetic) g.renderer.impactFrame(2, new THREE.Color(0xd8342a), g.player.position.clone().add(new THREE.Vector3(0, 1.1, 0)));
+    }
     g.cam.kick({ fov: -4, pitch: opts.from ? 0.02 : 0 });
     if (opts.self) g.audio.play('hurt.self'); else g.audio.play('hurt', { weight: Math.min(1, a / 40) });
     if (!opts.self) { this.invuln = 0.35; g.techniques.struck(); g.techniques.charge = Math.min(1, g.techniques.charge + a / 220); }

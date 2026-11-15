@@ -87,21 +87,21 @@ export class Ambience {
     this.leaves.gain.value = 0;
     this.loop('pink', 2).connect(leafHp).connect(this.leaves).connect(this.outsideFilter);
 
-    // Crickets: a high tone gated by a fast pulse, gated again by a slow one; two of them, apart.
+    // Crickets: a narrow band of noise, not a tone, so they rasp instead of
+    // beep. A fast sine tremolo gives the chirp and a slow one lets each
+    // insect swell and fall away; three of them, apart, at different rates.
     this.insects = ctx.createGain();
-    this.insects.gain.value = 0.035;
+    this.insects.gain.value = 0.12;
     this.insects.connect(this.outsideFilter);
-    for (const [f, chirp, rest, pan] of [[4300, 26, 0.55, -0.6], [4720, 31, 0.43, 0.55], [3950, 22, 0.31, 0.1]] as const) {
-      const o = ctx.createOscillator();
-      o.frequency.value = f;
-      // A gain at 0.5 swung by 0.5 of a square wave is a gate: open, shut.
+    for (const [f, chirp, swell, pan] of [[4300, 23, 0.11, -0.6], [4700, 29, 0.07, 0.55], [3900, 19, 0.05, 0.1]] as const) {
+      const band = ctx.createBiquadFilter();
+      band.type = 'bandpass'; band.frequency.value = f; band.Q.value = 9;
       const fast = ctx.createGain(); fast.gain.value = 0.5;
       const slow = ctx.createGain(); slow.gain.value = 0.5;
-      this.lfo(chirp, 0.5, fast.gain, 'square');
-      this.lfo(rest, 0.5, slow.gain, 'square');
+      this.lfo(chirp, 0.5, fast.gain);
+      this.lfo(swell, 0.5, slow.gain);
       const p = ctx.createStereoPanner(); p.pan.value = pan;
-      o.connect(fast).connect(slow).connect(p).connect(this.insects);
-      o.start(now);
+      this.loop('white', 2).connect(band).connect(fast).connect(slow).connect(p).connect(this.insects);
     }
 
     // The pond: low lapping where the pond is.

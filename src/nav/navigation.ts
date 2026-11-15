@@ -38,7 +38,7 @@ export const navUi = {
 
 // v2: the compound's places replaced the district's.
 const STORE_KEY = 'zenko.nav.v2';
-const PIP_RANGE = 80;
+const PIP_RANGE = 120;
 const MARKER_LIFT = 2.6;
 const LABEL_FAR = 34;
 const LABEL_NEAR = 7;

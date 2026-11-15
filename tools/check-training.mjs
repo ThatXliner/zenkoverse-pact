@@ -190,14 +190,14 @@ const LEVELS = [
 
 for (const tech of TECHS) {
   console.log(`  ${tech}`);
-  await api((g, t) => { g.technique(t); g.camera('first'); g.teleport([4.3, 0, 8]); }, tech);
+  await api((g, t) => { g.technique(t); g.camera('first'); g.teleport(g.posts().station); }, tech);
   await setStats(tech, all(0));
   // A plain blow on the lit post does not count.
   await api((g) => g.drill('striking-posts'));
   await strikeLit({ signed: false });
   await page.waitForTimeout(500);
   check(((await page.locator('.drill-hud .big').textContent()) ?? '').trim().startsWith('0'), `${tech}: a plain blow on the lit post scores nothing`);
-  await api((g) => { g.quitDrill(); g.teleport([4.3, 0, 8]); });
+  await api((g) => { g.quitDrill(); g.teleport(g.posts().station); });
   for (let i = 0; i < LEVELS.length; i++) {
     const L = LEVELS[i];
     let reached = i, tries = 0;

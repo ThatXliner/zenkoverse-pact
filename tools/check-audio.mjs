@@ -3,7 +3,8 @@
 // a headless browser cannot be listened to. It checks that nothing is made
 // or fetched before the first click, that the click starts the mixer and the
 // sound library loads, and then that each thing that should sound did: the
-// bed indoors and out, a footstep per surface, every Technique's casts and
+// bed indoors and out, the valley's bed past the gate (open air, grass, the
+// stream and the falls, and still no crickets), a footstep per surface, every Technique's casts and
 // its Maximum Output (charge, title, blow), hit weight by damage, the aura,
 // the drill, the interface, other bodies' steps placed in the world, and the
 // volume settings surviving a reload. Fails on any page error.
@@ -77,10 +78,24 @@ console.log('the bed, outdoors and in');
   const hall = (await view()).ambience;
   check(out.mode === 'calm' && out.indoors < 0.1 && out.layers.wind > 0.03, `courtyard: wind ${out.layers.wind.toFixed(3)}, room ${out.layers.room}`);
   check(hall.indoors > 0.8 && hall.layers.room > 0.05 && hall.layers.wind < out.layers.wind * 0.6, `hall: indoors ${hall.indoors.toFixed(2)}, room ${hall.layers.room.toFixed(3)}, wind down to ${hall.layers.wind.toFixed(3)}`);
+  check(out.open < 0.05 && out.layers.grass < 0.002, `courtyard: the walls hold the valley out (open ${out.open.toFixed(2)}, grass ${out.layers.grass})`);
+}
+
+console.log('the valley bed, out of the gate');
+{
+  const sample = async (where, ms = 2600) => { await api((g, p) => g.teleport(p), where); await wait(ms); const v = await view(); return { ...v.ambience, heard: v.heard }; };
+  const yard = await sample('courtyard', 1500);
+  const field = await sample('field');
+  const bridge = await sample('bridge', 1200);
+  const falls = await sample('falls', 1200);
+  check(field.open > 0.8 && field.layers.grass > 0.005 && field.layers.wind > 0.03, `field: open ${field.open.toFixed(2)}, grass ${field.layers.grass.toFixed(3)}, wind ${field.layers.wind.toFixed(3)} (the yard's ${yard.layers.wind.toFixed(3)}; gusts vary both)`);
+  check(bridge.heard.stream > field.heard.stream * 2 && bridge.heard.stream > 0.1, `the stream swells at the bridge: ${field.heard.stream} in the field, ${bridge.heard.stream} on the bridge`);
+  check(falls.heard.falls > 0.15 && falls.heard.falls > yard.heard.falls * 5, `the falls roar at the pool: ${falls.heard.falls}, ${yard.heard.falls} in the yard`);
+  check(!Object.keys(field.layers).some((k) => /cricket/i.test(k)) && !Object.keys(field.events).some((k) => /cricket/i.test(k)), `no crickets in the bed (${Object.keys(field.layers).join(', ')})`);
 }
 
 console.log('footsteps per surface');
-for (const [where, want] of [[[0, 0.6, -12], 'step.wood'], [[0, 0.6, 4], 'step.stone'], [[-8, 0.6, 8], 'step.gravel'], [[-34, 0.6, 0], 'step.grass'], [[11, -0.6, 11], 'step.water'], [[14.6, 0.6, 11], 'step.wet']]) {
+for (const [where, want] of [[[0, 0.6, -12], 'step.wood'], [[0, 0.6, 4], 'step.stone'], [[-8, 0.6, 8], 'step.gravel'], [[-34, 0.6, 0], 'step.grass'], [[11, -0.6, 11], 'step.water'], [[14.6, 0.6, 11], 'step.wet'], [[0, 0.3, 31], 'step.gravel'], [[2, 1.3, 47], 'step.wood'], [[-38.6, 0, 2], 'step.water']]) {
   await api((g, p) => { g.teleport(p); g.look(0, 0); }, where);
   await wait(300);
   await clear();

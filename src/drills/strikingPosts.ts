@@ -5,6 +5,7 @@ import type { Enemy } from '../combat/enemies';
 import type { MasteryStat } from '../mastery/mastery';
 import { toon } from '../render/materials';
 import { keyLabel } from '../app/keymap';
+import { FIELD } from '../world/valleyPlan';
 
 // The Striking Posts (巻藁), the drill for landing heavy blows well. Any
 // Technique can run it; the gains go to the Technique in hand. Three posts
@@ -18,9 +19,10 @@ import { keyLabel } from '../app/keymap';
 // A tier raises its stats to a level (`raises`): clearing it again adds
 // nothing, so the posts pay for the skill and not for the time spent.
 
-// Where the drill stands, as one value so the station can move. The posts
-// stand round it; the player begins the drill from it.
-const STATION = new THREE.Vector3(4.3, 0, 8.0);
+// Where the drill stands, as one value so the station can move: the swept
+// field beside the road just out of the gate (src/world/valleyPlan.ts). The
+// posts stand round it; the player begins the drill from it.
+const STATION = new THREE.Vector3(FIELD.x, 0, FIELD.z);
 // Each post's distance from the mark, and their bearings (0 is north). The
 // bell frame stands to the north, between them.
 const POST_RADIUS = 3;

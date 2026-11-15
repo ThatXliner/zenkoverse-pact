@@ -1,5 +1,7 @@
+import { slotDef } from './slots';
 import { type Pact, type Param, type Restriction, restrictions, sacrificeTag, wagerOf } from './schema';
 import { stakeOf, wagerTag, type Stake, type WagerTerms } from './wager';
+import { seedTally, tallyFrom, isTally, type OddsTally } from './odds';
 
 // Play telemetry the Resolve estimate reads. Fractions are 0..1 and decay
 // toward what the player actually does, so a restriction on something they
@@ -15,17 +17,28 @@ export interface Telemetry {
   waterNearby: number;
   lowHealthFraction: number;
   eyesOpenReliance: number;
-  // How often a cast lands, finishes a target, and how often eight seconds pass without a hit: the odds a Wager is called against.
-  hitRate: number;
-  killRate: number;
-  untouchedRate: number;
+  // How often a cast is made with the aura field open: what losing the pool costs this player.
+  auraReliance: number;
+  // What casts do at every setting a Wager can call: the odds it is called against (src/pacts/odds.ts).
+  odds: OddsTally;
 }
 
-export const DEFAULT_TELEMETRY: Telemetry = {
+export const DEFAULT_TELEMETRY: Readonly<Telemetry> = {
   movingWhileCasting: 0.6, dashesPerMinute: 4, airborneFraction: 0.12, hitsFromBehind: 0.25, longRangeFraction: 0.35,
   multiTargetFraction: 0.4, propUse: 0.3, waterNearby: 0.5, lowHealthFraction: 0.15, eyesOpenReliance: 0.9,
-  hitRate: 0.6, killRate: 0.2, untouchedRate: 0.5,
+  auraReliance: 0.2, odds: seedTally(),
 };
+
+// A fresh copy: the tallies are nudged in place, so nothing may share the seed's rows.
+export function freshTelemetry(): Telemetry { return { ...DEFAULT_TELEMETRY, odds: seedTally() }; }
+
+// A saved record, from any version. One from before per-setting tallies kept
+// a single rate per call; those carry over at the setting they measured.
+export function upgradeTelemetry(saved: Partial<Telemetry> & { hitRate?: number; killRate?: number; untouchedRate?: number } | undefined): Telemetry {
+  const { hitRate, killRate, untouchedRate, ...rest } = saved ?? {};
+  const odds = isTally(rest.odds) ? { ...structuredClone(rest.odds), called: structuredClone(rest.odds.called ?? {}) } : tallyFrom({ hitRate, killRate, untouchedRate, multiTargetFraction: rest.multiTargetFraction });
+  return { ...freshTelemetry(), ...rest, odds };
+}
 
 export type ResolveRead = 'trivial' | 'slight' | 'meaningful' | 'heavy' | 'grave';
 
@@ -117,11 +130,11 @@ export function estimateResolve(pact: Pact, inscribed: Pact[], telemetry: Teleme
     if (c.kind === 'risk') { lines.push({ label: `risk: past ${c.beyond} for ${c.cost}`, value: 0.4, reason: 'the escape clause is itself a cost' }); total += 0.4; }
     if (c.kind === 'program') { lines.push({ label: `program: when ${c.when}, ${c.then}`, value: 0.2, reason: 'automation removes a choice' }); total += 0.2; }
   }
-  const w = wagerOf(pact);
-  const wager = w ? { ...w, ...stakeOf(w, telemetry, counted.get(wagerTag(w))) } : null;
   total = round(total);
-  const read: ResolveRead = total < 0.8 ? 'trivial' : total < 2.2 ? 'slight' : total < 4.5 ? 'meaningful' : total < 7.5 ? 'heavy' : 'grave';
   const potency = 1 - Math.exp(-total / 4.2);
+  const w = wagerOf(pact);
+  const wager = w ? { ...w, ...stakeOf(w, { telemetry, restrictions: restrictions(pact), potency, raw: slotDef(pact.slot).raw !== null }, counted.get(wagerTag(w))) } : null;
+  const read: ResolveRead = total < 0.8 ? 'trivial' : total < 2.2 ? 'slight' : total < 4.5 ? 'meaningful' : total < 7.5 ? 'heavy' : 'grave';
   return { total, read, lines, potency, wager };
 }
 

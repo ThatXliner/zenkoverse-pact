@@ -3,10 +3,12 @@
 // anything overlaps, leaves the window, or is cut off sideways. Each scene
 // sets up one moment of play through the `?debug` hooks (the courtyard with
 // its opening message, a tutorial step, a drill before and during its run,
-// a fight with a boss bar, the rooftop trial, the Architect's plaque with its prompt) or opens
+// a fight with a boss bar, a Wager's open call, the rooftop trial, the Architect's plaque with its prompt) or opens
 // a sheet (each pause tab, the Workshop), then measures the regions the HUD
 // keeps apart: the captions column, the compass, the boss bar, the prompt,
-// the vitals and the Ability cards. A screenshot of every scene is saved.
+// the vitals, the Ability cards and a Wager's open call. In the Workshop's
+// Wager panel, tuned, every slider row keeps its parts apart and whole.
+// A screenshot of every scene is saved.
 // Usage: node tools/check-hud.mjs [url] [--out captures/hud] [--port 4173] [--sizes 1280x720,390x844]
 // Without a url it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
@@ -19,6 +21,9 @@ const out = args.out ?? 'captures/hud';
 mkdirSync(out, { recursive: true });
 const SIZES = (args.sizes ?? '1280x720,1920x1080,390x844,844x390').split(',').map((s) => s.split('x').map(Number));
 
+const wagerCall = `const G = g.game, s = G.book.inscribed.value.find((p) => p.name === "Shockline");
+  G.techniques.wagers.declare({ ...s, id: "hud-wager", name: "Shockline", clauses: [{ kind: "wager", declare: "untouched", at: 20, pays: { charge: 2, refill: 1, aura: 1, mend: 1 }, risks: { seal: 12, blood: 0.4, drain: 0.75, slow: 12, aura: 1, dark: 90 } }] }, {});
+  g.step(2);`;
 const pause = 'g.hold("pause", true); g.step(1); g.hold("pause", false); g.step(2);';
 const press = (a) => `g.hold("${a}", true); g.step(1); g.hold("${a}", false); g.step(2);`;
 const fresh = 'g.game.startRun({ skipTutorial: true }); g.camera("top"); g.step(5);';
@@ -32,6 +37,8 @@ const SCENES = [
   { name: 'drill-run', js: `${fresh} g.teleport([6, 0, 3.2]); g.step(5); g.drill("field-reading"); g.step(120);` },
   { name: 'stone-prompt', js: `${fresh} g.teleport([6, 0, 3.2]); g.step(20);` },
   { name: 'fight', js: `${fresh} g.encounter("ancient"); g.step(30);` },
+  // A Wager's open call with every part tuned: the longest slip there is.
+  { name: 'wager-call', js: `${fresh} g.encounter("ancient"); g.step(30); ${wagerCall}` },
   { name: 'rooftop', js: `${fresh} g.rooftop.begin(); g.step(90);` },
   { name: 'architect', js: `${fresh} g.teleport([-10, 0.3, -15]); g.step(10); ${press('interact')} g.step(10);` },
   { name: 'pause', sheet: true, js: `${fresh} ${pause}` },
@@ -40,10 +47,12 @@ const SCENES = [
   { name: 'codex', sheet: true, js: `${fresh} ${pause} window.__tab("codex");` },
   { name: 'map', sheet: true, js: `${fresh} ${press('map')}` },
   { name: 'workshop', sheet: true, js: `${fresh} g.workshop(true); g.step(2);` },
+  // The Wager panel, tuned: every slider row keeps its name, its slider and its reading apart.
+  { name: 'workshop-wager', sheet: true, wager: true, js: `${fresh} g.workshop(true); g.step(2);` },
 ];
 
 // The HUD's regions, which must not touch one another or leave the window.
-const REGIONS = ['.captions', '.top-center .compass', '.boss', '.prompt', '.vitals', '.abilities', '.rt-strip'];
+const REGIONS = ['.captions', '.top-center .compass', '.boss', '.prompt', '.vitals', '.abilities', '.rt-strip', '.wager-call'];
 
 const browser = await chromium.launch({ channel: 'chrome', args: ['--use-angle=metal', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
@@ -69,13 +78,23 @@ for (const [w, h] of SIZES) {
       const g = window.game;
       g.game.closeWorkshop?.();
       if (g.state() === 'paused') { g.hold('pause', true); g.step(1); g.hold('pause', false); g.step(1); }
-      g.game.drills.abandon(); g.game.rooftop.abandon(); g.game.encounters.reset?.();
+      g.game.drills.abandon(); g.game.rooftop.abandon(); g.game.encounters.reset?.(); g.game.techniques.wagers.clear();
       new Function('g', code)(g);
     }, scene.js);
+    if (scene.wager) {
+      await page.locator('.ws-book .bk.new').click();
+      await page.locator('.chip', { hasText: 'a wager, to bet on each cast' }).click();
+      await page.locator('.chip', { hasText: 'nothing touches you for' }).click();
+      for (const [name, keys] of [['How long', 4], ['Resource', 2], ['Aura', 1], ['Blood', 5], ['Dark', 5]]) {
+        await page.locator('.ws-panel').getByRole('slider', { name, exact: true }).first().focus();
+        for (let i = 0; i < keys; i++) await page.keyboard.press('ArrowRight');
+      }
+      await page.locator('.ws-panel .wg-read').scrollIntoViewIfNeeded();
+    }
     // Let the entrances finish: captions wipe in over a third of a second.
     await page.waitForTimeout(700);
     const tag = `${w}x${h} ${scene.name}`;
-    const report = await page.evaluate(({ regions, sheet }) => {
+    const report = await page.evaluate(({ regions, sheet, wager }) => {
       const W = innerWidth, H = innerHeight;
       const shown = (el) => { const s = getComputedStyle(el); return s.display !== 'none' && s.visibility !== 'hidden' && Number(s.opacity) > 0.05 && el.getClientRects().length > 0; };
       const rect = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; };
@@ -87,6 +106,22 @@ for (const [w, h] of SIZES) {
         if (outside(rect(s))) problems.push(`sheet leaves the window (${JSON.stringify(rect(s))})`);
         for (const part of s.querySelectorAll(':scope > header, :scope > .body, :scope > footer, .tabs')) {
           if (part.scrollWidth > part.clientWidth + 1) problems.push(`${part.className || part.tagName.toLowerCase()} is cut off sideways (${part.scrollWidth} > ${part.clientWidth})`);
+        }
+        if (wager) {
+          const rows = [...s.querySelectorAll('.ws-panel .wg-tune')];
+          if (rows.length < 12) problems.push(`the Wager panel shows ${rows.length} sliders`);
+          for (const row of rows) {
+            const parts = [...row.children].map((el) => ({ el, r: rect(el) }));
+            const name = row.querySelector('.l')?.textContent;
+            for (let i = 0; i < parts.length; i++) for (let j = i + 1; j < parts.length; j++) {
+              const a = parts[i].r, b = parts[j].r;
+              if (Math.min(a.r, b.r) - Math.max(a.l, b.l) > 1 && Math.min(a.b, b.b) - Math.max(a.t, b.t) > 1) problems.push(`${name}: ${parts[i].el.className || parts[i].el.tagName} overlaps ${parts[j].el.className || parts[j].el.tagName}`);
+            }
+            const slider = row.querySelector('input');
+            if (slider.getBoundingClientRect().width < 80) problems.push(`${name}: the slider is ${Math.round(slider.getBoundingClientRect().width)} px wide`);
+            for (const t of row.querySelectorAll('.l, .v')) if (t.scrollWidth > t.clientWidth + 1) problems.push(`${name}: "${t.textContent}" is cut off`);
+            if (rect(row).r > rect(s).r + 0.5) problems.push(`${name}: the row leaves the sheet`);
+          }
         }
         return { problems };
       }
@@ -103,7 +138,7 @@ for (const [w, h] of SIZES) {
         if (shown(el) && el.scrollWidth > el.clientWidth + 1) problems.push(`${el.className} is cut off sideways`);
       }
       return { problems, regions: found.map((f) => f.sel) };
-    }, { regions: REGIONS, sheet: !!scene.sheet });
+    }, { regions: REGIONS, sheet: !!scene.sheet, wager: !!scene.wager });
     check(report.problems.length === 0, `${tag}: ${report.problems.length ? report.problems.join('; ') : `clear (${scene.sheet ? 'sheet' : report.regions.join(', ')})`}`);
     // Animations run: a toast's exit is timed to its life, and disabling it would hide the toast.
     await page.screenshot({ path: join(out, `${w}x${h}-${scene.name}.png`) });

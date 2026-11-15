@@ -166,11 +166,18 @@ body.top-view .hud { cursor: none; }
 .banner { position: absolute; left: 0; right: 0; top: 30%; text-align: center; animation: banner 2.4s var(--ease) forwards; }
 .banner .big { font-family: var(--brush); font-size: clamp(42px, 7vw, 96px); font-weight: 400; letter-spacing: 0.08em; line-height: 1; color: var(--paper); -webkit-text-stroke: 8px var(--ink-line); paint-order: stroke fill; }
 .banner .small { display: inline-block; margin-top: 12px; padding: 3px 14px; font-size: 12px; font-weight: 700; letter-spacing: 0.4em; text-transform: uppercase; color: var(--paper-ink); background: var(--paper); border: 2px solid var(--ink-line); }
+/* A Pact a lost Wager put out: its key reads dim until it comes back. */
+.hud .x.dark .name, .hud .ab.dark .box { opacity: 0.45; }
+.hud .x.dark .name { text-decoration: line-through; }
+
 /* The open Wager: a slip of paper under the player, gold while it is open
    and when it pays, red when the forfeit lands. */
-.wager-call { position: absolute; left: 50%; top: 58%; translate: -50% 0; max-width: calc(100vw - 32px); display: flex; align-items: center; gap: 9px; padding: 5px 12px 6px 8px; background: var(--paper); color: var(--paper-ink); border: 2px solid var(--ink-line); box-shadow: 3px 3px 0 var(--ink-line); font-size: 13px; line-height: 1.3; animation: cap-in 0.25s var(--ease) both; }
+.wager-call { position: absolute; left: 50%; top: 58%; translate: -50% 0; max-width: min(calc(100vw - 32px), 560px); display: flex; align-items: center; gap: 9px; padding: 5px 12px 6px 8px; background: var(--paper); color: var(--paper-ink); border: 2px solid var(--ink-line); box-shadow: 3px 3px 0 var(--ink-line); font-size: 13px; line-height: 1.3; animation: cap-in 0.25s var(--ease) both; }
 .wager-call b { flex: none; display: grid; place-items: center; min-width: 26px; height: 26px; padding: 0 4px; white-space: nowrap; font-size: 16px; font-weight: 400; color: var(--paper); background: #c9962a; border: 1.5px solid var(--ink-line); }
+.wager-call > span { min-width: 0; }
 .wager-call em { display: block; font-style: normal; font-size: 11.5px; color: var(--paper-mute); }
+/* A Wager tuned with many parts keeps to two short lines; the Workshop holds the rest. */
+.wager-call em i { display: block; font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wager-call.declared b { animation: pulse 0.9s ease-in-out infinite; }
 /* A named Pact, called out over its caster: lettered in ink like a shouted
    technique name, slammed in, held, gone in a second and a half. It sits
@@ -207,6 +214,7 @@ body.top-view .hud { cursor: none; }
   .vitals { left: 50%; transform: translateX(-50%); width: min(200px, 26vw); }
 }
 @media (max-height: 520px) {
+  .wager-call { top: 52%; }
   .boss { top: calc(var(--hud-pad) + 60px); }
   .boss .n { font-size: 16px; }
   .cap { padding: 6px 11px 7px 15px; }

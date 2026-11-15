@@ -211,10 +211,10 @@ function useFresh(key: string, ms = 6000): boolean {
 function Extra({ slot, label, glyph, cd }: { slot: KeySlot; label: SlotLabel; glyph: string; cd: { cd: number; ready: boolean } }) {
   const fresh = useFresh(label.empty ? '' : label.name);
   return (
-    <div class={`x ${label.empty ? 'empty' : ''} ${cd.ready && !label.empty ? 'ready' : ''} ${label.preview ? 'preview' : ''} ${fresh && !label.empty ? 'fresh' : ''}`} data-slot={slot} title={label.empty ? `${keyLabel(slot)}: empty. Inscribe a Pact on it in the Workshop.` : undefined}>
+    <div class={`x ${label.empty ? 'empty' : ''} ${cd.ready && !label.empty ? 'ready' : ''} ${label.preview ? 'preview' : ''} ${fresh && !label.empty ? 'fresh' : ''} ${label.dark ? 'dark' : ''}`} data-slot={slot} title={label.dark ? `${label.dark} is dark` : label.empty ? `${keyLabel(slot)}: empty. Inscribe a Pact on it in the Workshop.` : undefined}>
       <kbd>{keyLabel(slot)}</kbd>
       {!label.empty && <div class="box"><span class="glyph">{glyph}</span><div class="cool" style={{ height: `${Math.max(0, Math.min(1, cd.cd)) * 100}%` }} /><Bet label={label} /></div>}
-      <span class="name">{label.empty ? 'Empty' : label.name}</span>
+      <span class="name">{label.empty ? label.dark ?? 'Empty' : label.name}</span>
     </div>
   );
 }
@@ -226,7 +226,7 @@ const shortKey = (label: string) => SHORT_MOUSE[label] ?? (label.length > 5 ? la
 function Ability({ slot, label, glyph, cd, ready }: { slot: KeySlot; label: SlotLabel; glyph: string; cd: number; ready: boolean }) {
   const fresh = useFresh(`${label.name}|${label.preview ? 1 : 0}`);
   return (
-    <div class={`ab ${ready ? 'ready' : ''} ${label.kind === 'max' ? 'max' : ''} ${label.preview ? 'preview' : ''} ${fresh ? 'fresh' : ''}`} data-slot={slot}>
+    <div class={`ab ${ready ? 'ready' : ''} ${label.kind === 'max' ? 'max' : ''} ${label.preview ? 'preview' : ''} ${fresh ? 'fresh' : ''} ${label.dark ? 'dark' : ''}`} data-slot={slot} title={label.dark ? `${label.dark} is dark` : undefined}>
       <div class="box"><span class="glyph">{glyph}</span><div class="cool" style={{ height: `${Math.max(0, Math.min(1, cd)) * 100}%` }} /><Bet label={label} /></div>
       <div class="txt">
         <span class="key">{keyLabel(slot)}{label.preview ? ' · trying a draft' : ''}</span>
@@ -250,7 +250,7 @@ function WagerTag({ call }: { call: WagerCall }) {
   return (
     <div class="wager-call declared">
       <b class="jp">賭</b>
-      <span>{call.pact} calls: {call.call}{left}<em>right: {call.win} · wrong: {call.lose}</em></span>
+      <span>{call.pact} calls: {call.call}{left}<em><i>right: {call.win}</i><i>wrong: {call.lose}</i></em></span>
     </div>
   );
 }

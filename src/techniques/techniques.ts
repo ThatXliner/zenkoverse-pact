@@ -7,7 +7,7 @@ import type { TechniqueKit, AbilityContext, CastResult, TechniqueId } from './ki
 import type { Pact, TriggerValue } from '../pacts/schema';
 import { KEY_SLOTS, KIND_DEFS, kindOn, slotDef, type AbilityKind, type AbilitySlot, type KeySlot } from '../pacts/slots';
 import { restriction, wagerOf } from '../pacts/schema';
-import { DECLARE } from '../pacts/wager';
+import { callWords } from '../pacts/wager';
 import { describe } from '../pacts/resolve';
 import { pick, type Gesture } from '../hands/gestures';
 import type { CameraKick } from '../player/camera';
@@ -22,7 +22,7 @@ import { echo } from './kits/echo';
 import { GROUP_PROP, GROUP_WORLD, GROUP_ENEMY } from '../physics/world';
 import { playerActor, enemyActor } from '../cutscene/cutscene';
 import { RULES } from '../net/protocol';
-import { Wagers } from './wagers';
+import { Wagers, darkUi } from './wagers';
 import { Declarations } from './declarations';
 
 export const KITS: Record<TechniqueId, TechniqueKit> = { recoil, shift, rime, blink, echo };
@@ -46,7 +46,8 @@ const RAW_POTENCY = 0.22;
 // does, how it is cast, and whether it is the raw Technique, a draft being
 // tried, or nothing yet (an extra slot with no Pact).
 // `wager` is what the Pact on the key bets on each cast, when it holds a Wager.
-export interface SlotLabel { name: string; what: string; kind: AbilityKind | null; raw: boolean; preview: boolean; empty: boolean; wager: string | null }
+// `dark` names the Pact a lost Wager has put out, while the key falls back.
+export interface SlotLabel { name: string; what: string; kind: AbilityKind | null; raw: boolean; preview: boolean; empty: boolean; wager: string | null; dark?: string }
 const EMPTY_LABEL: SlotLabel = { name: '', what: '', kind: null, raw: false, preview: false, empty: true, wager: null };
 const perSlot = <T>(make: (s: KeySlot) => T): Record<KeySlot, T> => Object.fromEntries(KEY_SLOTS.map((s) => [s, make(s)])) as Record<KeySlot, T>;
 
@@ -141,27 +142,36 @@ export class Techniques {
   private refreshSlots(): void {
     const book = this.game.book;
     const preview = book.preview.value;
+    const dark = darkUi.value;
     techUi.slots.value = perSlot((s): SlotLabel => {
-      const p = preview?.slot === s && preview.technique === this.def.id ? preview : book.bound(s);
+      const held = preview?.slot === s && preview.technique === this.def.id ? preview : book.bound(s);
+      const p = held && !dark.has(held.id) ? held : null;
       if (p) {
         const shape = this.def.shapes[p.grant.shape];
         const w = wagerOf(p);
-        return { name: p.name, what: shape?.short ?? '', kind: kindOn(s, shape?.kinds), raw: false, preview: p === preview, empty: false, wager: w ? DECLARE[w.declare].words : null };
+        return { name: p.name, what: shape?.short ?? '', kind: kindOn(s, shape?.kinds), raw: false, preview: p === preview, empty: false, wager: w ? callWords(w) : null };
       }
       const raw = slotDef(s).raw;
-      return raw ? { name: `Raw ${this.def.primitive.name}`, what: this.def.primitive.short, kind: raw, raw: true, preview: false, empty: false, wager: null } : EMPTY_LABEL;
+      const out = held?.name;
+      return raw ? { name: `Raw ${this.def.primitive.name}`, what: this.def.primitive.short, kind: raw, raw: true, preview: false, empty: false, wager: null, dark: out } : out ? { ...EMPTY_LABEL, dark: out } : EMPTY_LABEL;
     });
   }
 
   // A draft being tried defines its key. Otherwise an inscribed Pact that
   // is programmed to take precedence does so while its trigger holds, and
-  // the bound Pact defines the key the rest of the time.
+  // the bound Pact defines the key the rest of the time. A Pact a lost
+  // Wager has put out defines nothing until it comes back.
   pactFor(slot: KeySlot): Pact | null {
+    const p = this.definer(slot);
+    return p && !this.wagers.isDark(p.id) ? p : null;
+  }
+
+  private definer(slot: KeySlot): Pact | null {
     const book = this.game.book;
     const preview = book.preview.value;
     if (preview && preview.slot === slot && preview.technique === this.def.id) return preview;
     for (const p of book.inscribed.value) {
-      if (p.technique !== this.def.id || p.slot !== slot || book.expired(p)) continue;
+      if (p.technique !== this.def.id || p.slot !== slot || book.expired(p) || this.wagers.isDark(p.id)) continue;
       const prefer = p.clauses.find((c) => c.kind === 'program' && c.then === 'prefer');
       if (prefer?.kind === 'program' && this.triggerHolds(prefer.when)) return p;
     }
@@ -278,6 +288,7 @@ export class Techniques {
     g.net?.cast(kind, kind === 'max' ? this.def.cutscene.title.en : pact?.name ?? `Raw ${this.def.primitive.name}`, variant, speed, shout);
     g.book.observe('movingWhileCasting', g.player.planarSpeed.value > 0.5 ? 1 : 0);
     g.book.observe('airborneFraction', g.player.grounded ? 0 : 1);
+    g.book.observe('auraReliance', g.aura.open ? 1 : 0);
     g.mastery.gain(this.def.id, 'activation', 0.004);
     g.tutorial.notify(slot);
     return true;
@@ -295,8 +306,8 @@ export class Techniques {
       if (r.cameraKick) g.cam.kick(r.cameraKick);
       if (r.rooted) g.player.rooted = Math.max(g.player.rooted, r.rooted);
       if (r.moveLock) g.player.moveLock = Math.max(g.player.moveLock, r.moveLock);
-      // The odds a Wager is called against follow what this player's casts actually do.
-      if (c.ctx.kind !== 'max') { g.book.observe('hitRate', (r.hits ?? 0) > 0 ? 1 : 0); g.book.observe('multiTargetFraction', (r.hits ?? 0) >= 2 ? 1 : 0, 0.02); }
+      // The odds a Wager is called against are measured in `wagers.fire`.
+      if (c.ctx.kind !== 'max') g.book.observe('multiTargetFraction', (r.hits ?? 0) >= 2 ? 1 : 0, 0.02);
       if ((r.hits ?? 0) > 0) { this.charge = Math.min(1, this.charge + 0.08 * (r.hits ?? 1)); g.mastery.gain(this.def.id, 'precision', 0.006); }
       else if (c.ctx.kind !== 'max') g.book.observe('longRangeFraction', c.ctx.aim && c.ctx.aim.distanceTo(c.ctx.origin) > 8 ? 1 : 0);
     }

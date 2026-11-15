@@ -2,7 +2,7 @@ import { type Pact, type Clause, type Param } from './schema';
 import { slotDef, type AbilitySlot } from './slots';
 import { keyPhrase } from '../app/keymap';
 import { describe } from './resolve';
-import { DECLARE, REWARD, FORFEIT } from './wager';
+import { type WagerTerms, REWARDS, REWARD, FORFEIT, callWords, riskList, joinAnd as and } from './wager';
 
 // The terms as the universe reads them, built from the parsed Pact and
 // nothing else. The Workshop renders the segments as the editor, so what the
@@ -35,12 +35,15 @@ export function readbackSegments(pact: Pact, shapeLabel: (shape: string) => stri
     const focus: Focus = { kind: 'clause', index };
     if (c.kind === 'sunset') out.push({ text: 'seconds' in c.term ? `Invoked, its term runs ${c.term.seconds} seconds; the Pact remains` : `Its term ends after ${c.term.encounters} ${c.term.encounters === 1 ? 'fight' : 'fights'}; the Pact remains`, focus }, { text: '. ' });
     if (c.kind === 'risk') out.push({ text: `Risk: you may push past the ${c.beyond} limit, and ${riskCost(c.cost)}`, focus }, { text: '. ' });
-    if (c.kind === 'wager') out.push({ text: `Wager: each cast declares that ${DECLARE[c.declare].words}. Called right, ${REWARD[c.reward].plain}; called wrong, ${FORFEIT[c.forfeit].words}`, focus }, { text: '. ' });
+    if (c.kind === 'wager') out.push({ text: `Wager: each cast declares that ${callWords(c)}. Called right, ${wagerPays(c)}; called wrong, ${wagerRisks(c)}`, focus }, { text: '. ' });
     if (c.kind === 'program') out.push({ text: `Programmed: when ${triggerWords(c.when)}, this Pact ${c.then === 'activate' ? 'fires on its own' : c.then === 'suppress' ? 'refuses to fire' : 'takes precedence over your other Pacts'}`, focus }, { text: '. ' });
   });
   out.push({ text: 'Once inscribed it cannot be unwritten.' });
   return out;
 }
+
+export const wagerPays = (w: WagerTerms): string => and(REWARDS.filter((r) => (w.pays[r] ?? 0) > 0).map((r) => REWARD[r].plain)) || 'it pays nothing';
+export const wagerRisks = (w: WagerTerms): string => and(riskList(w).map(([f, n]) => FORFEIT[f].words(n))) || 'nothing is lost';
 
 export function readback(pact: Pact, shapeLabel: (shape: string) => string, behaviorLabel: (b: string) => string): string {
   return readbackSegments(pact, shapeLabel, behaviorLabel).map((s) => s.text).join('');

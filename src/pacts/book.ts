@@ -1,7 +1,7 @@
 import { signal } from '@preact/signals';
 import { type Pact, type TechniqueId, type ShapeTable, validatePact, upgradePact, type Validation } from './schema';
 import { type AbilitySlot, EXTRA_SLOTS } from './slots';
-import { estimateResolve, countedBefore, DEFAULT_TELEMETRY, type Telemetry, type ResolveEstimate } from './resolve';
+import { estimateResolve, countedBefore, freshTelemetry, upgradeTelemetry, type Telemetry, type ResolveEstimate } from './resolve';
 
 const KEY = 'zenko.pacts.v3';
 const LEGACY_KEY = 'zenko.pacts.v2';
@@ -24,7 +24,7 @@ export class PactBook {
   readonly bindings = signal<Bindings>({});
   readonly preview = signal<Pact | null>(null);
   private claimed = new Set<string>();
-  telemetry: Telemetry = { ...DEFAULT_TELEMETRY };
+  telemetry: Telemetry = freshTelemetry();
   technique: TechniqueId = 'recoil';
   encounters = 0;
   private catalogue = new Map<TechniqueId, Pact[]>();
@@ -145,7 +145,7 @@ export class PactBook {
   endEncounter(): void { this.encounters++; this.persist(); }
 
   // Telemetry nudges: each is an exponential moving average toward observed play.
-  observe(key: keyof Telemetry, value: number, rate = 0.04): void {
+  observe(key: Exclude<keyof Telemetry, 'odds'>, value: number, rate = 0.04): void {
     this.telemetry[key] += (value - this.telemetry[key]) * rate;
   }
 
@@ -155,7 +155,7 @@ export class PactBook {
     this.bindings.value = {};
     this.claimed.clear();
     this.preview.value = null;
-    this.telemetry = { ...DEFAULT_TELEMETRY };
+    this.telemetry = freshTelemetry();
     this.encounters = 0;
     this.seed();
     this.persist();
@@ -184,7 +184,7 @@ export class PactBook {
     this.drafts.value = (s.drafts ?? []).map(upgradePact).filter((p) => validatePact(p).ok);
     this.bindings.value = s.bindings ?? {};
     this.claimed = new Set(s.claimed ?? this.settled());
-    this.telemetry = { ...DEFAULT_TELEMETRY, ...(s.telemetry ?? {}) };
+    this.telemetry = upgradeTelemetry(s.telemetry);
     this.encounters = s.encounters ?? 0;
   }
 

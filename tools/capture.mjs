@@ -3,7 +3,7 @@
 // `?debug` hooks to fixed scenarios and saves screenshots and short frame
 // sequences per piece. Usage:
 //   node tools/capture.mjs [url] [--out captures] [--only hands,district] [--url http://...] [--port 4173] [--gpu]
-// Pieces: ui, hud, hands, variants, sign, poses, third-person, views, compound, vfx, style, encounters, roles, workshop, tutorial, drill, perf.
+// Pieces: ui, hud, hands, variants, sign, poses, third-person, views, compound, vfx, style, encounters, fight, roles, workshop, tutorial, drill, perf.
 // Without a URL it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -458,6 +458,79 @@ if (run('drill')) {
   await startRun('recoil');
   await api((g) => { g.teleport([-20, 0, 10]); g.camera('third'); g.look(0, 0.2); g.drill('recoil-crane'); });
   for (const f of [60, 150]) { await step(f === 60 ? 60 : 90); await shot('drill', `recoil-crane-f${f}`); }
+}
+
+// Fight direction (issues #10 and #11), from the top-down camera the game is
+// played in unless named: each role's telegraph mid wind-up and its blow, the
+// Kuroda pour, fuse and ignition (and his three-pool line below half), the
+// Master's palm, its echo, her wave and her step away, and the feel of the
+// player's own blows: a heavy Recoil strike's held impact frame, a thrown
+// body's smear and skid, and the same strike in first person at arm's length.
+if (run('fight')) {
+  // Steps one frame at a time until `cond` holds; false if it never did.
+  const until = (cond, max = 900) => api((g, src, n) => {
+    const f = new Function('g', `return (${src})(g)`);
+    for (let i = 0; i < n; i++) { if (f(g)) return true; g.step(1); }
+    return false;
+  }, cond.toString(), max);
+  const solo = async (key) => {
+    await startRun('recoil');
+    await api((g, k) => {
+      const G = g.game, V = G.player.position.constructor;
+      g.god(true); g.teleport([-8, 0, 8]); g.camera('top'); g.look(0, 0);
+      G.encounters.spawn(k, new V(-8, 0, 5.2));
+    }, key);
+  };
+  for (const key of ['thug', 'bruiser', 'runner', 'husk']) {
+    await solo(key);
+    if (await until((g) => g.game.encounters.enemies.some((e) => e.state === 'windup' && e.committed))) { await step(3); await shot('fight', `${key}-windup`); }
+    if (await until((g) => g.game.encounters.enemies.some((e) => e.state === 'strike'))) { await step(2); await shot('fight', `${key}-strike`); }
+  }
+
+  await startRun('recoil');
+  // In the open yard north of the gate, where the top-down camera sees him and his line.
+  await api((g) => { g.god(true); g.encounter('kuroda'); g.camera('top'); const G = g.game; for (const e of G.encounters.enemies) if (!e.isBoss) e.hurt(9999); g.teleport([0, 0, 4]); const k = G.encounters.enemies.find((e) => e.isBoss); k.position.set(1.5, 0, 7.5); });
+  const kuroda = '(g) => g.game.encounters.enemies.find((e) => e.def.ai === "kuroda")';
+  if (await until(new Function('return ' + `(g) => { const k = (${kuroda})(g); return k && k.state === 'cast' && k.t > 0.8; }`)(), 1200)) await shot('fight', 'kuroda-pour');
+  if (await until(new Function('return ' + `(g) => { const k = (${kuroda})(g); return k && k.state === 'recover' && k.t > 0.25; }`)(), 200)) await shot('fight', 'kuroda-fuse');
+  await step(12); await shot('fight', 'kuroda-ignite');
+  await step(40); await shot('fight', 'kuroda-burnt');
+  await api((g) => { const k = g.game.encounters.enemies.find((e) => e.def.ai === 'kuroda'); k.hp = k.maxHp * 0.45; k.castCd = 0; });
+  if (await until(new Function('return ' + `(g) => { const k = (${kuroda})(g); return k && k.state === 'cast' && k.t > 1.0; }`)(), 1200)) await shot('fight', 'kuroda-line-pour');
+  if (await until(new Function('return ' + `(g) => { const k = (${kuroda})(g); return k && k.state === 'recover' && k.t > 0.3; }`)(), 200)) await shot('fight', 'kuroda-line-fuse');
+  await step(30); await shot('fight', 'kuroda-line-burnt');
+  await api((g) => g.game.cutscenes.skip?.());
+
+  await startRun('recoil');
+  await api((g) => { g.god(true); g.encounter('ancient'); g.camera('top'); });
+  const master = '(g) => g.game.encounters.enemies.find((e) => e.def.ai === "ancient")';
+  const when = (body) => new Function('return ' + `(g) => { const m = (${master})(g); return !!m && (${body}); }`)();
+  if (await until(when("m.state === 'windup' && m.committed"), 1500)) await shot('fight', 'ancient-palm-windup');
+  if (await until(when('m.echoes.length > 0 && m.echoes[0].t > 0.35'), 200)) await shot('fight', 'ancient-echo');
+  if (await until(when("m.state === 'cast' && m.t > 0.7"), 1500)) await shot('fight', 'ancient-wave-cast');
+  await api((g) => { const m = g.game.encounters.enemies.find((e) => e.def.ai === 'ancient'); const p = m.position; g.teleport([p.x + 1.5, p.y, p.z + 2.4]); m.stepCd = 0; m.setState('chase'); m.attackCd = 3; m.castCd = 5; });
+  if (await until(when('m.glide > 0.1'), 120)) { await step(16); await shot('fight', 'ancient-step'); }
+
+  for (const view of ['top', 'third', 'first']) {
+    await startRun('recoil');
+    await api((g, v) => {
+      const G = g.game, V = G.player.position.constructor;
+      g.god(true); g.teleport([-8, 0, 8]);
+      const e = G.encounters.spawn('thug', new V(-8, 0, 6.6));
+      e.attackCd = 1e6;
+      g.camera(v); g.look(0, v === 'first' ? -0.05 : -0.1);
+      G.input.mouse.x = 0; G.input.mouse.y = 0.2;
+      G.techniques.resource = 100;
+    }, view);
+    await step(20);
+    await api((g) => g.cast('primary'));
+    if (await until((g) => g.game.techniques.current?.fired, 60)) {
+      await step(1); await shot('fight', `recoil-heavy-${view}-impact`);
+      await step(4); await shot('fight', `recoil-heavy-${view}-f5`);
+      await step(10); await shot('fight', `recoil-heavy-${view}-f15`);
+      await step(20); await shot('fight', `recoil-heavy-${view}-f35`);
+    }
+  }
 }
 
 if (run('perf')) {

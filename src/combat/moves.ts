@@ -20,6 +20,13 @@ export const MOVES = {
     { t: 0.48, right: 'slamDown', left: 'slamDown', snap: true },
     { t: 0.8, right: 'rest', left: 'rest' },
   ] },
+  // A heavy's overhead slam: both fists climb over the head through a long
+  // wind-up and come down together on the ground in front (wind-up 0.7 s).
+  slam: { duration: 1.1, impactAt: 0.56, keys: [
+    { t: 0, right: 'raiseHigh', left: 'raiseHigh', slow: true },
+    { t: 0.5, right: 'slamDown', left: 'slamDown', snap: true },
+    { t: 0.9, right: 'rest', left: 'rest' },
+  ] },
   // The Enforcer lays the fuel: a palm sweeps low over the ground, the hand
   // reaches after it, and he snaps it alight (resolves at 1.1 s).
   fuel: { duration: 1.35, impactAt: 1.1, keys: [

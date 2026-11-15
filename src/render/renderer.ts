@@ -49,7 +49,7 @@ export class Renderer {
   private bloom: BloomEffect;
   private chroma: ChromaticAberrationEffect;
   private impactFrames = 0;
-  private impactN = 0;
+  private impactHeld = 0;
   private focusT = 0;
   private focusMax = 1;
   private focusPeak = 0;
@@ -121,9 +121,10 @@ export class Renderer {
   // A big hit: a frame or three drawn in two inks, focus lines on the point
   // hit (or the frame's centre), in the colour of whoever landed it.
   impactFrame(frames: number, tint: THREE.Color, at?: THREE.Vector3): void {
+    if (frames > this.impactFrames) this.impactHeld = frames;
     this.impactFrames = Math.max(this.impactFrames, frames);
     (this.page.u('accent').value as THREE.Color).copy(tint);
-    this.focus(at ?? null, Math.min(1, 0.55 + frames * 0.15), 0.18 + frames * 0.06);
+    this.focus(at ?? null, Math.min(1, 0.4 + frames * 0.13), 0.14 + frames * 0.05);
   }
 
   // Focus lines converging on a world point (null: the frame's centre).
@@ -160,8 +161,10 @@ export class Renderer {
     p.u('water').value = look.water;
     p.u('negative').value = look.negative;
     p.u('impact').value = this.impactFrames > 0 ? 1 : 0;
-    p.u('impactFlip').value = this.impactN % 2;
-    if (this.impactFrames > 0) { this.impactFrames--; this.impactN++; } else this.impactN = 0;
+    // Held, not strobed: the inked frame stays put, and a long one turns
+    // negative for its last frame, as a page does on the heaviest blow.
+    p.u('impactFlip').value = this.impactFrames === 1 && this.impactHeld >= 3 ? 1 : 0;
+    if (this.impactFrames > 0) this.impactFrames--;
 
     this.focusT = Math.max(0, this.focusT - dt);
     p.u('focus').value = this.focusPeak * Math.min(1, (this.focusT / this.focusMax) * 1.6);

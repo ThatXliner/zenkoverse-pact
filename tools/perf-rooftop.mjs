@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Frame times on the roof with a whole wave on screen (issue #34: 60 fps at
 // High). Plays the trial up to wave 7 (twelve enemies, with the player's aura field
-// open) and measures 180 frames
+// open and pushed out wide) and measures 180 frames
 // in all three camera views at 1440x900, device pixel ratio 2. A second pass
 // runs with the frame limiter off, so the number shows the headroom and not
 // only the 60 fps cap. The courtyard and the hall are measured the same way, and an Aura Clash
@@ -62,8 +62,8 @@ for (const uncapped of [false, true]) {
       if (g.rooftop.offers().length) r.choose(0); else { r.chooseEye('horizon'); if (g.rooftop.offers().length) r.choose(0); }
     }
     for (let i = 0; i < 800 && g.rooftop.status().alive < 12; i++) g.step(2);
-    // The player's field open over the whole wave.
-    g.auraReady(); g.hold('aura', true); g.step(1); g.hold('aura', false); g.step(20);
+    // The player's field open over the whole wave, pushed all the way out: the most ground it paints.
+    g.auraReady(); g.hold('aura', true); g.step(90); g.hold('aura', false); g.step(20);
     g.loop(true);
   });
   await page.evaluate(() => window.game.camera('top'));

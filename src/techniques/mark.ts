@@ -86,6 +86,8 @@ export class Mark {
   }
 
   set progress(v: number) { this.mat.uniforms.progress!.value = THREE.MathUtils.clamp(v, 0, 1); }
+  // Lights the whole area while it is live: a blow the player senses (an aura field).
+  set glow(v: number) { if (this.state === 'live') this.mat.uniforms.fill!.value = v; }
 
   // The blow lands: the whole area flashes once and fades.
   fire(): void { if (this.state !== 'live') return; this.state = 'fired'; this.fade = 0.22; this.mat.uniforms.progress!.value = 1; }

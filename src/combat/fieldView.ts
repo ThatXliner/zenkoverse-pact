@@ -6,7 +6,11 @@ import type { Pick } from '../net/clash';
 // over it, both in flat bands like the rest of the frame. The ground ring is
 // what reads from the top-down camera: a solid band in the field's colour,
 // an ink line just inside it, a dashed edge outside it, and pressure rings
-// that drift in toward the owner, faster the denser the field. The dome's
+// that drift in toward the owner, faster the denser the field. The band is
+// as thick as the field is dense, so a compact field is a heavy ring and a
+// wide one a thin line. While a field is pushed out (`push`) its rings run
+// outward instead, its band pulses, and a dashed line on the ground shows
+// how far it can go (`limit`). The dome's
 // rim is a hard band, so from above it adds a second outline, and from
 // inside its far wall is a tint, not a wash.
 //
@@ -30,7 +34,7 @@ void main(){
 
 const domeFrag = /* glsl */ `
 uniform vec3 color; uniform float time; uniform float strength; uniform float density;
-uniform float crack; uniform float squeeze; uniform float flicker;
+uniform float crack; uniform float squeeze; uniform float flicker; uniform float push;
 varying vec3 vN; varying vec3 vV; varying vec3 vLocal; varying float vSide; varying float vDist;
 void main(){
   float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
@@ -49,6 +53,8 @@ void main(){
     float stripes = step(0.7, fract(vLocal.y * 16.0 + time * (0.4 + density * 0.6)));
     a = low * (0.06 + stripes * (0.22 + 0.18 * density)) + step(vLocal.y, 0.05) * 0.55;
   }
+  // Pushed out, its foot is a low wall that reads from behind the shoulder.
+  a += push * (0.45 * step(vLocal.y, 0.09) + 0.1 * (1.0 - smoothstep(0.09, 0.3, vLocal.y)));
   a *= 1.0 - flicker * step(vSide, -0.25) * (0.6 + 0.4 * sin(time * 42.0));
   // A wall the camera is about to pass through would fill the frame: it
   // fades out in the last few metres before the lens.
@@ -62,23 +68,25 @@ const ringVert = /* glsl */ `varying vec2 vP; void main(){ vP = position.xy; gl_
 const ringFrag = /* glsl */ `
 uniform vec3 color; uniform vec3 ink; uniform float time; uniform float strength; uniform float density;
 uniform float radius; uniform float outer; uniform float crack; uniform float bulge; uniform vec2 toward;
-uniform float squeeze; uniform float flicker; uniform float fill;
+uniform float squeeze; uniform float flicker; uniform float fill; uniform float push; uniform float limit;
 varying vec2 vP;
 void main(){
   float d = length(vP) * outer;
   vec2 dir = normalize(vP + vec2(1e-5, 0.0));
   float side = dot(dir, toward);
   float r = radius * (1.0 + bulge * pow(max(0.0, side), 3.0) * 0.3) * (1.0 - squeeze * 0.1);
-  if (d > r + 0.3) discard;
-  float w = 0.22 + squeeze * 0.14;
+  if (d > max(r + 0.3, limit + 0.1)) discard;
+  float w = 0.14 + 0.18 * density + squeeze * 0.14;
   float edge = step(r - w, d) * step(d, r);
   float inkLine = step(r - w - 0.12, d) * step(d, r - w);
   float ang = atan(vP.y, vP.x);
   float dash = step(r + 0.08, d) * step(d, r + 0.24) * step(0.5, fract(ang / 6.2831853 * 56.0 - time * 0.04));
-  float rings = step(0.9, fract((r - d) * 0.65 + time * (0.3 + 0.5 * density)));
+  float rings = step(0.9, fract((r - d) * 0.65 - time * mix(0.3 + 0.5 * density, -2.2, push)));
   float inside = step(d, r - w - 0.12);
-  float a = inside * (0.05 + 0.06 * density + rings * (0.08 + 0.12 * density)) * fill + edge * 0.92 + dash * 0.6;
-  vec3 c = mix(color, vec3(1.0), edge * 0.18 + crack);
+  float pulse = push * (0.5 + 0.5 * sin(time * 18.0));
+  float lim = limit > 0.0 ? step(abs(d - limit), 0.09) * step(0.45, fract(ang / 6.2831853 * 96.0 + time * 0.2)) * step(r + 0.3, d) : 0.0;
+  float a = inside * (0.05 + 0.06 * density + rings * (0.08 + 0.12 * density + 0.2 * push)) * fill + edge * 0.92 + dash * 0.6 + lim * 0.7 * push;
+  vec3 c = mix(color, vec3(1.0), edge * (0.18 + 0.5 * pulse) + crack + lim * 0.4);
   c = mix(c, ink, inkLine);
   a = max(a, inkLine * 0.75);
   a *= 1.0 - flicker * step(side, -0.25) * (0.55 + 0.45 * sin(time * 38.0));
@@ -98,10 +106,10 @@ export class FieldView {
   private toward = new THREE.Vector3(0, 0, -1);
 
   constructor(scene: THREE.Object3D, color: number) {
-    const shared = () => ({ color: { value: new THREE.Color(color) }, time: { value: 0 }, strength: { value: 1 }, density: { value: 0.5 }, crack: { value: 0 }, bulge: { value: 0 }, squeeze: { value: 0 }, flicker: { value: 0 } });
+    const shared = () => ({ color: { value: new THREE.Color(color) }, time: { value: 0 }, strength: { value: 1 }, density: { value: 0.5 }, crack: { value: 0 }, bulge: { value: 0 }, squeeze: { value: 0 }, flicker: { value: 0 }, push: { value: 0 } });
     this.domeMat = new THREE.ShaderMaterial({ uniforms: { ...shared(), toward: { value: new THREE.Vector3(0, 0, -1) } }, vertexShader: domeVert, fragmentShader: domeFrag, transparent: true, depthWrite: false, side: THREE.FrontSide });
     this.ringMat = new THREE.ShaderMaterial({
-      uniforms: { ...shared(), ink: { value: new THREE.Color(INK) }, fill: { value: 1 }, radius: { value: 1 }, outer: { value: 1 }, toward: { value: new THREE.Vector2(0, -1) } },
+      uniforms: { ...shared(), ink: { value: new THREE.Color(INK) }, fill: { value: 1 }, radius: { value: 1 }, outer: { value: 1 }, toward: { value: new THREE.Vector2(0, -1) }, push: { value: 0 }, limit: { value: 0 } },
       vertexShader: ringVert, fragmentShader: ringFrag, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     });
     this.dome = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 20, 0, Math.PI * 2, 0, Math.PI / 2), this.domeMat);
@@ -136,7 +144,9 @@ export class FieldView {
   // viewer's player stands in it. `dome` scales the dome against the ground
   // ring, whose edge always draws at full strength: the ring is the
   // boundary. `fill` scales the paint and pressure rings inside the edge.
-  draw(dt: number, time: number, feet: THREE.Vector3, radius: number, density: number, opts: { ceiling?: number; inside: boolean; dome?: number; fill?: number; lean?: number }): void {
+  // `push` (0..1) is how far into being pushed out it is, and `limit` the
+  // radius it can be pushed to.
+  draw(dt: number, time: number, feet: THREE.Vector3, radius: number, density: number, opts: { ceiling?: number; inside: boolean; dome?: number; fill?: number; lean?: number; push?: number; limit?: number }): void {
     this.crackT = Math.max(0, this.crackT - dt * 3);
     for (const k of ['push', 'hold', 'feint'] as const) this.tellAmt[k] += ((this.tellKind === k ? 1 : 0) - this.tellAmt[k]) * (1 - Math.exp(-12 * dt));
     const show = radius > 0.05;
@@ -153,14 +163,18 @@ export class FieldView {
       u.bulge!.value = bulge;
       u.squeeze!.value = this.tellAmt.hold;
       u.flicker!.value = this.tellAmt.feint;
+      u.push!.value = opts.push ?? 0;
     }
     this.domeMat.uniforms.toward!.value.copy(this.toward);
     this.ringMat.uniforms.toward!.value.set(this.toward.x, -this.toward.z);
     this.ringMat.uniforms.fill!.value = opts.fill ?? 1;
     this.ringMat.uniforms.radius!.value = radius;
-    this.ringMat.uniforms.outer!.value = radius * 1.32 + OUTER;
+    const limit = opts.limit ?? 0;
+    const outer = Math.max(radius * 1.32 + OUTER, limit + 0.4);
+    this.ringMat.uniforms.limit!.value = limit;
+    this.ringMat.uniforms.outer!.value = outer;
     this.ring.position.set(feet.x, feet.y + 0.035, feet.z);
-    this.ring.scale.setScalar(radius * 1.32 + OUTER);
+    this.ring.scale.setScalar(outer);
     const tall = Math.max(0.4, Math.min(radius, opts.ceiling ?? radius));
     this.dome.position.copy(feet);
     this.dome.scale.set(radius, tall, radius);

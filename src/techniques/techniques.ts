@@ -327,7 +327,7 @@ export class Techniques {
 
     if (!g.cutscenes.active && inp.enabled) {
       if (inp.hit('fullsign')) this.beginSign();
-      if (!this.signing) {
+      if (!this.signing && !g.aura.pushing) {
         for (const s of KEY_SLOTS) {
           if (!inp.hit(s)) continue;
           if (this.kindOf(s) !== 'max') { this.cast(s); continue; }

@@ -8,7 +8,7 @@ import type { TechniqueId } from '../techniques/kit';
 import type { Enemy } from './enemies';
 import type { RemotePlayer } from '../net/remote';
 import { RULES } from '../net/protocol';
-import { AURA, AuraField, auraPotential, fieldFor, type FieldEnd, type FieldState } from './field';
+import { AURA, AuraField, auraPotential, fieldFor, pressure, reinforcement, shapeOf, type FieldEnd, type FieldShape, type FieldState } from './field';
 import { FieldView } from './fieldView';
 import { Clash } from './clash';
 import { fieldReading } from '../drills/fieldReading';
@@ -57,6 +57,18 @@ export class Aura {
   // Seconds since the last expansion began; Infinity when none is playing.
   private since = Infinity;
   private shimmer = 0;
+  // The shape being chosen: from the press of F until it commits. A tap
+  // leaves the field compact; held past `AURA.push.tap` it is pushed out
+  // (`pushing`) until F is released or it is fully out.
+  private shaping = false;
+  pushing = false;
+  private heldFor = 0;
+  // 0 compact .. 1 fully pushed out; the shape the press began from.
+  spread = 0;
+  private compact: FieldShape = { reach: 0, density: 0 };
+  // Whether this expansion's release (the shockwave) has played.
+  private released = true;
+  private pushDrawn = 0;
 
   constructor(private game: Game) {
     this.mine = new FieldView(game.renderer.scene, 0xffffff);
@@ -94,12 +106,24 @@ export class Aura {
     const me = this.game.player.position;
     return Math.hypot(p.x - me.x, p.z - me.z) < this.field.radius && Math.abs(p.y - me.y) < this.field.radius;
   }
-  // An enemy inside the player's field moves and winds up this much slower.
-  hinder(p: THREE.Vector3): number { return this.inField(p) ? 1 - AURA.hinder * this.field.density : 1; }
+  // An enemy inside the player's field moves and winds up this much slower,
+  // unless it holds a field of its own open.
+  hinder(e: Enemy): number { return this.inField(e.position) && !e.field?.open ? pressure(this.field.density) : 1; }
+  // Whether the player senses what a body at `p` is about to do.
+  senses(p: THREE.Vector3): boolean { return this.inField(p); }
   // The player's wind-ups inside their own field.
   get castSpeed(): number { return 1 + AURA.sharper.speed * this.density; }
-  // A hit from the player on a body in the player's field.
-  damageOn(p: THREE.Vector3): number { return this.inField(p) ? 1 + AURA.sharper.damage * this.field.density : 1; }
+  // A hit from the player on `e`: harder inside the player's field, softer
+  // on a body standing in its own (the Master's reinforcement). Online a
+  // player's reinforcement is their own client's, in `reinforce`.
+  damageOn(e: Enemy): number {
+    let m = this.inField(e.position) ? 1 + AURA.sharper.damage * this.field.density : 1;
+    if (e.field?.open) m *= reinforcement(e.field.density);
+    return m;
+  }
+  // What the player's own field lets through of a blow: reinforcement, once
+  // the field is settled.
+  get reinforce(): number { return this.field.open && !this.pushing ? reinforcement(this.field.density) : 1; }
 
   // F: expand when the pool is full, retract when the field is open.
   toggle(): void {
@@ -110,11 +134,17 @@ export class Aura {
     this.game.audio.play('aura.denied');
   }
 
+  // Opens the field compact. Held, `shape` pushes it out from here.
   expand(): boolean {
     const g = this.game;
     const f = fieldFor(this.refinement());
     this.field.recovers = f.recovers;
     if (!this.field.expand(f.reach, f.density, f.holds)) return false;
+    this.compact = { reach: f.reach, density: f.density };
+    this.shaping = true;
+    this.pushing = false;
+    this.heldFor = this.spread = 0;
+    this.released = false;
     const color = this.colorOf(null);
     const feet = g.player.position.clone().add(new THREE.Vector3(0, 0.08, 0));
     // The gather: the body draws in, and the air and the dust around it are
@@ -125,18 +155,55 @@ export class Aura {
     g.vfx.ring(feet, color, f.reach * 0.5, 0.4, GATHER, undefined, 0.5);
     g.audio.play('aura.expand');
     g.cam.kick({ fov: -5, pitch: -0.01 });
-    g.vfx.after(GATHER, () => this.release(f.reach));
+    // A tap releases on the beat; a field being pushed out releases when it commits.
+    g.vfx.after(GATHER, () => { if (!this.pushing) this.release(); });
     g.tutorial.notify('aura');
     return true;
+  }
+
+  // While F stays down the field is pushed out, wider and thinner, and the
+  // player is slowed and cannot cast. Letting go, or reaching the full push,
+  // commits the shape; so does a clash, which takes the field as it is.
+  private shape(raw: number): void {
+    if (!this.shaping) return;
+    const f = this.field;
+    if (!f.open || this.clash.active) { this.commit(); return; }
+    const down = this.game.input.isDown('aura');
+    this.heldFor += raw;
+    if (!this.pushing) {
+      if (!down) { this.shaping = false; return; }
+      if (this.heldFor < AURA.push.tap) return;
+      this.pushing = true;
+      this.game.avatar.stance = 'push';
+      this.game.audio.play('aura.push');
+    }
+    if (down) this.spread = Math.min(1, this.spread + raw / AURA.push.seconds);
+    const s = shapeOf(this.compact, this.spread);
+    f.reach = s.reach;
+    f.density = s.density;
+    if (!down || this.spread >= 1) this.commit();
+  }
+
+  private commit(): void {
+    const was = this.pushing;
+    this.shaping = this.pushing = false;
+    if (!was) return;
+    if (!this.clash.active) this.game.avatar.stance = null;
+    // The release plays now, with the settle after it.
+    this.since = GATHER;
+    this.release();
+    this.game.audio.play('aura.release');
   }
 
   // The release: one held inked frame and a catch, then a shockwave that
   // raises the dust, shoves loose props and throws back the bodies near.
   // Other players are never moved or held by it: online the clock ignores
   // the catch, and the shove only reaches props and this screen's enemies.
-  private release(reach: number): void {
+  private release(): void {
     const g = this.game;
-    if (!this.field.open) return;
+    if (!this.field.open || this.released) return;
+    this.released = true;
+    const reach = this.field.reach;
     const me = g.player.position;
     const color = this.colorOf(null);
     const feet = me.clone().add(new THREE.Vector3(0, 0.08, 0));
@@ -187,6 +254,9 @@ export class Aura {
   }
 
   reset(): void {
+    if (this.pushing) this.game.avatar.stance = null;
+    this.shaping = this.pushing = false;
+    this.released = true;
     this.clash.cancel();
     this.field.reset();
     this.guardBroken = 0;
@@ -199,6 +269,7 @@ export class Aura {
   update(dt: number, raw: number): void {
     const g = this.game;
     if (g.input.hit('aura') && !g.cutscenes.active) this.toggle();
+    this.shape(raw);
     this.field.update(dt);
     this.guardBroken = Math.max(0, this.guardBroken - dt);
     this.lean = Math.max(0, this.lean - raw * 2);
@@ -212,7 +283,7 @@ export class Aura {
       const density = o.def.ai === 'rival' ? (o as RemotePlayer).fieldDensity : o.field!.density;
       const d = Math.hypot(o.position.x - g.player.position.x, o.position.z - g.player.position.z);
       const inside = d < radius;
-      if (inside && !this.field.open) pressed = Math.min(pressed, 1 - AURA.hinder * density);
+      if (inside && !this.field.open) pressed = Math.min(pressed, pressure(density));
       this.touch(o, radius, d);
       let view = this.views.get(o);
       if (!view && radius > 0.05) { view = new FieldView(g.renderer.scene, this.colorOf(o)); this.views.set(o, view); }
@@ -221,7 +292,8 @@ export class Aura {
       view.draw(raw, g.clock.time, o.position, radius, density, { inside, dome: this.clash.active ? CLASH_DOME : inside ? 0.5 : 0.9, fill: this.clash.active ? CLASH_FILL : 1, ceiling: zone?.indoors ? zone.max.y - o.position.y : undefined });
     }
     for (const [o, v] of this.views) if (!owners.includes(o)) { v.dispose(); this.views.delete(o); }
-    g.player.fieldScale = pressed;
+    // Pushing a field out takes the body's attention: it barely walks.
+    g.player.fieldScale = this.pushing ? Math.min(pressed, AURA.push.slow) : pressed;
 
     this.clash.update(raw);
     const me = g.player.position;
@@ -231,13 +303,14 @@ export class Aura {
     // The drawn field: held tight through the gather, then out past its reach and back.
     this.since += raw;
     const u = (this.since - GATHER) / SETTLE;
-    const drawn = this.since < GATHER ? 0.12 : u < 1 ? 1 + 0.08 * Math.sin(Math.min(1, u) * Math.PI) : 1;
+    const drawn = this.pushing ? 1 : this.since < GATHER ? 0.12 : u < 1 ? 1 + 0.08 * Math.sin(Math.min(1, u) * Math.PI) : 1;
+    this.pushDrawn += ((this.pushing ? 1 : 0) - this.pushDrawn) * (1 - Math.exp(-(this.pushing ? 14 : 5) * raw));
     // While it stays open, a faint ripple runs out across it now and then.
     if (this.field.open && this.since > GATHER + SETTLE && (this.shimmer -= dt) <= 0) {
       this.shimmer = 1.4;
       g.vfx.ring(me.clone().add(new THREE.Vector3(0, 0.08, 0)), this.colorOf(null), this.field.radius * 0.2, this.field.radius * 0.95, 1.2, undefined, 0.35);
     }
-    this.mine.draw(raw, g.clock.time, me, this.field.radius * drawn, this.field.open ? this.field.density : 0.4, { inside: true, dome: this.clash.active ? CLASH_DOME : g.cam.isFirst ? 0.5 : g.cam.isTop ? 0.6 : 0.85, fill: this.clash.active ? CLASH_FILL : 1, ceiling: zone?.indoors ? zone.max.y - me.y : undefined, lean: this.lean });
+    this.mine.draw(raw, g.clock.time, me, this.field.radius * drawn, this.field.open ? this.field.density : 0.4, { inside: true, dome: this.clash.active ? CLASH_DOME : g.cam.isFirst ? 0.5 : g.cam.isTop ? 0.6 : 0.85, fill: this.clash.active ? CLASH_FILL : 1, ceiling: zone?.indoors ? zone.max.y - me.y : undefined, lean: this.lean, push: this.pushDrawn, limit: this.pushDrawn > 0.01 ? this.compact.reach * AURA.push.wide : 0 });
     this.publish();
   }
 
@@ -272,7 +345,7 @@ export class Aura {
 // What the HUD and the codex say about the field state.
 export function fieldWords(f: AuraReadout): { state: string; detail: string } {
   if (f.state === 'open') return { state: 'Field open', detail: `${f.left.toFixed(1)} s · ${keyLabel('aura')} retracts` };
-  if (f.state === 'ready') return { state: 'Ready', detail: `${keyLabel('aura')} expands` };
+  if (f.state === 'ready') return { state: 'Ready', detail: `${keyLabel('aura')} expands, hold to widen` };
   if (f.ended === 'collapsed') return { state: 'Collapsed', detail: `${Math.round(f.pool * 100)}% · refilling` };
   return { state: f.ended === 'retracted' ? 'Retracted' : 'Spent', detail: `${Math.round(f.pool * 100)}% · refilling` };
 }

@@ -181,8 +181,8 @@ function Hud({ game }: { game: Game }) {
       {tut && !cut && !drill && <div class="objective"><span class="step">Tutorial {tut.index} / {tut.total} · {tut.jp}</span><span class="t">{tut.title}</span><span class="b">{tut.body()}</span><span class="step">{keyLabel('pause')} pauses · Skip tutorial is in the pause menu</span></div>}
       {drill && !cut && <div class="drill-hud">
         <span class="s">{drill.jp} · {drill.title} · {drill.tier}</span>
-        <span class="big">{drill.score} / {drill.needed}<small>{drill.starting ? `starts in ${drill.starting}` : `${drill.left} left`}</small></span>
-        {(drill.cue || drill.starting > 0) && <span class="cue">{drill.starting ? 'Get ready' : drill.cue}</span>}
+        <span class="big">{drill.score} / {drill.needed}<small>{drill.left} left</small></span>
+        {(drill.cue || drill.waiting) && <span class="cue">{drill.waiting ? `Press ${keyLabel('interact')} when ready` : drill.cue}</span>}
         <ul>{drill.howTo.map((l) => <li>{l}</li>)}</ul>
       </div>}
       {pl && !cut && <div class="objective" style="top:auto;bottom:calc(var(--hud-pad) + 120px);right:var(--hud-pad);border-color:#9fdfff"><span class="step">{pl.kicker ?? 'Lore plaque'}</span><span class="t">{pl.title}</span><span class="b">{pl.body}</span></div>}

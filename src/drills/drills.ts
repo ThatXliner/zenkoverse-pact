@@ -40,13 +40,14 @@ export interface DrillDef {
   end?(game: Game): void;
 }
 
-export const drillUi = { active: signal<{ title: string; jp: string; tier: string; score: number; needed: number; left: number; best: number; cue: string; howTo: string[]; starting: number } | null>(null) };
+export const drillUi = { active: signal<{ title: string; jp: string; tier: string; score: number; needed: number; left: number; best: number; cue: string; howTo: string[]; waiting: boolean } | null>(null) };
 const KEY = 'zenko.drills.v1';
-const START_DELAY = 3.5;
+// The first item follows the student's E by this long.
+const FIRST_ITEM = 0.8;
 
 export class Drills {
   private defs = new Map<DrillId, DrillDef>();
-  private current: { def: DrillDef; tier: number; score: number; spawned: number; timer: number; live: DrillItem[]; resume: 'explore' | 'tutorial' } | null = null;
+  private current: { def: DrillDef; tier: number; score: number; spawned: number; timer: number; live: DrillItem[]; resume: 'explore' | 'tutorial'; waiting: boolean; armed: boolean } | null = null;
   progress: Record<string, number> = {};
 
   constructor(private game: Game) {
@@ -73,13 +74,14 @@ export class Drills {
     return null;
   }
 
-  begin(id: DrillId): void {
+  // The drill opens on its rules and waits for E, so the student starts when
+  // they have read them. `ready` skips the wait, for the debug hook.
+  begin(id: DrillId, ready = false): void {
     const def = this.defs.get(id);
     if (!def || this.current) return;
     const tier = Math.min(this.progress[id] ?? 0, def.tiers.length - 1);
     const st = appState.value;
-    // A few seconds before the first item, to read the panel.
-    this.current = { def, tier, score: 0, spawned: 0, timer: START_DELAY, live: [], resume: st.kind === 'tutorial' ? 'tutorial' : 'explore' };
+    this.current = { def, tier, score: 0, spawned: 0, timer: FIRST_ITEM, live: [], resume: st.kind === 'tutorial' ? 'tutorial' : 'explore', waiting: !ready, armed: false };
     setState({ kind: 'drill', id });
     banner(def.jp, def.title);
     this.refresh();
@@ -89,7 +91,7 @@ export class Drills {
     const c = this.current;
     if (!c) { drillUi.active.value = null; return; }
     const t = c.def.tiers[c.tier]!;
-    drillUi.active.value = { title: c.def.title, jp: c.def.jp, tier: t.name, score: c.score, needed: t.pass, left: t.count - c.spawned + c.live.length, best: this.progress[c.def.id] ?? 0, cue: c.def.cue?.() ?? '', howTo: c.def.howTo ?? [c.def.brief], starting: c.spawned === 0 ? Math.ceil(c.timer) : 0 };
+    drillUi.active.value = { title: c.def.title, jp: c.def.jp, tier: t.name, score: c.score, needed: t.pass, left: t.count - c.spawned + c.live.length, best: this.progress[c.def.id] ?? 0, cue: c.def.cue?.() ?? '', howTo: c.def.howTo ?? [c.def.brief], waiting: c.waiting };
   }
 
   // Kits call this when a Technique acts on a prop, so the drill can score it.
@@ -116,6 +118,13 @@ export class Drills {
     if (!c) return;
     const t = c.def.tiers[c.tier]!;
     c.def.hold?.(this.game);
+    if (c.waiting) {
+      // The E that opened the drill is still down this frame; wait for the next press.
+      if (c.armed && this.game.input.hit('interact')) c.waiting = false;
+      c.armed = true;
+      this.refresh();
+      return;
+    }
     c.timer -= dt;
     if (c.spawned < t.count && c.timer <= 0) {
       c.live.push(c.def.spawn(this.game, t, c.spawned));

@@ -199,6 +199,10 @@ await step(2);
 await press('KeyE');
 await step(5);
 check(await page.evaluate(() => window.game.state() === 'drill'), 'E begins it');
+check(/when ready/.test(await page.locator('.drill-hud .cue').textContent().catch(() => '')), 'it waits on its rules until E');
+await step(60);
+await press('KeyE');
+await step(5);
 const COUNTER = { 'It swells toward you': 'KeyA', 'It draws tight': 'KeyW', 'Its far side flickers': 'KeyS' };
 let answered = 0, lastCue = '';
 for (let i = 0; i < 1200 && await page.evaluate(() => window.game.state() === 'drill'); i++) {

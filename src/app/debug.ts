@@ -124,7 +124,7 @@ export function installDebug(game: Game): void {
     handsView(yaw, pitch) { game.hands.inspect = yaw === 0 && pitch === 0 ? null : { yaw, pitch }; },
     hold(action, held) { game.input.inject(action, held); },
     encounter(id) { game.encounters.begin(id, true); },
-    drill(id) { game.drills.begin(id); },
+    drill(id) { game.drills.begin(id, true); },
     workshop(open) { if (open) game.openWorkshop(); else game.closeWorkshop(); },
     tutorialStep(step) { game.tutorial.jump(step as never); },
     cutscene(id) { game.cutscenes.playById(id); },

@@ -143,7 +143,7 @@ export const rime: TechniqueKit = {
         }
         for (const p of propsInCone(g, ctx.origin, flat, range, 0.3)) { g.props.push(p, new THREE.Vector3(flat.x, 1.5, flat.z).multiplyScalar(p.def.mass * 3)); if (ctx.behaviors.includes('pin')) freezeProp(ctx, p, 5); }
         g.audio.play('rime.ridge');
-        g.mastery.gain('rime', 'control', 0.004);
+        g.mastery.gainPassive('rime', 'control', 0.004);
         return { hits: hits.length, hitStop: hits.length ? 0.05 : 0, cameraKick: { fov: 6, pitch: 0.03 } };
       }
       if (ctx.shape === 'coldStitch') {

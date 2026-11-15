@@ -10,6 +10,10 @@ export const RULES = rulesJson as {
   maxPlayers: number; defaultRoom: string; tickHz: number; sendHz: number; interpMs: number; maxHp: number;
   respawnSeconds: number; spawnProtectSeconds: number; hitTimeoutMs: number; maxHitDamage: number; maxHitRange: number;
   reconnectGraceSeconds: number; spawns: [number, number, number][];
+  // Health comes back out of a fight: after `quietSeconds` with no blow dealt
+  // or taken (and, offline, no enemy standing within `clearRadius` m), at up
+  // to `perSecond` health a second, reached over `rampSeconds`.
+  regen: { quietSeconds: number; perSecond: number; rampSeconds: number; clearRadius: number };
   field: { maxRadius: number; clashSlack: number; clashCooldownMs: number };
   // A Maximum Output cutscene's lock (issue #27): how long it may hold its
   // two people, how often one player may start one, how far the target may

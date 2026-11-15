@@ -25,6 +25,7 @@ import { bindUiSounds } from '../audio/ui';
 import { Cutscenes } from '../cutscene/cutscene';
 import { Tutorial } from '../tutorial/tutorial';
 import { Drills } from '../drills/drills';
+import { strikingPosts } from '../drills/strikingPosts';
 import { PactBook } from '../pacts/book';
 import type { Pact } from '../pacts/schema';
 import { slotWords } from '../pacts/readback';
@@ -153,6 +154,7 @@ export class Game {
     this.combat = new Combat(this);
     this.aura = new Aura(this);
     this.encounters = new Encounters(this);
+    this.drills.register(strikingPosts(this));
     this.tutorial = new Tutorial(this);
     this.rooftop = new Rooftop(this);
     this.waypoints = new Waypoints(this.physics, scene, this.vfx);

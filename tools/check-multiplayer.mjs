@@ -452,7 +452,8 @@ const [fa, fb] = await Promise.all([auraOf(A), auraOf(B)]);
 check(fa.state === 'open' && fb.state === 'recovering' && fb.ended === 'collapsed', `A's field holds, B's collapsed (${fa.state}; ${fb.state}, ${fb.ended})`);
 check(fb.guardBroken > 0, "B's guard is broken");
 a = await A.net(); b = await B.net();
-check(a.hp === hpA0 && b.hp === hpB0, `nobody lost health in the clash (A ${hpA0} to ${a.hp}, B ${hpB0} to ${b.hp})`);
+// Out-of-combat regen may add a little either side of the clash's lock; the clash itself takes nothing.
+check(a.hp >= hpA0 && b.hp >= hpB0, `nobody lost health in the clash (A ${hpA0} to ${a.hp}, B ${hpB0} to ${b.hp})`);
 check(Math.abs(remoteOf(a, idB).hp - b.hp) < 0.11, "A's screen agrees on B's health");
 
 console.log('\na player who leaves mid-clash loses it');

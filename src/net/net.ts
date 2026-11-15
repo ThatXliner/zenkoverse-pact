@@ -222,7 +222,8 @@ export class Net {
       case 'snap': {
         const now = performance.now();
         for (const p of m.players) {
-          if (p.id === this.id) continue;
+          // Our own health as the server holds it, which its regen raises between blows.
+          if (p.id === this.id) { if (!this.downed && !p.down) g.combat.setHp(p.hp, true); continue; }
           const r = this.remotes.get(p.id);
           if (!r) continue;
           r.away = p.away;

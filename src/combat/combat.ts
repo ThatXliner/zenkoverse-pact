@@ -8,9 +8,12 @@ import { AURA } from './field';
 import { Eyes } from '../eyes/eyes';
 import type { EyeId } from '../eyes/registry';
 import type { TechniqueId } from '../techniques/kit';
+import { RULES } from '../net/protocol';
 
 export const combatUi = {
   hp: signal(1),
+  // Health is coming back on its own (out of a fight).
+  mending: signal(false),
   boss: signal<{ name: string; frac: number; color: number } | null>(null),
   // Damage numbers, and sound words lettered over heavy hits (`word`).
   numbers: signal<FloatText[]>([]),
@@ -33,6 +36,9 @@ export class Combat {
   private numId = 0;
   private lastWord = -1;
   private stopAt = -1;
+  // Seconds since this player last fought: dealt or took a blow, or stood
+  // near an enemy that could fight, or was in an encounter or the rooftop.
+  quiet = 0;
   // Counted by src/techniques/wagers.ts, read by the rooftop's score.
   wagersWon = 0;
   wagersLost = 0;
@@ -44,6 +50,7 @@ export class Combat {
   resetPlayer(): void {
     this.hp = this.maxHp = 100;
     this.invuln = 0;
+    this.quiet = 0;
     combatUi.hp.value = 1;
   }
 
@@ -65,6 +72,8 @@ export class Combat {
     const final = Math.round(amount * m);
     e.hurt(final, { from: opts.from, knock: opts.knock, lift: opts.lift, stagger: eye.stagger || opts.stagger });
     this.eyes.landed(e, final);
+    g.drills.struck(e, final);
+    this.quiet = 0;
     g.audio.hit(final, e.center());
     this.number(e.center(), String(final), wager > 1 ? '#ffd34d' : m > 1.1 ? '#ffb0ff' : '#f3eee4', final >= 40);
     // Hit-stop by the blow's weight: a jab catches for a frame or two, a
@@ -81,7 +90,7 @@ export class Combat {
       if (!g.cutscenes.active) this.letter(e.center().add(new THREE.Vector3(0, 0.9, 0)), g.techniques.def.sfx, g.techniques.def.color, final >= 80);
     }
     else g.cam.shake(0.12);
-    g.mastery.gain(g.techniqueId, 'output', 0.0015);
+    g.mastery.gainPassive(g.techniqueId, 'output', 0.0015);
     if (e.isBoss) combatUi.boss.value = { name: e.def.title ?? e.def.name, frac: Math.max(0, e.hp / e.maxHp), color: e.def.emissive ?? 0xff6a1a };
     return final;
   }
@@ -101,6 +110,7 @@ export class Combat {
     if (g.aura.guardBroken > 0 && !opts.self) a *= 1 + AURA.guardBreak.taken;
     if (!opts.self) a *= g.aura.reinforce;
     if (a <= 0) return 0;
+    this.quiet = 0;
     if (g.net) { if (!opts.pvp) g.net.selfDamage(a); }
     else { this.hp = Math.max(0, this.hp - a); combatUi.hp.value = this.hp / this.maxHp; }
     hud.hurt.value = Date.now();
@@ -124,9 +134,29 @@ export class Combat {
     return a;
   }
 
-  setHp(hp: number): void {
-    this.hp = Math.max(0, Math.min(this.maxHp, hp));
+  // Online the server's word on this player's health. `tick` marks the
+  // steady value in the room's snapshot, where a rise is the server's regen.
+  setHp(hp: number, tick = false): void {
+    const next = Math.max(0, Math.min(this.maxHp, hp));
+    if (tick) combatUi.mending.value = next > this.hp && next < this.maxHp;
+    this.hp = next;
     combatUi.hp.value = this.hp / this.maxHp;
+  }
+
+  // Out-of-combat regen, offline. The rooftop's waves have their own heal
+  // between waves, and an encounter keeps its stakes, so neither regens.
+  // Online the server runs the same rule (server/realtime.mjs).
+  private regen(dt: number): void {
+    const g = this.game;
+    const R = RULES.regen;
+    const me = g.player.position;
+    const fighting = g.rooftop.active || g.encounters.fighting || g.cutscenes.active
+      || g.encounters.enemies.some((e) => e.alive && e.def.ai !== 'dummy' && e.def.ai !== 'rival' && e.position.distanceTo(me) < R.clearRadius);
+    this.quiet = fighting ? 0 : this.quiet + dt;
+    const rate = R.perSecond * Math.min(1, Math.max(0, (this.quiet - R.quietSeconds) / R.rampSeconds));
+    const mending = rate > 0 && this.hp > 0 && this.hp < this.maxHp;
+    if (mending) { this.hp = Math.min(this.maxHp, this.hp + rate * dt); combatUi.hp.value = this.hp / this.maxHp; }
+    if (combatUi.mending.value !== mending) combatUi.mending.value = mending;
   }
 
   private defeat(): void {
@@ -155,6 +185,7 @@ export class Combat {
   update(dt: number): void {
     this.eyes.update(dt, this.game.clock.raw);
     this.invuln = Math.max(0, this.invuln - dt);
+    if (!this.game.net) this.regen(dt);
     const cam = this.game.renderer.camera;
     const out: FloatText[] = [];
     for (let i = this.nums.length - 1; i >= 0; i--) {

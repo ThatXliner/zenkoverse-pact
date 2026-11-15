@@ -38,6 +38,9 @@ export class Encounters {
 
   constructor(private game: Game) {}
 
+  // The player is in a fight that keeps its stakes (no regen while it lasts).
+  get fighting(): boolean { return this.active !== null; }
+
   reset(): void {
     for (const e of this.enemies) { e.die(); e.dispose(); }
     this.enemies.length = 0;
@@ -140,8 +143,8 @@ export class Encounters {
       this.done.add(d.id);
       banner('勝利', `${d.title} cleared.`);
       g.audio.play('encounter.clear');
-      g.mastery.gain(g.techniqueId, 'tolerance', 0.05);
-      g.mastery.gain(g.techniqueId, 'control', 0.04);
+      g.mastery.gainPassive(g.techniqueId, 'tolerance', 0.05);
+      g.mastery.gainPassive(g.techniqueId, 'control', 0.04);
       if (d.id === 'ancient') toast('Five thousand years, and she still bowed. Aurabending unlocked in the codex.', 'good');
     }
     if (appState.value.kind === 'encounter') setState({ kind: 'explore' });

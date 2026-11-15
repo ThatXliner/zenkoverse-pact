@@ -103,7 +103,12 @@ export interface WagerContext {
 // whole Technique sealed.
 export const WEIGHT = {
   sealPerSecond: 0.48,
-  bloodPerHealth: 10,
+  // Health returns out of a fight (rules.json `regen`), so health lost to a
+  // call weighs only on the rest of the fight it is lost in: about half a
+  // fight, where before regen it weighed on that and at least the next whole
+  // one. A third of the old 10. On the roof, where waves heal only 35%
+  // between them, blood is priced a little under what it takes.
+  bloodPerHealth: 10 / 3,
   drain: { full: 1.6, resource: 0.6, charge: 0.4, refills: 6 },
   slowPerSecond: 1 / 6,
   // Seconds of a whole Technique a Pact that spends everything (or half) leaves you without anyway.

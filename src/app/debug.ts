@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import type { Game } from './game';
 import { SPAWN } from '../world/compound';
 import type { CameraMode } from '../player/camera';
-import { appState } from './state';
+import { appState, setState } from './state';
+import { RULES } from '../net/protocol';
+import { combatUi } from '../combat/combat';
 import { validatePact } from '../pacts/schema';
 import type { KeySlot } from '../pacts/slots';
 import type { DrillId } from './state';
@@ -11,6 +13,7 @@ import { audit as auditOffers } from '../rooftop/offers';
 import type { TechniqueId } from '../techniques/kit';
 import type { PoseName, HandPose } from '../hands/poses';
 import { MASTERY_CONFIG } from '../mastery/mastery';
+import { postsView } from '../drills/strikingPosts';
 import { netUi } from '../net/net';
 import { clashUi } from '../combat/clash';
 import { setSetting, type Settings } from './settings';
@@ -36,6 +39,12 @@ export interface DebugApi {
   hold(action: Action, held: boolean): void;
   encounter(id: 'sparring' | 'kuroda' | 'ancient' | 'dummy-room'): void;
   drill(id: DrillId): void;
+  // The striking posts as the checks read them: which post is lit, how long it has been, where they stand.
+  posts(): ReturnType<typeof postsView>;
+  // Ends a running drill without judging it, back to explore.
+  quitDrill(): void;
+  // Regen and the passive ceiling as the checks read them.
+  training(): { passiveCeiling: number; regen: typeof RULES.regen; quiet: number; mending: boolean };
   workshop(open: boolean): void;
   tutorialStep(step: string): void;
   // Plays a Maximum Output's cutscene: a Technique's by its cutscene id
@@ -149,6 +158,9 @@ export function installDebug(game: Game): void {
     hold(action, held) { game.input.inject(action, held); },
     encounter(id) { game.encounters.begin(id, true); },
     drill(id) { game.drills.begin(id, true); },
+    posts() { return postsView(); },
+    quitDrill() { game.drills.abandon(); if (appState.value.kind === 'drill') setState({ kind: 'explore' }); },
+    training() { return { passiveCeiling: MASTERY_CONFIG.passiveCeiling, regen: RULES.regen, quiet: game.combat.quiet, mending: combatUi.mending.value }; },
     workshop(open) { if (open) game.openWorkshop(); else game.closeWorkshop(); },
     tutorialStep(step) { game.tutorial.jump(step as never); },
     cutscene(id) { game.cutscenes.playById(id); },

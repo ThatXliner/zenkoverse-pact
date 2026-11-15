@@ -45,7 +45,7 @@ export function Status({ game }: { game: Game }) {
                 <li key={st} data-stat={st}>
                   <span class="n">{STAT_WORDS[st]}</span>
                   <span class="v">{pct(v)}{st === 'refinement' && <small> / {pct(aura.potential)}</small>}</span>
-                  <span class="bar"><i style={{ width: `${pct(v)}%` }} />{st === 'refinement' && <s style={{ left: `${pct(aura.potential)}%` }} />}</span>
+                  <span class="bar"><i style={{ width: `${pct(v)}%` }} />{st === 'refinement' ? <s style={{ left: `${pct(aura.potential)}%` }} /> : <s class="ceil" title="Past this mark, only drills train it" style={{ left: `${pct(MASTERY_CONFIG.passiveCeiling)}%` }} />}</span>
                 </li>
               );
             })}

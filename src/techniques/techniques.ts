@@ -75,6 +75,9 @@ export class Techniques {
   private struckRecently = 0;
   sealed = 0;
   sign: SignState = SIGN_IDLE;
+  // The latest cast, so what its blows land on can tell a signed blow from a
+  // plain one (the striking posts score only signed blows). `at` is game time.
+  lastCast: { kind: AbilityKind; primed: boolean; at: number } = { kind: 'primary', primed: false, at: -Infinity };
   // When this player last began a Maximum Output (performance.now()).
   private maxAt = -Infinity;
   readonly limbTrail: THREE.Vector3[] = [];
@@ -267,6 +270,7 @@ export class Techniques {
       variant, origin, dir, aim: aimHit ? aimHit.point : origin.clone().addScaledVector(dir, 30), targets: [], wagered: false,
     };
     if (primed) this.sign = SIGN_IDLE;
+    this.lastCast = { kind, primed, at: g.clock.time };
     this.resource = Math.max(0, this.resource - cost.resource);
     if (cost.health > 0) g.combat.hurtPlayer(cost.health, { self: true });
     this.strain = Math.min(1, this.strain + cost.strain);
@@ -289,7 +293,7 @@ export class Techniques {
     g.book.observe('movingWhileCasting', g.player.planarSpeed.value > 0.5 ? 1 : 0);
     g.book.observe('airborneFraction', g.player.grounded ? 0 : 1);
     g.book.observe('auraReliance', g.aura.open ? 1 : 0);
-    g.mastery.gain(this.def.id, 'activation', 0.004);
+    g.mastery.gainPassive(this.def.id, 'activation', 0.004);
     g.tutorial.notify(slot);
     return true;
   }
@@ -308,7 +312,7 @@ export class Techniques {
       if (r.moveLock) g.player.moveLock = Math.max(g.player.moveLock, r.moveLock);
       // The odds a Wager is called against are measured in `wagers.fire`.
       if (c.ctx.kind !== 'max') g.book.observe('multiTargetFraction', (r.hits ?? 0) >= 2 ? 1 : 0, 0.02);
-      if ((r.hits ?? 0) > 0) { this.charge = Math.min(1, this.charge + 0.08 * (r.hits ?? 1)); g.mastery.gain(this.def.id, 'precision', 0.006); }
+      if ((r.hits ?? 0) > 0) { this.charge = Math.min(1, this.charge + 0.08 * (r.hits ?? 1)); g.mastery.gainPassive(this.def.id, 'precision', 0.006); }
       else if (c.ctx.kind !== 'max') g.book.observe('longRangeFraction', c.ctx.aim && c.ctx.aim.distanceTo(c.ctx.origin) > 8 ? 1 : 0);
     }
     const risk = pact?.clauses.find((k) => k.kind === 'risk');

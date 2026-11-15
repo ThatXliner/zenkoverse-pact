@@ -14,6 +14,10 @@ export const MASTERY_CONFIG = {
   // baseline, so it rises with Activation: `novice` at 0, `master` at 1,
   // along activation^curve.
   sign: { window: 4, boost: { novice: 0.15, master: 0.75, curve: 1.6 } },
+  // Play alone fills a stat only this far. Past it, only a drill's tiers
+  // raise the stat (`Mastery.raiseTo`), so a skilled newcomer who clears
+  // them matches someone who has played for months. Output uses it now.
+  passiveCeiling: 0.4,
   diminishing: 2.2,
   strainPerDrill: 0.12,
   strainRecoveryPerSecond: 0.01,
@@ -51,11 +55,36 @@ export class Mastery {
     const cur = this.get(t, s);
     const cap = this.cap(t, s);
     const applied = Math.max(0, amount * cap * Math.pow(Math.max(0, 1 - cur / cap), MASTERY_CONFIG.diminishing) * (1 - this.strain * 0.6));
-    const next = Math.max(cur, Math.min(cap, cur + applied));
-    this.stats.value = { ...this.stats.value, [t]: { ...this.stats.value[t], [s]: next } };
+    this.set(t, s, Math.max(cur, Math.min(cap, cur + applied)), applied);
+    return applied;
+  }
+
+  // A gain from ordinary play, stopped at the passive ceiling. Below it the
+  // usual diminishing returns apply; a stat already above it is untouched.
+  gainPassive(t: TechniqueId, s: MasteryStat, amount: number): number {
+    const cur = this.get(t, s);
+    const ceiling = Math.min(this.cap(t, s), MASTERY_CONFIG.passiveCeiling);
+    if (cur >= ceiling) return 0;
+    const applied = Math.min(ceiling - cur, Math.max(0, amount * Math.pow(1 - cur, MASTERY_CONFIG.diminishing) * (1 - this.strain * 0.6)));
+    this.set(t, s, cur + applied, applied);
+    return applied;
+  }
+
+  // A skill gate passed: the stat stands at least at `level` (held to its
+  // ceiling). Clearing the same gate again adds nothing, so a gate pays for
+  // the skill it tests and not for the time spent on it.
+  raiseTo(t: TechniqueId, s: MasteryStat, level: number): number {
+    const cur = this.get(t, s);
+    const next = Math.min(this.cap(t, s), level);
+    if (next <= cur) return 0;
+    this.set(t, s, next, next - cur);
+    return next - cur;
+  }
+
+  private set(t: TechniqueId, s: MasteryStat, v: number, applied: number): void {
+    this.stats.value = { ...this.stats.value, [t]: { ...this.stats.value[t], [s]: v } };
     this.recent.value = { stat: s, amount: applied, id: ++this.n };
     try { localStorage.setItem(KEY, JSON.stringify(this.stats.value)); } catch { /* storage unavailable */ }
-    return applied;
   }
 
   addStrain(a: number): void { this.strain = Math.min(1, this.strain + a); }

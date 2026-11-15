@@ -77,10 +77,10 @@ const STEPS: Step[] = [
   },
   {
     id: 'clash', title: 'Aura Clash', jp: '気読み', at: new THREE.Vector3(...STAND),
-    line: (_g, ev) => ev.has('drill-failed')
+    line: (_g, ev) => ev.has('drill-failed:field-reading')
       ? `Close. ${keyLabel('interact')} at the stone to go again.`
       : `Two auras that touch will clash. Learn to read one: ${keyLabel('interact')} at the listening stone.`,
-    done: (_g, ev) => ev.has('drill-passed'),
+    done: (_g, ev) => ev.has('drill-passed:field-reading'),
   },
   {
     id: 'pact', title: 'Write a Pact', jp: '契約',

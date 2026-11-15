@@ -26,6 +26,8 @@ const SHELL = 0.004;
 // long axis; lean and bob are untouched.
 const CALM_CHEST = { clips: ['Jog_Fwd_Loop', 'Sprint_Loop'], bones: { spine_02: 'spine_03', spine_03: 'neck_01' }, keep: 0.35 };
 const CUFF_ABOVE_WRIST = 0.035;
+// Share of a vertex's skin weight on the neck and head above which the suit stops.
+const COLLAR_WEIGHT = 0.5;
 
 // Reads a .gltf whose image URIs may name files that do not exist in the pack
 // (the Godot export points at *_png.png copies). Resolves them to the files
@@ -49,7 +51,7 @@ async function readGltf(file) {
 
 // In-memory triangle soup with named vertex streams, so triangles can be
 // filtered, clipped and offset before they go back into glTF accessors.
-class Soup {
+export class Soup {
   constructor(semantics) { this.sem = semantics; this.streams = Object.fromEntries(semantics.map((s) => [s.name, []])); this.tris = []; }
   static fromPrimitive(prim, keep) {
     const semantics = keep.filter((n) => prim.getAttribute(n)).map((n) => { const a = prim.getAttribute(n); return { name: n, size: a.getElementSize(), type: a.getType(), int: n.startsWith('JOINTS') }; });
@@ -74,12 +76,13 @@ class Soup {
     for (const t of this.tris) if (pred(t)) out.tris.push(t.map(remap));
     return out;
   }
-  // Splits every triangle against the plane and keeps the side where
-  // plane.distanceToPoint is negative. Interpolated vertices lerp the float
-  // streams; skinning streams come from the nearer endpoint.
-  clip(plane) {
+  // Splits every triangle where `side` crosses zero and keeps the negative
+  // side. `side` is a plane (its signed distance) or a function of the vertex
+  // index. Interpolated vertices lerp the float streams; skinning streams
+  // come from the nearer endpoint.
+  clip(side) {
     const out = new Soup(this.sem);
-    const d = Array.from({ length: this.count }, (_, i) => plane.distanceToPoint(new Vector3(...this.pos(i))));
+    const d = Array.from({ length: this.count }, (_, i) => (typeof side === 'function' ? side(i) : side.distanceToPoint(new Vector3(...this.pos(i)))));
     const map = new Map();
     const keep = (i) => { if (!map.has(i)) map.set(i, out.push(this.vertex(i))); return map.get(i); };
     const cut = (a, b) => {
@@ -134,6 +137,30 @@ class Soup {
   }
 }
 
+// The cuff: a plane across the forearm a little above the wrist.
+export function cuffAt(bonePos, side) {
+  const wrist = bonePos(`hand_${side}`), elbow = bonePos(`lowerarm_${side}`);
+  const axis = wrist.clone().sub(elbow).normalize();
+  return new Plane().setFromNormalAndCoplanarPoint(axis, wrist.clone().addScaledVector(axis, -CUFF_ABOVE_WRIST));
+}
+
+// Third-person suit: the whole skin, cut at the collar and the cuffs, pushed
+// out 4 mm. The collar follows the skin weights, not a level plane: in the
+// T-pose the bind is drawn in, the tops of the shoulders rise above the base
+// of the neck, and a level cut there opened holes in the shell over both
+// shoulders. Cutting where the neck and head take half the weight runs the
+// collar round the base of the neck, wherever the shoulders are.
+export function suitShell(soup, jointNames, bonePos) {
+  const neckish = jointNames.map((n) => /^(neck_01|Head)$/.test(n));
+  const collar = (i) => {
+    const j = soup.streams.JOINTS_0[i], w = soup.streams.WEIGHTS_0[i];
+    let s = 0;
+    for (let k = 0; k < 4; k++) if (neckish[j[k]]) s += w[k];
+    return s - COLLAR_WEIGHT;
+  };
+  return soup.clip(collar).clip(cuffAt(bonePos, 'l')).clip(cuffAt(bonePos, 'r')).offset(SHELL);
+}
+
 // Scales the twist of each keyframe rotation away from `rest` about `axis`, the
 // bone's long axis in its own frame.
 function scaleTwist(values, rest, axis, keep) {
@@ -180,15 +207,10 @@ export async function buildHuman(raw, out) {
   const classWeight = (i, re) => { const j = soup.streams.JOINTS_0[i], w = soup.streams.WEIGHTS_0[i]; let s = 0; for (let k = 0; k < 4; k++) if (re.test(joints[j[k]].getName())) s += w[k]; return s; };
   const anyVertex = (re, min) => (t) => t.some((i) => classWeight(i, re) > min);
 
-  const cuffPlane = (side) => {
-    const wrist = worldPos(nodes.get(`hand_${side}`)), elbow = worldPos(nodes.get(`lowerarm_${side}`));
-    const axis = wrist.clone().sub(elbow).normalize();
-    return new Plane().setFromNormalAndCoplanarPoint(axis, wrist.clone().addScaledVector(axis, -CUFF_ABOVE_WRIST));
-  };
-  const collar = new Plane().setFromNormalAndCoplanarPoint(new Vector3(0, 1, 0), worldPos(nodes.get('neck_01')).add(new Vector3(0, 0.01, 0)));
+  const bonePos = (name) => worldPos(nodes.get(name));
+  const cuffPlane = (side) => cuffAt(bonePos, side);
 
-  // Third-person suit: the whole skin, cut at the collar and the cuffs, pushed out 4 mm.
-  const suit = soup.clip(collar).clip(cuffPlane('l')).clip(cuffPlane('r')).offset(SHELL);
+  const suit = suitShell(soup, joints.map((j) => j.getName()), bonePos);
   bodyNode.getMesh().addPrimitive(suit.toPrimitive(doc, buffer, suitMat)).setName('Body');
   bodyNode.setName('Body');
 

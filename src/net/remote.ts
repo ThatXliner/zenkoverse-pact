@@ -111,6 +111,9 @@ export class RemotePlayer extends Enemy {
   override hurt(amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number; stagger?: boolean } = {}): void {
     if (!this.alive) return;
     this.avatar.flash(1.2);
+    // The attacker sees the blow land at once; the body's real position stays its owner's.
+    const from = opts.from ?? this.game.player.position;
+    this.avatar.impact(this.position.clone().sub(from), 0.35 + Math.min(1, amount / 40) * 0.5 + (opts.knock ?? 0) * 0.12);
     this.unconfirmed.push({ amount, at: performance.now() });
     this.onHit(this, amount, opts);
   }
@@ -130,6 +133,8 @@ export class RemotePlayer extends Enemy {
     if (!hurt) return;
     this.avatar.flash(1.2);
     if (this.alive) this.avatar.playUpper('Hit_Chest', 1.2);
+    // A blow from someone else: the rock comes from the front, where most blows land.
+    if (this.alive && !mine) this.avatar.impact(new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)), 0.6);
   }
 
   override die(): void {

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Game } from '../app/game';
 import { Avatar, type CharacterModel } from '../character/avatar';
 import type { CostumeId } from '../character/costume';
+import { POSTURES, type Posture } from '../character/posture';
 import { RAPIER, GROUP_ENEMY, GROUP_WORLD, GROUP_PROP, groups } from '../physics/world';
 import { AURA, AuraField } from './field';
 import { BOSS_ULTIMATES } from './ultimates';
@@ -12,19 +13,19 @@ import { MOVES } from './moves';
 export type EnemyAi = 'thug' | 'kuroda' | 'ancient' | 'dummy' | 'rival';
 // `tint` is the suit: one flat, saturated colour per role, far from any skin
 // tone. `costume` is what the role wears over it (src/character/costume.ts):
-// with `height` and `build` (the chest's width) it gives each role its own
+// with `height`, `build` (the chest's width) and `posture` (src/character/posture.ts) it gives each role its own
 // silhouette from the top-down camera. A rival (another player) wears none.
-export interface EnemyDef { name: string; model: CharacterModel; costume?: CostumeId; hp: number; speed: number; dmg: number; ai: EnemyAi; boss?: boolean; tint?: number; emissive?: number; height?: number; build?: number; title?: string }
+export interface EnemyDef { name: string; model: CharacterModel; costume?: CostumeId; hp: number; speed: number; dmg: number; ai: EnemyAi; boss?: boolean; tint?: number; emissive?: number; height?: number; build?: number; title?: string; posture?: Posture }
 
 export const ENEMY_DEFS: Record<string, EnemyDef> = {
-  thug: { name: 'Underworld Thug', model: 'bald', costume: 'thug', hp: 70, speed: 3.6, dmg: 11, ai: 'thug', tint: 0x5b5560 },
-  bruiser: { name: 'Bristle Brawler', model: 'beard', costume: 'bruiser', hp: 120, speed: 3.0, dmg: 16, ai: 'thug', tint: 0x9b2335, height: 1.95, build: 1.18 },
-  kuroda: { name: 'Kuroda Enforcer', model: 'parted', costume: 'kuroda', hp: 620, speed: 3.2, dmg: 15, ai: 'kuroda', boss: true, tint: 0xd4661a, emissive: 0xff3a00, height: 1.9, build: 1.1, title: 'Kuroda Enforcer, whose "fire" is fuel' },
-  ancient: { name: 'The Ancient Echo Master', model: 'long', costume: 'ancient', hp: 1300, speed: 2.6, dmg: 20, ai: 'ancient', boss: true, tint: 0xeef3ea, emissive: 0x7dffb2, height: 1.7, build: 0.94, title: 'The Ancient Echo Master' },
+  thug: { name: 'Underworld Thug', model: 'bald', costume: 'thug', posture: POSTURES.thug, hp: 70, speed: 3.6, dmg: 11, ai: 'thug', tint: 0x5b5560 },
+  bruiser: { name: 'Bristle Brawler', model: 'beard', costume: 'bruiser', posture: POSTURES.bruiser, hp: 120, speed: 3.0, dmg: 16, ai: 'thug', tint: 0x9b2335, height: 1.95, build: 1.18 },
+  kuroda: { name: 'Kuroda Enforcer', model: 'parted', costume: 'kuroda', posture: POSTURES.kuroda, hp: 620, speed: 3.2, dmg: 15, ai: 'kuroda', boss: true, tint: 0xd4661a, emissive: 0xff3a00, height: 1.9, build: 1.1, title: 'Kuroda Enforcer, whose "fire" is fuel' },
+  ancient: { name: 'The Ancient Echo Master', model: 'long', costume: 'ancient', posture: POSTURES.ancient, hp: 1300, speed: 2.6, dmg: 20, ai: 'ancient', boss: true, tint: 0xeef3ea, emissive: 0x7dffb2, height: 1.7, build: 0.94, title: 'The Ancient Echo Master' },
   dummy: { name: 'Training Dummy', model: 'buzzed', costume: 'dummy', hp: 100000, speed: 0, dmg: 0, ai: 'dummy', tint: 0x8c9a7a },
   // Rooftop-trial roster: the same thug AI at other speeds, weights and hit points.
-  runner: { name: 'Spring Leaper', model: 'buzzed', costume: 'runner', hp: 52, speed: 5.2, dmg: 14, ai: 'thug', tint: 0x2f9e5a, height: 1.72, build: 0.92 },
-  husk: { name: 'Husk Shell', model: 'beard', costume: 'husk', hp: 190, speed: 2.3, dmg: 20, ai: 'thug', tint: 0x6b2f6e, height: 2.05, build: 1.24 },
+  runner: { name: 'Spring Leaper', model: 'buzzed', costume: 'runner', posture: POSTURES.runner, hp: 52, speed: 5.2, dmg: 14, ai: 'thug', tint: 0x2f9e5a, height: 1.72, build: 0.92 },
+  husk: { name: 'Husk Shell', model: 'beard', costume: 'husk', posture: POSTURES.husk, hp: 190, speed: 2.3, dmg: 20, ai: 'thug', tint: 0x6b2f6e, height: 2.05, build: 1.24 },
   rival: { name: 'Rival', model: 'parted', hp: 100, speed: 0, dmg: 0, ai: 'rival', height: 1.78 },
 };
 
@@ -33,6 +34,8 @@ export const NO_SCALE: EnemyScale = { hp: 1, dmg: 1 };
 
 const STILL = new THREE.Vector3();
 const CORPSE_SECONDS = 6;
+// How hard a thrown body's skid brakes on the ground, in m/s².
+const KNOCK_FRICTION = 9;
 const CAM_RIGHT = new THREE.Vector3();
 
 // A thin bar above the head that appears once the enemy is hurt. The sprites
@@ -103,7 +106,7 @@ export class Enemy {
     this.hp = this.maxHp = def.hp * scale.hp;
     this.dmg = def.dmg * scale.dmg;
     this.position = pos.clone();
-    this.avatar = new Avatar(game.assets, def.model, { targetHeight: def.height ?? 1.8, tint: def.tint, emissive: def.emissive, build: def.build, costume: def.costume });
+    this.avatar = new Avatar(game.assets, def.model, { targetHeight: def.height ?? 1.8, tint: def.tint, emissive: def.emissive, build: def.build, costume: def.costume, posture: def.posture });
     this.avatar.root.position.copy(pos);
     game.renderer.scene.add(this.avatar.root);
     const h = def.height ?? 1.8, r = 0.36;
@@ -128,10 +131,13 @@ export class Enemy {
     this.hp -= amount;
     this.damageTaken += amount;
     this.avatar.flash(1.2);
-    if (this.def.ai === 'dummy') { this.avatar.playOneShot('Hit_Chest'); return; }
     const from = opts.from ?? this.game.player.position;
     const away = this.position.clone().sub(from).setY(0).normalize();
     const knock = (opts.knock ?? 0) * (this.isBoss ? 0.25 : 1);
+    // The body rocks away from the blow, by its weight and the blow's: a jab
+    // jolts the chest, a heavy blow throws it back on its heels.
+    this.avatar.impact(away, (0.35 + Math.min(1, amount / 40) * 0.5 + knock * 0.12) * (this.isBoss ? 0.6 : 1));
+    if (this.def.ai === 'dummy') { this.avatar.playOneShot('Hit_Chest'); return; }
     if (knock > 0) {
       this.velocity.addScaledVector(away, knock);
       this.velocity.y += (opts.lift ?? knock * 0.35) * (this.isBoss ? 0.3 : 1);
@@ -228,7 +234,7 @@ export class Enemy {
           if (this.t > 0.45) this.state = 'chase';
           break;
         case 'knocked':
-          if (this.grounded && this.t > 0.6) { this.state = 'recover'; this.t = 0; }
+          if (this.grounded && this.t > 0.6 && Math.hypot(this.velocity.x, this.velocity.z) < 1) { this.state = 'recover'; this.t = 0; }
           break;
         case 'cast':
           this.face(p, dt, 4);
@@ -237,8 +243,16 @@ export class Enemy {
       }
     }
 
-    this.velocity.x = THREE.MathUtils.lerp(this.velocity.x, move.x, 1 - Math.exp(-(this.state === 'knocked' ? 1 : 10) * dt));
-    this.velocity.z = THREE.MathUtils.lerp(this.velocity.z, move.z, 1 - Math.exp(-(this.state === 'knocked' ? 1 : 10) * dt));
+    if (this.state === 'knocked') {
+      // Thrown: no footing in the air, and on the ground a skid that the
+      // feet fight with steps until it stops, rather than a glide.
+      const v = Math.hypot(this.velocity.x, this.velocity.z);
+      const slow = this.grounded ? Math.max(0, v - KNOCK_FRICTION * dt) / (v || 1) : Math.exp(-0.4 * dt);
+      this.velocity.x *= slow; this.velocity.z *= slow;
+    } else {
+      this.velocity.x = THREE.MathUtils.lerp(this.velocity.x, move.x, 1 - Math.exp(-10 * dt));
+      this.velocity.z = THREE.MathUtils.lerp(this.velocity.z, move.z, 1 - Math.exp(-10 * dt));
+    }
     this.velocity.y -= 20 * dt;
     const step = this.velocity.clone().multiplyScalar(dt);
     this.ctrl.computeColliderMovement(this.collider, step, undefined, groups(GROUP_ENEMY, GROUP_WORLD | GROUP_PROP | GROUP_ENEMY));

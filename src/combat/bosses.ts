@@ -11,8 +11,8 @@ const MASTER = 0x7dffb2;
 // Her echoes: a pale jade ghost of her, not a glow.
 export const GHOST = 0x5fb893;
 
-// The Kuroda Enforcer's cast (issue #11: the fight shows that the "fire" is
-// fuel). He pours: a dark, iridescent sheen splashes out of his sweeping
+// The Kuroda Enforcer's cast (issue #11). The fight shows its lesson and
+// never says it. He pours: a dark, iridescent sheen splashes out of his sweeping
 // palm and runs along the ground from his feet to where the player stood,
 // pooling there. Nothing burns yet. On the snap of his fingers a spark starts
 // at his feet and runs the fuel line, the line burning behind it, and each
@@ -127,7 +127,7 @@ export class Fuse {
     }
     for (const e of g.encounters.enemies) {
       if (!e.alive || e.position.distanceTo(at) >= POOL) continue;
-      // His own fire is only fuel: it burns him like anyone else.
+      // It burns him like anyone else.
       e.hurt(e === this.owner ? 30 : 20, { from: at, knock: 3 });
       if (e === this.owner) g.combat.letter(e.center().add(new THREE.Vector3(0, 0.9, 0)), 'ボッ', FLAME, false);
     }

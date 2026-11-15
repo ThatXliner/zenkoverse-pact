@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import type { Game } from '../app/game';
-import { toast } from '../app/game';
 import { Avatar, type CharacterModel } from '../character/avatar';
 import type { CostumeId } from '../character/costume';
 import { POSTURES, type Posture } from '../character/posture';
@@ -24,7 +23,7 @@ export interface EnemyDef { name: string; model: CharacterModel; costume?: Costu
 export const ENEMY_DEFS: Record<string, EnemyDef> = {
   thug: { name: 'Underworld Thug', model: 'bald', costume: 'thug', posture: POSTURES.thug, hp: 70, speed: 3.6, dmg: 11, ai: 'thug', tint: 0x5b5560 },
   bruiser: { name: 'Bristle Brawler', model: 'beard', costume: 'bruiser', posture: POSTURES.bruiser, hp: 120, speed: 3.0, dmg: 16, ai: 'thug', tint: 0x9b2335, height: 1.95, build: 1.18 },
-  kuroda: { name: 'Kuroda Enforcer', model: 'parted', costume: 'kuroda', posture: POSTURES.kuroda, hp: 620, speed: 3.2, dmg: 15, ai: 'kuroda', boss: true, tint: 0xd4661a, emissive: 0xff3a00, height: 1.9, build: 1.1, title: 'Kuroda Enforcer, whose "fire" is fuel' },
+  kuroda: { name: 'Kuroda Enforcer', model: 'parted', costume: 'kuroda', posture: POSTURES.kuroda, hp: 620, speed: 3.2, dmg: 15, ai: 'kuroda', boss: true, tint: 0xd4661a, emissive: 0xff3a00, height: 1.9, build: 1.1, title: 'Kuroda Enforcer' },
   ancient: { name: 'The Ancient Echo Master', model: 'long', costume: 'ancient', posture: POSTURES.ancient, hp: 1300, speed: 1.7, dmg: 20, ai: 'ancient', boss: true, tint: 0xeef3ea, emissive: 0x7dffb2, height: 1.7, build: 0.94, title: 'The Ancient Echo Master' },
   dummy: { name: 'Training Dummy', model: 'buzzed', costume: 'dummy', hp: 100000, speed: 0, dmg: 0, ai: 'dummy', tint: 0x8c9a7a },
   // Rooftop-trial roster: the same thug AI at other speeds, weights and hit points.
@@ -439,10 +438,7 @@ export class Enemy {
   private beginCast(): void {
     const g = this.game;
     if (this.def.ai === 'kuroda') {
-      if (!this.phase2 && this.hp < this.maxHp * 0.5) {
-        this.phase2 = true;
-        toast('He soaks the whole line now. Every sheen is a fuse.', 'info');
-      }
+      if (this.hp < this.maxHp * 0.5) this.phase2 = true;
       this.fuse?.end();
       this.fuse = new Fuse(g, this, g.player.position.clone(), this.phase2 ? 3 : 1);
     } else if (this.def.ai === 'ancient') {

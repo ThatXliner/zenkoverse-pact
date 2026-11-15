@@ -8,7 +8,7 @@ import type { CameraRig } from '../player/camera';
 import type { Input } from '../app/input';
 import type { TechniqueKit } from '../techniques/kit';
 import type { Assets } from '../app/assets';
-import { toon, addInkHulls } from '../render/materials';
+import { toon } from '../render/materials';
 import { PLAYER_SUIT } from '../character/avatar';
 
 // Each hand is a spring (src/hands/performer.ts) run through its own
@@ -62,13 +62,12 @@ export class Hands {
 
   constructor(scene: THREE.Scene, private camera: THREE.PerspectiveCamera, assets: Assets) {
     this.rig = new ArmRig(assets.model('characters/human'));
-    // The same flat skin and suit the third-person body wears, with an ink
-    // hull: the player's own hands are drawn like everyone else's.
+    // The same flat skin and suit the third-person body wears, inked by the
+    // post effect: the player's own hands are drawn like everyone else's.
     this.skin = toon(0xf7d9bf);
     for (const m of this.rig.skinMeshes) m.material = this.skin;
     const sleeve = toon(PLAYER_SUIT, { side: THREE.DoubleSide });
     for (const m of this.rig.sleeveMeshes) m.material = sleeve;
-    addInkHulls(this.rig.object, 0.0045);
     this.clawMat = new THREE.MeshStandardMaterial({ color: 0xd8f4ff, roughness: 0.3, emissive: 0x9fe8ff, emissiveIntensity: 0.4 });
 
     this.rigRoot.quaternion.copy(FLIP);

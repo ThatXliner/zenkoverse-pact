@@ -1,38 +1,14 @@
 import * as THREE from 'three';
+import { mangaShading } from './tone';
 
-// The cel-shaded material set. Everything in the world and on the characters
-// is a MeshToonMaterial over one shared light ramp, so the whole frame reads
-// as one drawing: flat fills, a hard terminator, stepped shadows, and ink
-// lines from the post effect (src/render/ink.ts) plus an inverted hull on the
-// characters (inkHull below).
+// The material set: a coloured manga page. Everything in the world and on the
+// characters is a MeshToonMaterial painted in flat colour and screentone
+// (src/render/tone.ts), and the post effect (src/render/manga.ts) draws the
+// brush ink, the paper and the panel over the whole frame, the first-person
+// arms included. Nothing carries its own outline: the ink comes from the
+// depth buffer, so it is one hand for the world, the bodies and the arms.
 
 export const INK = 0x14101c;
-
-// Four light bands: core shadow, half tone, lit, and a hot highlight.
-const RAMP_STEPS = [0.36, 0.62, 0.9, 1.0];
-let ramp: THREE.DataTexture | null = null;
-export function toonRamp(): THREE.DataTexture {
-  if (ramp) return ramp;
-  const data = new Uint8Array(RAMP_STEPS.length * 4);
-  RAMP_STEPS.forEach((v, i) => { data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = Math.round(v * 255); data[i * 4 + 3] = 255; });
-  ramp = new THREE.DataTexture(data, RAMP_STEPS.length, 1, THREE.RGBAFormat);
-  ramp.minFilter = ramp.magFilter = THREE.NearestFilter;
-  ramp.needsUpdate = true;
-  return ramp;
-}
-
-// Shadow maps come out soft; the ramp wants them as a hard band. Each
-// shadowed light's term is snapped to lit or shaded before the ramp sees it.
-function hardShadows(mat: THREE.Material): void {
-  mat.onBeforeCompile = (shader) => {
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <shadowmap_pars_fragment>', '#include <shadowmap_pars_fragment>\n#define getShadowStep(a,b,c,d,e,f) smoothstep(0.42, 0.58, getShadow(a,b,c,d,e,f))')
-      .replace(/\? getShadow\( directionalShadowMap/g, '? getShadowStep( directionalShadowMap')
-      .replace(/\? getShadow\( spotShadowMap/g, '? getShadowStep( spotShadowMap');
-  };
-  mat.customProgramCacheKey = () => 'toon-hard-shadow';
-}
-
 export interface ToonOptions {
   map?: THREE.Texture | null;
   emissive?: number;
@@ -45,11 +21,11 @@ export interface ToonOptions {
 
 export function toon(color: number | THREE.Color, opts: ToonOptions = {}): THREE.MeshToonMaterial {
   const m = new THREE.MeshToonMaterial({
-    color, gradientMap: toonRamp(), map: opts.map ?? null,
+    color, map: opts.map ?? null,
     emissive: opts.emissive ?? 0x000000, emissiveIntensity: opts.emissiveIntensity ?? 1,
     side: opts.side ?? THREE.FrontSide, transparent: opts.transparent ?? false, opacity: opts.opacity ?? 1, alphaTest: opts.alphaTest ?? 0,
   });
-  hardShadows(m);
+  mangaShading(m);
   return m;
 }
 
@@ -81,54 +57,6 @@ export function toonify(root: THREE.Object3D, tint?: number): void {
     }
     m.material = t;
   });
-}
-
-// Inverted hull: the same skinned mesh drawn again, back faces only, pushed
-// out along the normal, in ink. `width` is in metres at one metre; it grows
-// with distance so the line keeps its weight on screen.
-const hullVert = /* glsl */ `
-#include <common>
-#include <skinning_pars_vertex>
-uniform float width;
-void main() {
-  #include <beginnormal_vertex>
-  #include <skinbase_vertex>
-  #include <skinnormal_vertex>
-  #include <begin_vertex>
-  #include <skinning_vertex>
-  vec4 mv = modelViewMatrix * vec4(transformed, 1.0);
-  float w = width * clamp(-mv.z * 0.09, 0.45, 2.6);
-  transformed += normalize(objectNormal) * w;
-  #include <project_vertex>
-}`;
-const hullFrag = /* glsl */ `uniform vec3 ink; void main() { gl_FragColor = vec4(ink, 1.0); }`;
-
-export function inkHullMaterial(width: number, ink = INK): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({ vertexShader: hullVert, fragmentShader: hullFrag, uniforms: { width: { value: width }, ink: { value: new THREE.Color(ink) } }, side: THREE.BackSide });
-}
-
-// Adds a hull sibling for every skinned mesh under `root` and returns them,
-// so a caller can hide or recolour the outline with the body.
-export function addInkHulls(root: THREE.Object3D, width: number, ink = INK): THREE.SkinnedMesh[] {
-  const mat = inkHullMaterial(width, ink);
-  const out: THREE.SkinnedMesh[] = [];
-  const targets: THREE.SkinnedMesh[] = [];
-  root.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) targets.push(o as THREE.SkinnedMesh); });
-  for (const m of targets) {
-    const hull = new THREE.SkinnedMesh(m.geometry, mat);
-    hull.bind(m.skeleton, m.bindMatrix);
-    hull.bindMode = m.bindMode;
-    hull.frustumCulled = m.frustumCulled;
-    hull.boundingSphere = m.boundingSphere;
-    hull.castShadow = false;
-    hull.receiveShadow = false;
-    hull.name = `${m.name}_ink`;
-    hull.renderOrder = m.renderOrder;
-    m.parent!.add(hull);
-    hull.position.copy(m.position); hull.quaternion.copy(m.quaternion); hull.scale.copy(m.scale);
-    out.push(hull);
-  }
-  return out;
 }
 
 // A wooden board with brushed kanji. `color` is the paint; the board is the

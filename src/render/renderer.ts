@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { EffectComposer, RenderPass, EffectPass, BloomEffect, SMAAEffect, VignetteEffect, ToneMappingEffect, ToneMappingMode, BlendFunction, Effect, ChromaticAberrationEffect, KernelSize } from 'postprocessing';
+import { EffectComposer, RenderPass, EffectPass, BloomEffect, SMAAEffect, ToneMappingEffect, ToneMappingMode, ChromaticAberrationEffect, KernelSize } from 'postprocessing';
 import type { Quality } from '../app/settings';
 import { patchLightLoop } from './lightLoop';
 import { LightPool, type PoolSize } from './lightPool';
-import { InkEffect } from './ink';
+import { InkMaskPass, OverlayPass, PageEffect, type InkQuality, type LookId } from './manga';
+import { MANGA } from './tone';
 
 const POOL: Record<Quality, PoolSize> = {
   high: { points: 8, spots: 4, spotShadows: 1 },
@@ -11,33 +12,29 @@ const POOL: Record<Quality, PoolSize> = {
   low: { points: 4, spots: 2, spotShadows: 0 },
 };
 
-const impactShader = /* glsl */ `
-uniform float amount;
-uniform vec3 tint;
-void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
-  float l = dot(inputColor.rgb, vec3(0.299, 0.587, 0.114));
-  float hard = step(0.42, l);
-  vec3 frame = mix(vec3(0.02, 0.01, 0.03), tint, hard);
-  frame = mix(frame, 1.0 - inputColor.rgb, 0.35);
-  outputColor = vec4(mix(inputColor.rgb, frame, amount), inputColor.a);
-}`;
+// What each preset spends on the page: the brush's reach (how heavy a line can
+// get) and the dry-brush, paper fibre and painted looks. Low keeps the tones
+// and a plain ink line.
+const INK: Record<Quality, InkQuality> = {
+  high: { radius: 3, detail: true },
+  medium: { radius: 2, detail: true },
+  low: { radius: 1, detail: false },
+};
 
-// One to three frames of inverted, high-contrast color on a big hit.
-class ImpactFrameEffect extends Effect {
-  constructor() {
-    super('ImpactFrameEffect', impactShader, {
-      blendFunction: BlendFunction.NORMAL,
-      uniforms: new Map<string, THREE.Uniform>([['amount', new THREE.Uniform(0)], ['tint', new THREE.Uniform(new THREE.Color(1, 1, 1))]]),
-    });
-  }
-  set amount(v: number) { this.uniforms.get('amount')!.value = v; }
-  set tint(c: THREE.Color) { (this.uniforms.get('tint')!.value as THREE.Color).copy(c); }
-}
+// The whole-frame looks a cutscene shot can ask for, as the page's mix.
+const LOOKS: Record<LookId, { wash: number; water: number; negative: number }> = {
+  manga: { wash: 0, water: 0, negative: 0 },
+  wash: { wash: 1, water: 0, negative: 0 },
+  watercolor: { wash: 0, water: 1, negative: 0 },
+  negative: { wash: 0.85, water: 0, negative: 1 },
+};
 
-// The frame: toon-lit scene, ink lines, a little bloom for the lanterns and
-// the Technique glow, a hue-preserving tone curve so the flat colours stay
-// the colours they were painted, then the impact frame, vignette and SMAA.
-// The first-person arms render in a second pass over the top.
+const v3 = new THREE.Vector3();
+
+// The frame: the toned scene (src/render/tone.ts), a little bloom for the
+// lanterns and the Technique glow, a hue-preserving tone curve, then the page
+// (src/render/manga.ts): the first-person arms laid in, brush ink over
+// everything, paper, staging lines and the panel.
 export class Renderer {
   readonly gl: THREE.WebGLRenderer;
   readonly composer: EffectComposer;
@@ -46,12 +43,26 @@ export class Renderer {
   readonly camera = new THREE.PerspectiveCamera(80, 1, 0.08, 600);
   readonly overlayCamera = new THREE.PerspectiveCamera(75, 1, 0.01, 10);
   readonly lights = new LightPool(this.scene);
-  private impact: ImpactFrameEffect;
+  private page: PageEffect;
+  private mask: InkMaskPass;
+  private overlay: OverlayPass;
   private bloom: BloomEffect;
   private chroma: ChromaticAberrationEffect;
-  private ink: InkEffect;
   private impactFrames = 0;
-  private impactTint = new THREE.Color(1, 1, 1);
+  private impactN = 0;
+  private focusT = 0;
+  private focusMax = 1;
+  private focusPeak = 0;
+  private focusWorld: THREE.Vector3 | null = null;
+  private speedT = 0;
+  private speedMax = 1;
+  private speedPeak = 0;
+  private speedWorld = new THREE.Vector3();
+  private lookId: LookId = 'manga';
+  // A world point the screen patterns are pinned to, so they slide with the
+  // world rather than stay on the glass. Re-pinned when it leaves the view.
+  private anchor: THREE.Vector3 | null = null;
+  private size = new THREE.Vector2();
   overlayVisible = true;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -66,14 +77,16 @@ export class Renderer {
 
     this.composer = new EffectComposer(this.gl, { frameBufferType: THREE.HalfFloatType, multisampling: 0 });
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.ink = new InkEffect(this.camera.far);
-    this.bloom = new BloomEffect({ intensity: 0.55, luminanceThreshold: 0.9, luminanceSmoothing: 0.2, mipmapBlur: true, kernelSize: KernelSize.MEDIUM, radius: 0.6 });
-    this.impact = new ImpactFrameEffect();
-    this.chroma = new ChromaticAberrationEffect({ offset: new THREE.Vector2(0, 0), radialModulation: true, modulationOffset: 0.4 });
+    this.overlay = new OverlayPass(this.overlayScene, this.overlayCamera);
+    this.composer.addPass(this.overlay);
+    this.mask = new InkMaskPass(this.camera, this.overlay);
+    this.composer.addPass(this.mask);
+    this.bloom = new BloomEffect({ intensity: 0.4, luminanceThreshold: 0.9, luminanceSmoothing: 0.2, mipmapBlur: true, kernelSize: KernelSize.MEDIUM, radius: 0.55 });
     const tone = new ToneMappingEffect({ mode: ToneMappingMode.NEUTRAL });
-    const vignette = new VignetteEffect({ darkness: 0.38, offset: 0.32 });
-    const smaa = new SMAAEffect();
-    this.composer.addPass(new EffectPass(this.camera, this.ink, this.bloom, tone, this.impact, vignette, smaa));
+    this.composer.addPass(new EffectPass(this.camera, this.bloom, tone, new SMAAEffect()));
+    this.page = new PageEffect(this.mask, this.overlay);
+    this.composer.addPass(new EffectPass(this.camera, this.page));
+    this.chroma = new ChromaticAberrationEffect({ offset: new THREE.Vector2(0, 0), radialModulation: true, modulationOffset: 0.4 });
     this.composer.addPass(new EffectPass(this.camera, this.chroma));
     this.setQuality('high');
   }
@@ -83,7 +96,7 @@ export class Renderer {
     this.gl.setPixelRatio(dpr);
     this.lights.setSize(POOL[q]);
     this.gl.shadowMap.enabled = q !== 'low';
-    this.ink.weight = dpr >= 1.75 ? 1.6 : 1.0;
+    this.page.setQuality(INK[q]);
     this.resize();
   }
 
@@ -95,29 +108,100 @@ export class Renderer {
     this.camera.updateProjectionMatrix();
     this.overlayCamera.aspect = w / h;
     this.overlayCamera.updateProjectionMatrix();
+    this.gl.getDrawingBufferSize(this.size);
+    // Pattern and line sizes are authored at 1080 lines; a denser screen
+    // scales them so the drawing reads the same.
+    const stride = Math.max(0.6, this.size.y / 1080);
+    MANGA.pitch.value = Math.max(3.6, 5.2 * stride);
+    this.mask.stride = stride;
+    this.page.u('stride').value = stride;
   }
 
-  impactFrame(frames: number, tint: THREE.Color): void {
+  // A big hit: a frame or three drawn in two inks, focus lines on the point
+  // hit (or the frame's centre), in the colour of whoever landed it.
+  impactFrame(frames: number, tint: THREE.Color, at?: THREE.Vector3): void {
     this.impactFrames = Math.max(this.impactFrames, frames);
-    this.impactTint.copy(tint);
+    (this.page.u('accent').value as THREE.Color).copy(tint);
+    this.focus(at ?? null, Math.min(1, 0.55 + frames * 0.15), 0.18 + frames * 0.06);
   }
+
+  // Focus lines converging on a world point (null: the frame's centre).
+  focus(at: THREE.Vector3 | null, strength: number, seconds: number): void {
+    this.focusWorld = at ? at.clone() : null;
+    this.focusPeak = strength;
+    this.focusT = this.focusMax = seconds;
+    this.page.u('seed').value = Math.floor(Math.random() * 97);
+  }
+
+  // Speed lines for a body moving fast along `dir` (world units per second):
+  // streaks across the frame, converging lines when it moves into the screen.
+  speed(dir: THREE.Vector3, strength: number, seconds: number): void {
+    this.speedWorld.copy(dir);
+    this.speedPeak = strength;
+    this.speedT = this.speedMax = seconds;
+  }
+
+  // A whole-frame look; 'manga' is the page itself.
+  look(id: LookId, accent?: THREE.Color): void {
+    this.lookId = id;
+    if (accent) (this.page.u('accent').value as THREE.Color).copy(accent);
+  }
+  get currentLook(): LookId { return this.lookId; }
 
   setChroma(amount: number): void {
     (this.chroma.offset as THREE.Vector2).set(amount, amount * 0.6);
   }
 
+  private stage(dt: number): void {
+    const p = this.page, cam = this.camera;
+    const look = LOOKS[this.lookId];
+    p.u('wash').value = look.wash;
+    p.u('water').value = look.water;
+    p.u('negative').value = look.negative;
+    p.u('impact').value = this.impactFrames > 0 ? 1 : 0;
+    p.u('impactFlip').value = this.impactN % 2;
+    if (this.impactFrames > 0) { this.impactFrames--; this.impactN++; } else this.impactN = 0;
+
+    this.focusT = Math.max(0, this.focusT - dt);
+    p.u('focus').value = this.focusPeak * Math.min(1, (this.focusT / this.focusMax) * 1.6);
+    const at = p.u('focusAt').value as THREE.Vector2;
+    if (this.focusWorld) {
+      v3.copy(this.focusWorld).project(cam);
+      at.set(THREE.MathUtils.clamp(v3.x * 0.5 + 0.5, 0.1, 0.9), THREE.MathUtils.clamp(v3.y * 0.5 + 0.5, 0.1, 0.9));
+    } else at.set(0.5, 0.5);
+
+    this.speedT = Math.max(0, this.speedT - dt);
+    const k = this.speedPeak * Math.min(1, (this.speedT / this.speedMax) * 2);
+    // The motion seen from the camera: across the frame streaks, into it converges.
+    v3.copy(this.speedWorld).transformDirection(cam.matrixWorldInverse);
+    const across = Math.hypot(v3.x, v3.y), into = Math.max(0, -v3.z);
+    const total = across + into + 1e-6;
+    (p.u('speedDir').value as THREE.Vector2).set(v3.x, v3.y).normalize();
+    p.u('speed').value = k * (across / total);
+    p.u('radial').value = k * 0.8 * (into / total);
+
+    // Pin the screen patterns to the world.
+    cam.getWorldDirection(v3);
+    if (this.anchor) {
+      const s = this.anchor.clone().project(cam);
+      const behind = this.anchor.clone().sub(cam.position).dot(v3) < 1;
+      if (behind || Math.abs(s.x) > 1.6 || Math.abs(s.y) > 1.6) this.anchor = null;
+    }
+    if (!this.anchor) this.anchor = cam.position.clone().addScaledVector(v3, 12);
+    const s = this.anchor.clone().project(cam);
+    MANGA.origin.value.set((s.x * 0.5 + 0.5) * this.size.x, (s.y * 0.5 + 0.5) * this.size.y);
+    (p.u('origin').value as THREE.Vector2).copy(MANGA.origin.value);
+    this.mask.origin = MANGA.origin.value;
+  }
+
   render(dt: number): void {
-    this.impact.amount = this.impactFrames > 0 ? 1 : 0;
-    this.impact.tint = this.impactTint;
-    if (this.impactFrames > 0) this.impactFrames--;
     this.camera.updateMatrixWorld();
     this.lights.update(this.camera, dt);
+    this.overlay.visible = this.overlayVisible;
+    this.page.u('overOn').value = this.overlayVisible ? 1 : 0;
+    this.stage(dt);
     this.gl.info.reset();
     this.gl.clear(true, true, true);
     this.composer.render(dt);
-    if (this.overlayVisible) {
-      this.gl.clearDepth();
-      this.gl.render(this.overlayScene, this.overlayCamera);
-    }
   }
 }

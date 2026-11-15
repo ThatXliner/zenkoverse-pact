@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { toon, inkHullMaterial } from '../render/materials';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { toon } from '../render/materials';
 
 // Costumes: what each enemy role wears over its suit, so a role reads by its
 // silhouette from the top-down camera and by its clothes up close. A costume
 // is data: flat-coloured pieces (bands, skirts, domes, boxes, cones) fixed to
-// bones. Every piece is a toon fill over the shared ramp with an ink hull,
+// bones. Every piece is a toon fill in screentone, inked by the post effect,
 // the same drawing as the bodies. The pieces on one bone merge into one mesh,
 // so a costume costs a few draw calls whatever it holds.
 
@@ -154,31 +154,18 @@ function shapeGeometry(s: Shape): THREE.BufferGeometry {
   }
 }
 
-// The ink hull wants one normal per position, or a box's corners split open.
-function smooth(g: THREE.BufferGeometry): THREE.BufferGeometry {
-  const p = new THREE.BufferGeometry();
-  p.setAttribute('position', g.getAttribute('position').clone());
-  if (g.index) p.setIndex(g.index.clone());
-  const m = mergeVertices(p);
-  m.computeVertexNormals();
-  return m;
-}
-
-function strip(g: THREE.BufferGeometry, color: THREE.Color | null): THREE.BufferGeometry {
+function strip(g: THREE.BufferGeometry, color: THREE.Color): THREE.BufferGeometry {
   const out = g.index ? g.toNonIndexed() : g.clone();
   for (const name of Object.keys(out.attributes)) if (name !== 'position' && name !== 'normal') out.deleteAttribute(name);
-  if (color) {
-    const n = out.getAttribute('position').count;
-    const c = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) c.set([color.r, color.g, color.b], i * 3);
-    out.setAttribute('color', new THREE.BufferAttribute(c, 3));
-  }
+  const n = out.getAttribute('position').count;
+  const c = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) c.set([color.r, color.g, color.b], i * 3);
+  out.setAttribute('color', new THREE.BufferAttribute(c, 3));
   return out;
 }
 
-interface Baked { bone: string; body: THREE.BufferGeometry; hull: THREE.BufferGeometry }
+interface Baked { bone: string; body: THREE.BufferGeometry }
 const baked = new Map<string, Baked[]>();
-const hullMaterial = inkHullMaterial(0.0075);
 
 // Fixes a costume to a posed skeleton. The model's root must be at the
 // origin, unturned, and in its idle pose: pieces are placed in that pose.
@@ -189,7 +176,7 @@ export function dress(model: THREE.Object3D, bones: Map<string, THREE.Bone>, id:
   let parts = baked.get(key);
   if (!parts) {
     const k = height / REF_HEIGHT;
-    const byBone = new Map<string, { body: THREE.BufferGeometry[]; hull: THREE.BufferGeometry[] }>();
+    const byBone = new Map<string, THREE.BufferGeometry[]>();
     for (const p of COSTUMES[id]) {
       const bone = bones.get(p.bone);
       if (!bone) throw new Error(`costume ${id}: no bone ${p.bone}`);
@@ -206,13 +193,12 @@ export function dress(model: THREE.Object3D, bones: Map<string, THREE.Bone>, id:
       }
       const toBone = bone.matrixWorld.clone().invert().multiply(world);
       const geo = shapeGeometry(p.shape);
-      const slot = byBone.get(p.bone) ?? { body: [], hull: [] };
-      slot.body.push(strip(geo, new THREE.Color(p.color)).applyMatrix4(toBone));
-      slot.hull.push(strip(smooth(geo), null).applyMatrix4(toBone));
+      const slot = byBone.get(p.bone) ?? [];
+      slot.push(strip(geo, new THREE.Color(p.color)).applyMatrix4(toBone));
       byBone.set(p.bone, slot);
       geo.dispose();
     }
-    parts = [...byBone].map(([bone, s]) => ({ bone, body: mergeGeometries(s.body)!, hull: mergeGeometries(s.hull)! }));
+    parts = [...byBone].map(([bone, s]) => ({ bone, body: mergeGeometries(s)! }));
     baked.set(key, parts);
   }
   const material = toon(0xffffff, { side: THREE.DoubleSide });
@@ -223,9 +209,7 @@ export function dress(model: THREE.Object3D, bones: Map<string, THREE.Bone>, id:
     body.castShadow = true;
     body.receiveShadow = true;
     body.name = `costume_${p.bone}`;
-    const hull = new THREE.Mesh(p.hull, hullMaterial);
-    hull.name = `costume_${p.bone}_ink`;
-    bone.add(body, hull);
+    bone.add(body);
   }
   return material;
 }

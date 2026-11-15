@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { Assets } from '../app/assets';
-import { toon, addInkHulls } from '../render/materials';
+import { toon } from '../render/materials';
 import { dress, type CostumeId } from './costume';
 import { BodyGesture } from './gesture';
 import type { Gesture } from '../hands/gestures';
 
-// Every character is the one rigged human in human.glb, drawn cel-shaded: flat
-// skin and hair fills over the toon ramp, a flat suit in the role's colour, an
-// ink hull around the whole body, and a larger head and hands than life, so
+// Every character is the one rigged human in human.glb, drawn like the rest
+// of the page: flat skin and hair fills in screentone, a flat suit in the
+// role's colour, brush ink from the post effect, and a larger head and hands than life, so
 // the figures read as drawn rather than scanned. A look picks hair and skin.
 export interface Look { hair: string | null; hairColor: number; beard?: boolean; skin: 'light' | 'dark' | 'warm' }
 const parted: Look = { hair: 'Hair_SimpleParted', hairColor: 0x2a1e2e, skin: 'light' };
@@ -49,7 +49,6 @@ const HEAD_SCALE = 1.17;
 const HAND_SCALE = 1.1;
 const BODY_BOUNDS = new THREE.Sphere(new THREE.Vector3(0, 0.9, 0), 1.6);
 const WHITE = new THREE.Color(1, 1, 1);
-const INK_WIDTH = 0.0075;
 
 // Pulls the torso and arm tracks out of a clip so a gesture plays on the
 // upper body while the legs keep their locomotion cycle.
@@ -77,7 +76,6 @@ export class Avatar {
   private suit: THREE.MeshToonMaterial;
   private suitGlow = new THREE.Color(0);
   private materials: THREE.MeshToonMaterial[] = [];
-  private hulls: THREE.SkinnedMesh[] = [];
   private flashT = 0;
   private gesture: BodyGesture;
 
@@ -112,7 +110,6 @@ export class Avatar {
       this.materials.push(mat);
     });
     for (const o of drop) o.removeFromParent();
-    this.hulls = addInkHulls(this.model, INK_WIDTH);
     // The model is authored facing +Z. Turned inside the root, the root follows
     // the game's convention (yaw 0 looks down -Z, like the camera), so callers
     // set root.rotation.y to their yaw as they would for any other object.

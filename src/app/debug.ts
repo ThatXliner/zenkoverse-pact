@@ -9,7 +9,7 @@ import type { DrillId } from './state';
 import type { Action } from './keymap';
 import { audit as auditOffers } from '../rooftop/offers';
 import type { TechniqueId } from '../techniques/kit';
-import type { PoseName } from '../hands/poses';
+import type { PoseName, HandPose } from '../hands/poses';
 import { MASTERY_CONFIG } from '../mastery/mastery';
 import { netUi } from '../net/net';
 import { clashUi } from '../combat/clash';
@@ -27,7 +27,7 @@ export interface DebugApi {
   camera(mode: CameraMode): void;
   look(yaw: number, pitch: number): void;
   cast(slot: KeySlot): void;
-  pose(name: PoseName | null): void;
+  pose(name: PoseName | HandPose | null): void;
   handsView(yaw: number, pitch: number): void;
   hold(action: Action, held: boolean): void;
   encounter(id: 'sparring' | 'kuroda' | 'ancient' | 'dummy-room'): void;

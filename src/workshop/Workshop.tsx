@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'preact/hooks';
+import { useState, useMemo, useRef } from 'preact/hooks';
+import { useSheetKeys } from '../ui/useSheetKeys';
 import { signal } from '@preact/signals';
 import type { Game } from '../app/game';
 import { toast } from '../app/game';
@@ -97,9 +98,11 @@ export function Workshop({ game }: { game: Game }) {
   const move = (how: 'replace' | 'swap') => { if (pact && moveTo) book.place(pact.id, moveTo, how); setMoveTo(null); };
   const focusKey = focus ? focusId(focus) : '';
 
+  const sheet = useRef<HTMLDivElement>(null);
+  useSheetKeys(sheet);
   return (
     <div class="sheet-wrap" style={{ '--c': `#${kit.color.toString(16).padStart(6, '0')}` } as never}>
-      <div class="sheet ws-sheet" role="dialog" aria-label="Pact Workshop">
+      <div class="sheet ws-sheet" role="dialog" aria-label="Pact Workshop" ref={sheet}>
         <header>
           <h2><span class="jp">契約の工房</span><span class="en">Pact Workshop · {kit.name}</span></h2>
           {tutorial ? <Guide drafts={drafts} pact={pact} /> : <p class="lede">A Pact is a sacrifice written against your Technique. The more it costs you, the more it gives back.</p>}

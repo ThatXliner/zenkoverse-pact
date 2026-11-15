@@ -14,6 +14,6 @@ Every third-party asset in `public/assets/` is listed here with its source and l
 | Interface Sounds | Kenney | CC0 1.0 | https://kenney.nl/assets/interface-sounds | UI feedback. |
 | Digital Audio | Kenney | CC0 1.0 | https://kenney.nl/assets/digital-audio | Technique layers. |
 
-Typography is loaded from Google Fonts under the SIL Open Font License: Shippori Mincho B1, Zen Kaku Gothic New, and Inter.
+Typography is loaded from Google Fonts under the SIL Open Font License: Shippori Mincho B1, Zen Kaku Gothic New, Inter, and Yuji Syuku (the brush lettering).
 
 The compound itself (walls, hall, roofs, stair, bridge, ring, pond, lanterns, trees and hills), the cel-shading materials, the ink line effect, the sky, the ice, aura and shock-ring effects, the generated clothing shells, the hand poses and gestures, the wind bed, and all UI are original to this repository.

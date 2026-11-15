@@ -15,6 +15,7 @@
     "check:controls": "node tools/check-controls.mjs",
     "check:cutscenes": "node tools/check-cutscenes.mjs",
     "check:effects": "node tools/check-effects.mjs",
+    "check:hud": "node tools/check-hud.mjs",
     "check:keybinds": "node tools/check-keybinds.mjs",
     "check:locomotion": "node tools/check-locomotion.mjs",
     "check:multiplayer": "node tools/check-multiplayer.mjs",

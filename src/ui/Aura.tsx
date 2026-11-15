@@ -1,33 +1,46 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Game } from '../app/game';
 import { keyLabel } from '../app/keymap';
 import { auraUi, fieldWords } from '../combat/aura';
 import { clashUi, PICK_WORDS, TELL_WORDS, type ClashView } from '../combat/clash';
 import { PICKS, type Pick } from '../net/clash';
+import { drillUi } from '../drills/drills';
 import './aura.css';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 const pct = (x: number) => Math.round(x * 100);
 
 // The aura meter under the vitals: the pool or the open field's time, the
-// state in words, and refinement against its potential.
+// state in words, and refinement against its potential. Refinement only
+// changes at the listening stone, so its line shows during a drill and for
+// a while after it moves; the pause menu keeps it the rest of the time.
 export function AuraMeter() {
   const f = auraUi.field.value;
   const tr = auraUi.training.value;
+  const moved = useMoved(`${pct(tr.refinement)}|${pct(tr.potential)}`, 6000);
+  const showSub = moved || drillUi.active.value !== null;
   const w = fieldWords(f);
   const fill = f.state === 'open' ? f.left / Math.max(0.1, f.holds) : f.pool;
   const capped = tr.trained > tr.potential + 0.004;
   return (
     <div class={`aura-meter ${f.state} ${f.ended ?? ''}`} data-aura={f.state}>
-      <span class="lbl"><b class="jp">気</b> Aura · {w.state}</span>
+      <span class="lbl"><b class="jp">気</b><span class="w">Aura · {w.state}</span></span>
       <span class="val">{w.detail}</span>
       <div class="track"><i style={{ width: `${Math.max(0, Math.min(1, fill)) * 100}%` }} /><s style={{ left: `${pct(tr.potential)}%` }} /></div>
-      <span class="sub" title="Refinement sets how dense and strong your field is. Its potential falls as your Technique is broader and as you inscribe more Pacts.">
+      <span class={`sub ${showSub ? 'on' : ''}`} title="Refinement sets how dense and strong your field is. Its potential falls as your Technique is broader and as you inscribe more Pacts.">
         Refinement <b>{pct(tr.refinement)}</b> of potential <b>{pct(tr.potential)}</b>{capped ? ` · trained ${pct(tr.trained)}, held by potential` : ''}
       </span>
       {f.guardBroken && <span class="broken">Guard broken: blows land harder</span>}
     </div>
   );
+}
+
+// True for `ms` after `key` changes; false to begin with.
+function useMoved(key: string, ms: number): boolean {
+  const seen = useRef(false);
+  const [on, setOn] = useState(false);
+  useEffect(() => { if (!seen.current) { seen.current = true; return; } setOn(true); const t = setTimeout(() => setOn(false), ms); return () => clearTimeout(t); }, [key]);
+  return on;
 }
 
 const KEYS: Record<Pick, () => string> = {

@@ -100,7 +100,7 @@ export interface CutsceneView {
 }
 
 export interface AuraView {
-  state: string; pool: number; left: number; radius: number; density: number; ended: string | null; guardBroken: number;
+  state: string; pool: number; left: number; holds: number; radius: number; density: number; ended: string | null; guardBroken: number;
   refinement: number; trained: number; potential: number; breadth: number; pacts: number;
   clash: { stage: string | null; masterPick: string | null; view: unknown; log: unknown[] };
   hp: number; master: { hp: number; field: string; radius: number; ended: string | null; locked: number; guardBroken: number } | null;
@@ -201,7 +201,7 @@ export function installDebug(game: Game): void {
       const a = game.aura, f = a.field, t = game.techniqueId;
       const m = game.encounters.enemies.find((e) => e.field && !e.disposed);
       return {
-        state: f.state, pool: f.pool, left: f.left, radius: f.radius, density: f.density, ended: f.ended, guardBroken: a.guardBroken,
+        state: f.state, pool: f.pool, left: f.left, holds: f.holds, radius: f.radius, density: f.density, ended: f.ended, guardBroken: a.guardBroken,
         refinement: a.refinement(t), trained: game.mastery.get(t, 'refinement'), potential: a.potential(t), breadth: a.breadth(t), pacts: a.pacts(t),
         clash: { stage: a.clash.stage, masterPick: a.clash.masterPick, view: clashUi.value, log: a.clash.log.map((l) => ({ ...l })) },
         hp: game.combat.hp,

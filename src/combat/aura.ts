@@ -163,14 +163,14 @@ export class Aura {
     }
   }
 
-  // By choice: the field draws back in, calmly, and the pool starts from empty.
+  // By choice: the field draws back in, calmly, and keeps its unused time as pool.
   retract(): void {
     const g = this.game;
     if (!this.field.end('retracted')) return;
     const feet = g.player.position.clone().add(new THREE.Vector3(0, 0.08, 0));
     g.vfx.ring(feet, this.colorOf(null), this.field.radius, 0.3, 0.5);
     g.audio.play('aura.retract');
-    toast('Field retracted. Your aura refills from empty.');
+    toast(`Field retracted. Your aura refills from ${Math.round(this.field.pool * 100)}%.`);
   }
 
   // Forced: a lost clash crushes the field and breaks the guard for `guard` seconds.

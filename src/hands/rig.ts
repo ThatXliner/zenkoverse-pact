@@ -32,6 +32,9 @@ export interface Arm {
   upperLen: number;
   foreLen: number;
   parentRest: THREE.Quaternion;
+  // Takes the hand's frame to the forearm frame that leaves the wrist
+  // straight and untwisted, as the two stood in the T-pose.
+  wristRest: THREE.Quaternion;
   // Away from the body on this arm's side, and where the elbow bends toward:
   // out, down and back.
   outward: THREE.Vector3;
@@ -50,8 +53,12 @@ export interface ArmTarget {
 
 const MAX_CURL: Record<'finger' | 'thumb', [number, number, number]> = { finger: [1.5, 1.65, 0.95], thumb: [0.55, 0.95, 1.0] };
 const SPREAD: Record<Finger, number> = { thumb: 0, index: -1, middle: -0.2, ring: 0.5, pinky: 1.2 };
-// Fraction of the hand's roll the forearm takes, standing in for pronation.
-const FOREARM_TWIST = 0.55;
+// Share of the hand's roll the forearm takes from the elbow's hinge; the
+// wrist keeps the rest. Pronation lives in the forearm, so nearly all of it.
+const FOREARM_TWIST = 0.9;
+// How hard the elbow is pulled round behind the hand, against the arm's own
+// out-and-down hint.
+const SWIVEL = 1.2;
 
 // Measures both arms of a skeleton standing in its T-pose (its world
 // matrices current): each bone's rest frame, the bone lengths, and the
@@ -90,15 +97,17 @@ export function calibrateArms(bones: Map<string, THREE.Bone>): Record<Side, Arm>
       });
       tips[f] = b(leaf);
     }
+    const fore = aimed(`lowerarm_${side}`, wrist.clone().sub(elbow), elbowOut);
+    const hand = aimed(`hand_${side}`, fingerDir, palm.clone().negate());
     return {
       side,
       clavicle: aimed(`clavicle_${side}`, shoulder.clone().sub(clavicleRoot), UP),
       upper: aimed(`upperarm_${side}`, elbow.clone().sub(shoulder), elbowOut),
-      fore: aimed(`lowerarm_${side}`, wrist.clone().sub(elbow), elbowOut),
-      hand: aimed(`hand_${side}`, fingerDir, palm.clone().negate()),
+      fore, hand,
       clavicleRoot, clavicleLen: shoulder.distanceTo(clavicleRoot), shoulder,
       upperLen: elbow.distanceTo(shoulder), foreLen: wrist.distanceTo(elbow),
       parentRest: quat('spine_03'),
+      wristRest: hand.frameInv.clone().multiply(fore.frameInv.clone().invert()),
       outward, elbowHint: outward.clone().multiplyScalar(0.8).addScaledVector(UP, -1).addScaledVector(back, 0.3).normalize(),
       fingers, tips,
     };
@@ -169,7 +178,12 @@ export function solveArm(arm: Arm, t: ArmTarget): void {
   const dir = t.wrist.clone().sub(shoulder).normalize();
   const cosA = (arm.upperLen ** 2 + d * d - arm.foreLen ** 2) / (2 * arm.upperLen * d);
   const a = Math.acos(THREE.MathUtils.clamp(cosA, -1, 1));
-  const hint = arm.elbowHint;
+  // The elbow swings round behind the hand, so the forearm runs into the
+  // wrist along the hand's own line instead of meeting it at an angle. A
+  // hand aimed down lifts the elbow no higher than the arm's own hint.
+  const behind = new THREE.Vector3(0, 0, 1).applyQuaternion(t.hand);
+  behind.y = Math.min(behind.y, 0);
+  const hint = arm.elbowHint.clone().addScaledVector(behind, SWIVEL);
   const bend = hint.clone().addScaledVector(dir, -hint.dot(dir));
   if (bend.lengthSq() < 1e-6) bend.copy(arm.outward);
   bend.normalize();
@@ -177,12 +191,18 @@ export function solveArm(arm: Arm, t: ArmTarget): void {
   const upperQ = aim(arm.upper, elbow.clone().sub(shoulder), bend, clavQ);
 
   const handWorld = t.hand.clone().multiply(arm.hand.frameInv).multiply(arm.hand.rest);
-  const handUp = UP.clone().applyQuaternion(t.hand);
+  // The forearm takes the hand's roll (pronation and supination happen
+  // along it, not at the wrist): its up is the one that would leave the
+  // wrist untwisted, turned from the elbow's hinge by FOREARM_TWIST.
   const foreAxis = t.wrist.clone().sub(elbow).normalize();
-  const handUpPerp = handUp.clone().addScaledVector(foreAxis, -handUp.dot(foreAxis));
-  const foreUp = bend.clone().lerp(handUpPerp, handUpPerp.lengthSq() > 0.05 ? FOREARM_TWIST : 0);
-  if (foreUp.lengthSq() < 1e-4) foreUp.copy(bend);
-  const foreQ = aim(arm.fore, t.wrist.clone().sub(elbow), foreUp, upperQ);
+  const flat = (v: THREE.Vector3) => v.addScaledVector(foreAxis, -v.dot(foreAxis));
+  const untwisted = flat(UP.clone().applyQuaternion(t.hand.clone().multiply(arm.wristRest)));
+  const foreUp = flat(bend.clone());
+  if (untwisted.lengthSq() > 1e-4 && foreUp.lengthSq() > 1e-4) {
+    const roll = Math.atan2(new THREE.Vector3().crossVectors(foreUp, untwisted).dot(foreAxis), foreUp.dot(untwisted));
+    foreUp.applyAxisAngle(foreAxis, roll * FOREARM_TWIST);
+  }
+  const foreQ = aim(arm.fore, foreAxis, foreUp, upperQ);
   arm.hand.bone.quaternion.copy(foreQ).invert().multiply(handWorld);
 
   for (const f of FINGERS) {

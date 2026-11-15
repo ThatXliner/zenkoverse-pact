@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Drives the built game the way a player does, with real clicks and keys:
 // title, Technique select, the Workshop, inscribing, the dummy room, the
-// tutorial's Pact step, and then the whole tutorial from its first step to
-// its last in the default top-down view. Times the 30-second test from
+// tutorial's Pact step and its trade panel, hold-to-inscribe by keyboard, the
+// whole tutorial from its first step to its last in the default top-down
+// view (the clash step passes the field-reading drill by reading its cues),
+// and skipping a step. Times the 30-second test from
 // issue #29 ("Absorption, only from the front, while held") and fails on any
 // page error.
 // Usage: node tools/check-flow.mjs [url] [--url http://localhost:4173/] [--out captures/flow] [--port 4173]
@@ -152,7 +154,8 @@ await page.getByRole('button', { name: 'Begin at the Academy' }).click();
 check((await waitState('tutorial')) === 'tutorial', 'Begin at the Academy starts the tutorial');
 await page.evaluate(() => window.game.tutorialStep('pact'));
 await page.waitForTimeout(800);
-check((await page.locator('.objective .t').textContent()) === 'Your Pacts', `the card shows the Pact step: ${await page.locator('.objective .t').textContent()}`);
+check(/Write a Pact/.test(await page.locator('.objective .step').textContent()), `the card shows the Pact step: ${await page.locator('.objective .step').textContent()}`);
+check(/Give something up/.test(await page.locator('.objective .b').textContent()), `the card says why: ${await page.locator('.objective .b').textContent()}`);
 await shot('07-tutorial-pact-card');
 await page.keyboard.press('Tab');
 await page.locator('.ws-sheet').waitFor();
@@ -161,24 +164,43 @@ check(/New Pact/.test(await guide()), `guide step 1: ${await guide()}`);
 await page.locator('.ws-book .bk.new').click();
 check(/[Aa]dd a term/.test(await guide()), `guide step 2: ${await guide()}`);
 await shot('08-tutorial-workshop-guide');
-await page.locator('.opt', { hasText: 'Body' }).click();
-await shot('09-body-picker');
-await page.locator('.opt', { hasText: 'with both hands' }).click();
-check(/Inscribe/.test(await guide()), `guide step 3: ${await guide()}`);
-await page.getByRole('button', { name: 'Inscribe', exact: true }).click();
+await page.locator('.opt', { hasText: 'Trigger' }).click();
+await shot('09-trigger-picker');
+await page.locator('.opt', { hasText: 'only while standing still' }).click();
+check(/Try it/.test(await guide()), `guide step 3: ${await guide()}`);
 {
-  const hold = page.getByRole('button', { name: 'Hold to inscribe' });
-  const bb = await hold.boundingBox();
-  await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2);
-  await page.mouse.down();
-  await page.waitForTimeout(1500);
-  await page.mouse.up();
+  // The trade reads both ways: the term and what it takes from you, and what the Pact pays back.
+  const give = await page.locator('.ws-trade .give').innerText();
+  const get = await page.locator('.ws-trade .get').innerText();
+  check(/only while standing still/.test(give) && /casting on the move/.test(give), `the cost names the term and what it takes: ${give.replace(/\s+/g, ' ').slice(0, 90)}`);
+  const times = Number((/×(\d+\.\d)/.exec(get) ?? [])[1]);
+  check(times > 1, `it pays back more than the raw Technique: ×${times}`);
+  check(/Raw Recoil/.test(get) && /Kinetic Release \(on that key now\)/.test(get), 'the payback compares the raw Technique and the Pact on that key now');
 }
-await page.keyboard.press('Escape');
+await shot('09b-trade');
+await page.getByRole('button', { name: 'Try it on the dummies' }).click();
 await page.waitForFunction(() => window.game.game.tutorial.stepId === 'wager', null, { timeout: 8000 }).catch(() => undefined);
-check((await state()) === 'tutorial', 'closing the Workshop keeps the tutorial running');
-check((await page.evaluate(() => window.game.game.tutorial.stepId)) === 'wager', 'the Pact step completes and the tutorial moves to Wager');
+check((await state()) === 'tutorial', 'trying the draft keeps the tutorial running');
+check((await page.evaluate(() => window.game.game.tutorial.stepId)) === 'wager', 'trying a draft with a term completes the Pact step');
+check((await page.evaluate(() => window.game.game.encounters.enemies.length)) > 0, 'the dummies stand ready for the Wager step');
 await shot('10-tutorial-after-pact');
+
+console.log('hold to inscribe works from the keyboard');
+await page.keyboard.press('Tab');
+await page.locator('.ws-sheet').waitFor();
+await page.locator('.ws-book .bk', { hasText: 'New Pact' }).first().click();
+await page.getByRole('button', { name: 'Inscribe', exact: true }).click();
+await page.locator('.confirm .hold').waitFor();
+check(await page.waitForFunction(() => document.activeElement?.classList.contains('hold'), null, { timeout: 2000 }).then(() => true, () => false), 'the confirm opens on the hold button');
+await page.keyboard.down('Enter');
+await page.waitForTimeout(400);
+await page.keyboard.up('Enter');
+check(!(await book()).inscribed.some((p) => p.name === 'New Pact'), 'letting go early does not inscribe');
+await page.keyboard.down('Enter');
+await page.waitForTimeout(1500);
+await page.keyboard.up('Enter');
+check((await book()).inscribed.some((p) => p.name === 'New Pact'), 'holding Enter inscribes');
+await page.keyboard.press('Escape');
 
 console.log('the whole tutorial, start to finish, in the top-down view');
 await page.evaluate(() => localStorage.clear());
@@ -190,23 +212,30 @@ check((await waitState('tutorial')) === 'tutorial', 'the tutorial starts');
 const stepId = () => page.evaluate(() => window.game.game.tutorial.stepId);
 // A step turns over 0.6 s after its objective is met, while the cast that met it may still be in flight; the pause before the next input is a player reading the card.
 const untilStep = async (id, ms = 9000) => { const ok = await page.waitForFunction((s) => window.game.game.tutorial.stepId === s, id, { timeout: ms }).then(() => true, () => false); check(ok, `the tutorial reaches "${id}" (at "${await stepId()}")`); await page.waitForTimeout(700); return ok; };
+// Walks with the movement keys toward a point in the top-down view, where W is north and D is east.
+const walkTo = async (x, z, near = 0.7) => {
+  const held = new Set();
+  const want = async (key, on) => {
+    if (on && !held.has(key)) { held.add(key); await page.keyboard.down(key); }
+    if (!on && held.has(key)) { held.delete(key); await page.keyboard.up(key); }
+  };
+  for (let i = 0; i < 160; i++) {
+    const [px, , pz] = await page.evaluate(() => window.game.game.player.position.toArray());
+    const dx = x - px, dz = z - pz;
+    if (Math.hypot(dx, dz) < near) break;
+    await want('KeyD', dx > 0.3); await want('KeyA', dx < -0.3); await want('KeyS', dz > 0.3); await want('KeyW', dz < -0.3);
+    await page.waitForTimeout(50);
+  }
+  for (const k of [...held]) await page.keyboard.up(k);
+};
 check((await page.evaluate(() => window.game.game.cam.mode)) === 'top', 'a fresh player starts in the top-down view');
 check((await stepId()) === 'move', 'step 1 is Move');
+await shot('11-tutorial-move');
 await page.waitForTimeout(800);
-// Move: W is up the screen in the top-down view.
-await page.keyboard.down('KeyW');
-await page.waitForTimeout(1800);
-await page.keyboard.up('KeyW');
-await untilStep('look');
-// Aim: the cursor turns the body.
-await page.mouse.move(640, 360);
-await page.waitForTimeout(400);
-await page.mouse.move(1180, 420, { steps: 12 });
-await page.waitForTimeout(400);
-await page.mouse.move(120, 300, { steps: 12 });
-await page.waitForTimeout(400);
+const spot = await page.evaluate(() => window.game.game.nav.target.value?.position.toArray());
+check(!!spot, 'the Move step marks a spot on the compass');
+await walkTo(spot[0], spot[2]);
 await untilStep('camera');
-await shot('11-tutorial-aim-done');
 // Camera: V cycles the view; cycle all the way back to the top-down view.
 await page.keyboard.press('KeyV');
 await untilStep('primary');
@@ -215,24 +244,71 @@ await page.keyboard.press('KeyV'); await page.waitForTimeout(200); await page.ke
 check((await page.evaluate(() => window.game.game.cam.mode)) === 'top', 'two more presses come back to the top-down view');
 await page.mouse.move(640, 300);
 await clickCanvas('left');
-await untilStep('secondary');
-await clickCanvas('right', 500);
+await untilStep('reserve');
+// Reserve: aim just ahead and hold Absorption while the crate drops into it.
+await page.mouse.move(640, 250);
+await page.waitForTimeout(300);
+await page.mouse.down({ button: 'right' });
+await page.waitForFunction(() => window.game.game.tutorial.stepId !== 'reserve', null, { timeout: 9000 }).catch(() => undefined);
+await page.mouse.up({ button: 'right' });
+await untilStep('sign');
+await shot('12-tutorial-sign');
+// The hand sign: Alt, wait for the prime, then strike.
+await page.keyboard.press('AltLeft');
+await page.waitForFunction(() => window.game.sign().kind === 'primed', null, { timeout: 4000 }).catch(() => undefined);
+await clickCanvas('left');
 await untilStep('art');
 await page.keyboard.press('Digit1');
-await untilStep('pact');
+await untilStep('aura');
+await page.keyboard.press('KeyF');
+await untilStep('clash');
+await shot('13-tutorial-clash');
+// The clash step is the field-reading drill, passed by reading the cue and answering it.
+const stand = await page.evaluate(() => window.game.game.nav.target.value?.position.toArray());
+await walkTo(stand[0], stand[2], 0.8);
+await page.keyboard.press('KeyE');
+check((await waitState('drill')) === 'drill', 'E at the stone opens the drill');
+await page.waitForTimeout(400);
+await page.keyboard.press('KeyE');
+const ANSWER = { 'It swells toward you!': 'KeyA', 'It draws tight!': 'KeyW', 'Its far side flickers!': 'KeyS' };
+let last = '';
+for (let i = 0; i < 600 && (await state()) === 'drill'; i++) {
+  const cue = await page.evaluate(() => document.querySelector('.drill-hud .cue')?.textContent ?? '');
+  if (ANSWER[cue] && cue !== last) await page.keyboard.press(ANSWER[cue]);
+  last = cue;
+  await page.waitForTimeout(40);
+}
+await untilStep('pact', 6000);
 await page.keyboard.press('Tab');
 await page.locator('.ws-sheet').waitFor();
-await page.keyboard.press('Escape');
+await page.locator('.ws-book .bk.new').click();
+await page.locator('.opt', { hasText: 'Trigger' }).click();
+await page.locator('.opt', { hasText: 'only with feet on the ground' }).click();
+await page.getByRole('button', { name: 'Try it on the dummies' }).click();
 await untilStep('wager');
 await page.keyboard.press('KeyR');
 await untilStep('max');
-await shot('12-tutorial-max');
+await shot('14-tutorial-max');
 await page.keyboard.press('KeyQ');
 await untilStep('done', 14000);
 check((await state()) === 'tutorial' || (await state()) === 'cinematic', `the last card shows (state ${await state()})`);
-await shot('13-tutorial-done');
+await shot('15-tutorial-done');
 await page.waitForFunction(() => window.game.state() === 'explore', null, { timeout: 14000 }).catch(() => undefined);
 check((await state()) === 'explore', 'the tutorial hands over to free play');
+
+console.log('every step can be skipped');
+await page.evaluate(() => window.game.game.startRun());
+await waitState('tutorial');
+await page.waitForTimeout(300);
+for (const id of ['move', 'camera', 'primary']) {
+  check((await stepId()) === id, `at "${id}"`);
+  await page.keyboard.press('Backspace');
+  await page.waitForTimeout(250);
+}
+check((await stepId()) === 'reserve', `Backspace skips one step at a time (at "${await stepId()}")`);
+await page.locator('.objective .skip-step').click();
+await page.waitForTimeout(250);
+check((await stepId()) === 'sign', 'the skip line on the card skips by click too');
 
 const pageErrors = await page.evaluate(() => window.game.errors);
 errors.push(...pageErrors.map((e) => `window: ${e}`));

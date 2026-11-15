@@ -55,7 +55,12 @@ body.top-view .hud { cursor: none; }
 
 .objective { --bar: var(--accent); }
 .objective .step b { color: var(--paper-ink); }
+/* One line to act on, and the way past it. */
+.objective .b { font-size: 15px; font-weight: 600; line-height: 1.45; }
 .objective .foot { margin-top: 3px; font-size: 11px; letter-spacing: 0.04em; color: var(--paper-mute); }
+.hud .objective .skip-step { pointer-events: auto; justify-self: start; display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; font-family: var(--sans); cursor: pointer; }
+.objective .skip-step kbd { font-family: var(--sans); font-size: 10px; font-weight: 700; padding: 1px 5px; color: var(--paper-ink); border: 1.5px solid var(--ink-line); border-radius: 2px; background: var(--paper); }
+.objective .skip-step:hover { color: var(--paper-ink); }
 
 .plaque { --bar: var(--ice); }
 .plaque .b { font-size: 13px; }
@@ -207,4 +212,7 @@ body.top-view .hud { cursor: none; }
   .boss .n { font-size: 16px; letter-spacing: 0.08em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .cap { max-width: 420px; }
   .vitals { width: min(46vw, 200px); }
+  /* The field sits just above the student, under the panel: once the drill
+     runs, the panel keeps only the score and the cue. */
+  .drill-hud.running ul { display: none; }
 }

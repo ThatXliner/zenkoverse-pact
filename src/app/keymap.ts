@@ -8,7 +8,7 @@ import { KEY_SLOTS, slotDef, type KeySlot } from '../pacts/slots';
 
 export type Action =
   | 'forward' | 'back' | 'left' | 'right' | 'sprint' | 'jump' | 'dash'
-  | 'wager' | 'aura' | 'fullsign' | 'interact' | 'camera' | 'map' | 'workshop' | 'pause'
+  | 'wager' | 'aura' | 'fullsign' | 'interact' | 'camera' | 'map' | 'workshop' | 'skip' | 'pause'
   | KeySlot;
 export type Code = string;
 export type Group = 'move' | 'ability' | 'combat' | 'interface';
@@ -34,6 +34,7 @@ export const ACTIONS: readonly ActionDef[] = [
   { id: 'camera', label: 'Camera view', group: 'interface', defaults: ['KeyV'] },
   { id: 'map', label: 'Map', group: 'interface', defaults: ['KeyM'] },
   { id: 'workshop', label: 'Pact Workshop', group: 'interface', defaults: ['Tab'] },
+  { id: 'skip', label: 'Skip a tutorial step', group: 'interface', defaults: ['Backspace'] },
   { id: 'pause', label: 'Pause and close', group: 'interface', defaults: ['Escape'], fixed: true },
 ];
 const DEF = new Map<Action, ActionDef>(ACTIONS.map((a) => [a.id, a]));

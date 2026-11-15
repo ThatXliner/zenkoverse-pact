@@ -36,6 +36,8 @@ export type SignState =
   | { kind: 'signing'; t: number; duration: number }
   | { kind: 'primed'; left: number };
 const SIGN_IDLE: SignState = { kind: 'idle' };
+// The Resolve-driven potency of the raw Technique: "if I will activation, activate."
+const RAW_POTENCY = 0.22;
 
 // What the HUD shows for a key: the Ability's name, a few words on what it
 // does, how it is cast, and whether it is the raw Technique, a draft being
@@ -200,10 +202,13 @@ export class Techniques {
     return { resource: max * base * eff, health: 0, strain: 0 };
   }
 
+  // How hard a cast hits, from the Pact's Resolve and trained Output. The raw
+  // Technique runs on the conscious-will Pact; a Pact that gives up less than
+  // that is no weaker than it, since it still asks for at least as much.
   potency(pact: Pact | null): number {
     const g = this.game;
     const mastery = g.mastery.get(this.def.id, 'output');
-    const base = pact ? g.book.estimate(pact).potency : 0.22;
+    const base = Math.max(RAW_POTENCY, pact ? g.book.estimate(pact).potency : 0);
     return THREE.MathUtils.clamp(0.25 + base * 0.75 + mastery * 0.35, 0.2, 1.6);
   }
 

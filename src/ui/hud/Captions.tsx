@@ -39,14 +39,13 @@ export function Captions({ game }: { game: Game }) {
       {drill && <DrillCaption drill={drill} />}
       {tut && !drill && (
         <div class="cap objective" key={tut.id}>
-          <span class="step"><b>{tut.index}</b> / {tut.total} · <span class="jp">{tut.jp}</span></span>
-          <span class="t">{tut.title}</span>
+          <span class="step">{tut.id !== 'done' && <><b>{tut.index}</b> / {tut.total} · </>}<span class="jp">{tut.jp}</span> · {tut.title}</span>
           <span class="b">{tut.body()}</span>
-          <span class="foot">{keyLabel('pause')} pauses · skip the tutorial from there</span>
+          {tut.id !== 'done' && <button class="foot skip-step" onClick={() => game.tutorial.skipStep()}><kbd>{keyLabel('skip')}</kbd> skip this step · {keyLabel('pause')} menu</button>}
         </div>
       )}
-      {t && !fighting && (
-        <div class={`cap tracker ${tut ? 'minor' : ''}`} key={t.title}>
+      {t && !fighting && !tut && (
+        <div class="cap tracker" key={t.title}>
           <span class="kicker"><b class="gem" />{SOURCE[t.source]}</span>
           <span class="tr-title">{t.title}</span>
           <span class="tr-sub">{t.subtitle}</span>

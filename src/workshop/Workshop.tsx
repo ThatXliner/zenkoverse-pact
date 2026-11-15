@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'preact/hooks';
+import { useState, useMemo, useRef, useEffect } from 'preact/hooks';
 import { useSheetKeys } from '../ui/useSheetKeys';
 import { signal } from '@preact/signals';
 import type { Game } from '../app/game';
@@ -43,7 +43,6 @@ export function Workshop({ game }: { game: Game }) {
   const [focus, setFocus] = useState<Focus>(null);
   const [confirm, setConfirm] = useState(false);
   const [moveTo, setMoveTo] = useState<AbilitySlot | null>(null);
-  const [hold, setHold] = useState(0);
   const est = useMemo(() => (pact ? book.estimate(pact) : null), [pact, inscribed.length, book.bindings.value]);
   const valid = pact ? validatePact(pact, kit.shapes) : { ok: false, errors: [] };
   const shapeLabel = (s: string) => kit.shapes[s]?.label ?? s;
@@ -77,10 +76,13 @@ export function Workshop({ game }: { game: Game }) {
     if (!pact) return;
     const r = book.inscribe(pact, kit.shapes);
     if (!r.ok) { toast(r.errors[0] ?? 'Invalid Pact', 'bad'); return; }
+    game.tutorial.notify('inscribed');
     game.audio.play('ui.inscribe');
     toast(`${pact.name} is inscribed and bound to ${slotWords(pact.slot)}.`, 'good');
     setConfirm(false);
   };
+  // Trying a draft that gives something up is the tutorial's Pact step.
+  const tryIt = (p: Pact) => { if (restrictions(p).length) game.tutorial.notify('tried'); game.tryDraft(p); };
   const counted = pact ? book.counted(pact) : new Map<string, string>();
   const weigh = (param: Param) => (value: string) => lineFor({ param, value } as Restriction, counted, book.telemetry);
   const boundTo = (p: Pact) => p.slot !== 'passive' && book.binding(p.slot) === p.id;
@@ -105,7 +107,7 @@ export function Workshop({ game }: { game: Game }) {
       <div class="sheet ws-sheet" role="dialog" aria-label="Pact Workshop" ref={sheet}>
         <header>
           <h2><span class="jp">契約の工房</span><span class="en">Pact Workshop · {kit.name}</span></h2>
-          {tutorial ? <Guide drafts={drafts} pact={pact} /> : <p class="lede">A Pact is a sacrifice written against your Technique. The more it costs you, the more it gives back.</p>}
+          {tutorial ? <Guide drafts={drafts} pact={pact} /> : <p class="lede">A Pact is a restriction you write onto your Technique. What it costs you, it pays back.</p>}
         </header>
         <div class="body">
           <div class="ws">
@@ -198,7 +200,7 @@ export function Workshop({ game }: { game: Game }) {
                       {focus.kind === 'clause' && pact.clauses[focus.index] && <ClausePanel c={pact.clauses[focus.index]!} restricted={restrictions(pact).map((r) => r.param)} onChange={(c) => setClause(focus.index, c)} onRemove={() => removeClause(focus.index)} />}
                     </div>
                   )}
-                  <ResolveBar est={est} onFocus={(f) => isDraft && setFocus(f)} />
+                  <Trade est={est} power={power(game, pact)} kit={kit.name} onFocus={(f) => isDraft && setFocus(f)} />
                   {!valid.ok && <p class="ws-error">{valid.errors[0]}</p>}
                 </>
               ) : <p class="ws-empty">Pick a Pact from the list, or write a new one.</p>}
@@ -210,8 +212,8 @@ export function Workshop({ game }: { game: Game }) {
           {pact && isDraft && (
             <div class="actions">
               <button class="btn quiet" onClick={() => { book.deleteDraft(pact.id); selectedId.value = null; }}>Discard draft</button>
-              <button class="btn" disabled={!valid.ok} onClick={() => game.tryDraft(pact)}>Try it on the dummies</button>
-              <button class="btn primary" disabled={!valid.ok} onClick={() => setConfirm(true)}>Inscribe</button>
+              <button class={`btn ${tutorial && restrictions(pact).length ? 'primary pulse' : ''}`} disabled={!valid.ok} onClick={() => tryIt(pact)}>Try it on the dummies</button>
+              <button class={`btn ${tutorial ? '' : 'primary'}`} disabled={!valid.ok} onClick={() => setConfirm(true)}>Inscribe</button>
             </div>
           )}
           {pact && !isDraft && (
@@ -225,14 +227,14 @@ export function Workshop({ game }: { game: Game }) {
         </footer>
       </div>
       {confirm && pact && (
-        <div class="confirm" onMouseUp={() => setHold(0)}>
-          <div class="box">
+        <div class="confirm">
+          <div class="box" role="alertdialog" aria-label={`Inscribe ${pact.name}`}>
             <h3>Inscribe "{pact.name}"?</h3>
             <p>{readback(pact, shapeLabel, behaviorLabel)}</p>
-            <p>This is permanent for this save. Hold the button to confirm.</p>
-            <div style="display:flex;gap:8px;justify-content:flex-end">
+            <p>This is permanent for this save. Hold the button, or hold Enter on it, to confirm.</p>
+            <div class="acts">
               <button class="btn" onClick={() => setConfirm(false)}>Not yet</button>
-              <button class="btn danger hold" onMouseDown={() => { const t0 = Date.now(); const iv = setInterval(() => { const f = Math.min(1, (Date.now() - t0) / 1100); setHold(f); if (f >= 1) { clearInterval(iv); inscribe(); } }, 30); const stop = () => { clearInterval(iv); setHold(0); window.removeEventListener('mouseup', stop); }; window.addEventListener('mouseup', stop); }}><i style={{ width: `${hold * 100}%` }} />Hold to inscribe</button>
+              <HoldButton label="Hold to inscribe" onDone={inscribe} />
             </div>
           </div>
         </div>
@@ -258,7 +260,7 @@ function PanelHead({ title, hint, onRemove, onBack }: { title: string; hint: str
 function Guide({ drafts, pact }: { drafts: Pact[]; pact: Pact | null }) {
   const draft = pact && !pact.inscribed ? pact : drafts[0] ?? null;
   const step = !draft ? 0 : restrictions(draft).length === 0 ? 1 : 2;
-  const steps = ['Choose + New Pact', 'Add a term: what you give up', 'Read it, then hold Inscribe'];
+  const steps = ['+ New Pact', 'Add a term: what you give up', 'Try it on the dummies'];
   return (
     <ol class="ws-guide" aria-label="Tutorial">
       {steps.map((s, i) => <li key={i} class={i < step ? 'done' : i === step ? 'now' : ''}><b>{i + 1}</b>{s}</li>)}
@@ -291,27 +293,92 @@ function ClausePanel({ c, restricted, onChange, onRemove }: { c: Clause; restric
   </>;
 }
 
-// One read of the whole Pact: a bar whose length is what the universe gives
-// back, split by what each term paid for it.
-function ResolveBar({ est, onFocus }: { est: ResolveEstimate; onFocus: (f: ReadbackFocus) => void }) {
+// What the Pact would hit with, against the raw Technique and against the
+// Pact it would replace on its key. `potency` is the engine's own number.
+interface Power { pact: number; raw: number; holder: { name: string; value: number } | null }
+function power(game: Game, pact: Pact): Power {
+  const t = game.techniques;
+  const held = pact.slot !== 'passive' ? game.book.bound(pact.slot) : null;
+  return { pact: t.potency(pact), raw: t.potency(null), holder: held && held.id !== pact.id ? { name: held.name, value: t.potency(held) } : null };
+}
+
+// The trade, both sides at once: what each term takes from you, in the
+// words of what you can no longer do, and what the whole Pact pays back.
+// The Resolve bar on the left is split by term; the bars on the right are
+// the strength of a cast with this Pact, the raw Technique, and whatever
+// holds the key now.
+function Trade({ est, power: p, kit, onFocus }: { est: ResolveEstimate; power: Power; kit: string; onFocus: (f: ReadbackFocus) => void }) {
   const paid = est.lines.reduce((a, l) => a + Math.max(0, l.value), 0) || 1;
+  const top = Math.max(p.pact, p.raw, p.holder?.value ?? 0);
+  const times = (v: number) => `×${(v / p.raw).toFixed(1)}`;
+  const rows: { label: string; value: number; me?: boolean }[] = [
+    { label: 'This Pact', value: p.pact, me: true },
+    ...(p.holder ? [{ label: `${p.holder.name} (on that key now)`, value: p.holder.value }] : []),
+    { label: `Raw ${kit}`, value: p.raw },
+  ];
   return (
-    <div class="ws-resolve">
-      <div class="top">
-        <span class="t">Resolve</span>
+    <div class="ws-trade">
+      <section class="give" aria-label="What it costs you">
+        <header><span class="t">It costs you</span><span class="read">{est.read}</span></header>
         <div class="rbar" role="img" aria-label={`Resolve ${est.read}, ${est.total.toFixed(1)}`}>
-          {est.lines.map((l, i) => l.value > 0 && <i key={i} style={{ width: `${(l.value / paid) * est.potency * 100}%`, background: PARAM_COLOR[l.param ?? 'clause'] }} title={`${l.label} +${l.value.toFixed(1)}: ${l.reason}`} />)}
+          {est.lines.map((l, i) => l.value > 0 && <i key={i} style={{ width: `${(l.value / paid) * est.potency * 100}%`, background: PARAM_COLOR[l.param ?? 'clause'] }} />)}
         </div>
-        <span class="read">{est.read}</span>
-      </div>
-      <div class="legend">
-        {est.lines.length === 0 && <span class="none">No sacrifice yet, so the universe gives nothing beyond the raw Technique.</span>}
-        {est.lines.map((l, i) => (
-          <button key={i} class={`lg ${l.zero ? 'zero' : ''}`} disabled={!l.param} onClick={() => l.param && onFocus({ kind: 'term', param: l.param })} title={l.reason}>
-            <i style={{ background: PARAM_COLOR[l.param ?? 'clause'] }} /><span>{l.label}</span>{l.value < 0 ? <span class="w">{l.value.toFixed(1)}</span> : <Worth line={l} />}
-          </button>
-        ))}
-      </div>
+        {est.lines.length === 0
+          ? <p class="none">Nothing yet, so it pays back nothing. Add a term: what will you give up?</p>
+          : <ul class="legend">{est.lines.map((l, i) => (
+            <li key={i}>
+              <button class={`lg ${l.zero ? 'zero' : ''}`} disabled={!l.param} onClick={() => l.param && onFocus({ kind: 'term', param: l.param })}>
+                <i style={{ background: PARAM_COLOR[l.param ?? 'clause'] }} /><span class="l">{l.label}</span>{l.value < 0 ? <span class="w">{l.value.toFixed(1)}</span> : <Worth line={l} />}
+              </button>
+              <span class="why">{l.reason}</span>
+            </li>
+          ))}</ul>}
+      </section>
+      <section class="get" aria-label="What it pays back">
+        <header><span class="t">It pays back</span><span class="read">{times(p.pact)}</span></header>
+        <ul class="power">{rows.map((r) => (
+          <li key={r.label} class={r.me ? 'me' : ''}>
+            <span class="l">{r.label}</span>
+            <span class="bar"><i style={{ width: `${(r.value / top) * 100}%` }} /></span>
+            <span class="v">{times(r.value)}</span>
+          </li>
+        ))}</ul>
+        <p class="note">Every hit, push and catch this key makes scales with it.</p>
+      </section>
     </div>
+  );
+}
+
+// A button that acts only once it has been held down: by pointer, by touch,
+// or by Enter or Space while it has focus. Letting go early cancels.
+function HoldButton({ label, onDone, ms = 1100 }: { label: string; onDone: () => void; ms?: number }) {
+  const [f, setF] = useState(0);
+  const run = useRef<{ t0: number; raf: number } | null>(null);
+  const stop = () => { if (run.current) cancelAnimationFrame(run.current.raf); run.current = null; setF(0); };
+  const start = () => {
+    if (run.current) return;
+    const t0 = performance.now();
+    const tick = () => {
+      const k = Math.min(1, (performance.now() - t0) / ms);
+      setF(k);
+      if (k >= 1) { run.current = null; onDone(); return; }
+      run.current = { t0, raf: requestAnimationFrame(tick) };
+    };
+    run.current = { t0, raf: requestAnimationFrame(tick) };
+  };
+  const el = useRef<HTMLButtonElement>(null);
+  // The dialog opens on this button, so Enter can be held at once.
+  useEffect(() => { el.current?.focus({ preventScroll: true }); return stop; }, []);
+  const key = (e: KeyboardEvent) => e.key === 'Enter' || e.key === ' ';
+  return (
+    <button class="btn danger hold" ref={el}
+      onPointerDown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); start(); }}
+      onPointerUp={stop} onPointerCancel={stop} onPointerLeave={stop}
+      onKeyDown={(e) => { if (key(e)) { e.preventDefault(); if (!e.repeat) start(); } }}
+      onKeyUp={(e) => { if (key(e)) stop(); }}
+      onBlur={stop}
+      onClick={(e) => e.preventDefault()}>
+      <i style={{ width: `${f * 100}%` }} />{label}
+    </button>
   );
 }

@@ -54,7 +54,7 @@ export class EmptySight implements Sight {
       const r = e.isBoss ? 1.05 : 0.72;
       const seen = this.through(e, me);
       const keep = (Math.PI - GAP) * (1 - gd.open);
-      if (keep > 0.05) gd.mark.set(e.position, { inner: r - 0.07, outer: r, fill: 0.55, line: 0.022 }, seen ? 0.95 : 0.7, e.yaw, keep);
+      if (keep > 0.05) gd.mark.set(e.position, { inner: r - 0.1, outer: r, fill: 0.7, line: 0.025 }, seen ? 1 : 0.8, e.yaw, keep);
       else {
         // Nothing left of the guard: only its outline, broken.
         gd.mark.set(e.position, { inner: r - 0.02, outer: r, line: 0.015, dash: 9 }, 0.55, 0);

@@ -19,8 +19,8 @@ function glint(side: number): THREE.BufferGeometry {
     const base = pts.length / 3;
     for (let i = 0; i <= N; i++) {
       const t = i / N;
-      const x = side * (0.045 + t * 0.15), y = 0.004 + t * 0.03, z = -0.02 + t * 0.15;
-      const w = 0.013 * (1 - t) ** 1.4 + 0.0015;
+      const x = side * (0.05 + t * 0.14), y = 0.006 + t * 0.02, z = -0.01 + t * 0.1;
+      const w = 0.011 * (1 - t) ** 1.2 + 0.0015;
       if (upright) pts.push(x, y - w, z, x, y + w, z);
       else pts.push(x - side * w * 0.4, y, z - w, x + side * w * 0.4, y, z + w);
       if (i < N) { const a = base + i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
@@ -32,7 +32,7 @@ function glint(side: number): THREE.BufferGeometry {
   return g;
 }
 
-const IRIS = new THREE.CircleGeometry(0.0185, 18);
+const IRIS = new THREE.CircleGeometry(0.016, 18);
 const GLINT = { left: glint(-1), right: glint(1) };
 
 export class EyeMark {

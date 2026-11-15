@@ -24,8 +24,8 @@ export interface EyeDef {
 // filaments, Empty's pale violet, Vault's brass.
 export const EYES: Record<EyeId, EyeDef> = {
   horizon: { name: 'Horizon Eye', jp: '地平', color: 0xffc94a, text: 'Perceives the futures that can be reached from now.', rule: 'Shows the blows that can come in the next second, before anyone commits to them. A blow you saw coming and stepped out of leaves its thrower open.' },
-  thread: { name: 'Thread Eye', jp: '糸', color: 0x6f8cff, text: 'Perceives relationships, dependencies and causes.', rule: 'Shows who leans on whom. A blow to an anchor runs down every thread to the bodies tied to it; while the anchor stands, they are harder to hurt.' },
-  empty: { name: 'Empty Eye', jp: '空', color: 0xc6b3f2, text: 'Perceives absence, concealment and what is held back.', rule: 'Shows the gap in each guard, and what is about to arrive before it does. A blow through the gap lands harder and staggers.' },
+  thread: { name: 'Thread Eye', jp: '糸', color: 0x7b97ff, text: 'Perceives relationships, dependencies and causes.', rule: 'Shows who leans on whom. A blow to an anchor runs down every thread to the bodies tied to it; while the anchor stands, they are harder to hurt.' },
+  empty: { name: 'Empty Eye', jp: '空', color: 0xcdb8ff, text: 'Perceives absence, concealment and what is held back.', rule: 'Shows the gap in each guard, and what is about to arrive before it does. A blow through the gap lands harder and staggers.' },
   vault: { name: 'Vault Eye', jp: '庫', color: 0xd9b25e, text: 'Houses one transferred foreign Technique. Never a copy.', rule: 'Holds another Technique, cast on its own key with its own cooldown. Rougher than your own: it aims loosely.' },
   covenant: { name: 'Covenant Eye', jp: '盟', color: 0xe9e3ff, text: 'A binding vow, enforced by the universe, between several willing people.', rule: 'It cannot be installed alone.', locked: true },
 };

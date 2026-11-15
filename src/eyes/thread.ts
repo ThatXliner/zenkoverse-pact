@@ -116,7 +116,7 @@ export class ThreadSight implements Sight {
       anchors.add(t.anchor);
       const lit = focus === t.anchor;
       const carry = this.carries.find((c) => c.dep === e);
-      t.strand.set(t.anchor.center(), e.center(), cam, lit ? 0.07 : 0.045, lit ? 0.9 : 0.5, 0.35, carry ? carry.t / TRAVEL : -1);
+      t.strand.set(t.anchor.center(), e.center(), cam, lit ? 0.09 : 0.06, lit ? 0.95 : 0.7, 0.35, carry ? carry.t / TRAVEL : -1);
     }
     for (const a of anchors) {
       let k = this.knots.get(a);

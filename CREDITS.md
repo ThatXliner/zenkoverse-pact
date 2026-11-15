@@ -22,6 +22,6 @@ Every recording in `public/assets/audio/sounds.pack`, by the Kenney pack (CC0 1.
 - Interface Sounds (https://kenney.nl/assets/interface-sounds): click_002, click_003, select_001, select_002, select_003, confirmation_001, confirmation_002, error_004, error_006, open_001, close_001, tick_001, tick_002, question_002, glass_002, pluck_001, bong_001, glitch_001, switch_002.
 - Digital Audio (https://kenney.nl/assets/digital-audio): phaseJump3, powerUp9, zapTwoTone, lowDown, spaceTrash1.
 
-Typography is loaded from Google Fonts under the SIL Open Font License: Shippori Mincho B1, Zen Kaku Gothic New, and Inter.
+Typography is loaded from Google Fonts under the SIL Open Font License: Shippori Mincho B1, Zen Kaku Gothic New, Inter, and Yuji Syuku (the brush lettering).
 
 The compound itself (walls, hall, roofs, stair, bridge, ring, pond, lanterns, trees and hills), the cel-shading materials, the ink line effect, the sky, the ice, aura and shock-ring effects, the generated clothing shells, the hand poses and gestures, all UI, and every synthesized sound (the ambience beds, the music, and the whooshes, risers, booms and shimmers layered into the Techniques, src/audio) are original to this repository.

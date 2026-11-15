@@ -83,6 +83,14 @@ function Gem({ x, z }: { x: number; z: number }) {
   return <g class="m-gem" transform={`translate(${x} ${z})`}><path d="M0 -2 L1.5 0 L0 2 L-1.5 0 Z" /></g>;
 }
 
+// A name near the map's side reads inward, so it is not cut off at the edge.
+const EDGE = 12;
+function nameAnchor(x: number): { x: number; 'text-anchor': 'start' | 'middle' | 'end' } {
+  if (x > HALF_X - EDGE) return { x: 8, 'text-anchor': 'end' };
+  if (x < -HALF_X + EDGE) return { x: -8, 'text-anchor': 'start' };
+  return { x: 0, 'text-anchor': 'middle' };
+}
+
 function PoiIcon({ poi, unlocked, tracked, selected, onPick }: { poi: Poi; unlocked: boolean; tracked: boolean; selected: boolean; onPick: (e: Event) => void }) {
   return (
     <g class={`m-poi ${unlocked ? 'unlocked' : ''} ${tracked ? 'tracked' : ''} ${selected ? 'selected' : ''}`} data-map-poi={poi.id} transform={`translate(${poi.at.x} ${poi.at.z}) scale(0.5)`} role="button" tabIndex={0} aria-label={poi.name} onClick={onPick} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onPick(e); }}>
@@ -90,7 +98,7 @@ function PoiIcon({ poi, unlocked, tracked, selected, onPick }: { poi: Poi; unloc
       <circle class="ring" r={5.6} />
       <circle class="face" r={4.4} />
       <text class="glyph" y={1.9} text-anchor="middle">{poi.glyph}</text>
-      <text class="name" y={10.6} text-anchor="middle">{poi.name}</text>
+      <text class="name" y={10.6} {...nameAnchor(poi.at.x)}>{poi.name}</text>
       {tracked && <path class="gem" d="M0 -9 L2.6 -6.4 L0 -3.8 L-2.6 -6.4 Z" />}
     </g>
   );

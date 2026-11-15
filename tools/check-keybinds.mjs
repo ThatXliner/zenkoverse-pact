@@ -142,7 +142,8 @@ await waitState('explore');
 await openControls();
 await rebind('camera', () => page.keyboard.press('KeyB'));
 await closeSheet();
-check((await texts('.top-left .keys b')).includes('B'), `the key hint shows B for the camera: ${(await texts('.top-left .keys b')).join(' ')}`);
+// The key reminder is the strip that fades in when you stand idle.
+check((await texts('.at-hand kbd')).includes('B'), `the key reminder shows B for the camera: ${(await texts('.at-hand kbd')).join(' ')}`);
 const VIEWS = ['top', 'third', 'first'];
 const next = (m) => VIEWS[(VIEWS.indexOf(m) + 1) % 3];
 const v0 = await page.evaluate(() => window.game.game.cam.mode);

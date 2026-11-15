@@ -1,0 +1,210 @@
+/* The play HUD, lettered like the page it sits on. Words that need reading
+   are narration boxes (paper, an ink rule, a hard ink shadow); everything
+   else is ink-outlined type and bars drawn straight onto the panel. It keeps
+   to the four edges and leaves the middle to the fight. */
+
+#ui > .hud {
+  --hud-pad: clamp(16px, 2.6vmin, 44px);
+  --below-compass: calc(var(--hud-pad) + 108px);
+  --cap-w: clamp(220px, calc(50vw - var(--compass-w) / 2 - 2 * var(--hud-pad)), 330px);
+  position: absolute; inset: 0; pointer-events: none; font-family: var(--sans); animation: fade 0.6s var(--ease);
+  /* Its own stack, so nothing in it rises over a sheet. */
+  isolation: isolate;
+}
+.hud * { pointer-events: none; }
+
+/* Ink-outlined lettering, for type set straight on the picture. */
+.hud .vitals .lbl, .hud .vitals .val, .hud .aura-meter .sub, .hud .aura-meter .broken,
+.hud .ab .txt, .hud .x .name, .hud .at-hand, .hud .sign .txt, .hud .boss .n, .hud .wager-arm {
+  color: var(--paper); -webkit-text-stroke: 3px var(--ink-line); paint-order: stroke fill; text-shadow: none;
+}
+
+.reticle { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: rgba(243,238,228,0.9); box-shadow: 0 0 0 1.5px var(--ink-line); transition: transform 0.15s var(--ease), opacity 0.3s; }
+.reticle.hot { transform: scale(1.8); background: var(--c, var(--accent)); }
+.reticle.third { opacity: 0.45; }
+/* The top-down aim rides the mouse; the system cursor is hidden over the canvas. */
+body.top-view #gl { cursor: none; }
+body.top-view .hud { cursor: none; }
+.cursor { position: absolute; width: 22px; height: 22px; margin: -11px; border-radius: 50%; border: 2px solid rgba(243,238,228,0.92); box-shadow: 0 0 0 1.5px var(--ink-line), inset 0 0 0 1px var(--ink-line); transition: transform 0.12s var(--ease), border-color 0.2s; }
+.cursor::after { content: ''; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: rgba(243,238,228,0.95); }
+.cursor.hot { transform: scale(1.35); border-color: var(--c, var(--accent)); }
+.damage { position: absolute; inset: 0; box-shadow: inset 0 0 160px rgba(255,40,60,0.0); transition: box-shadow 0.25s; }
+.damage.hit { box-shadow: inset 0 0 160px rgba(255,40,60,0.55); }
+
+/* ---- Captions: the top-left column ---------------------------------- */
+.captions { position: absolute; left: var(--hud-pad); top: var(--hud-pad); width: var(--cap-w); display: grid; gap: 10px; justify-items: start; }
+.cap { position: relative; width: 100%; display: grid; gap: 3px; padding: 9px 13px 10px 17px; background: var(--paper); color: var(--paper-ink); border: 2px solid var(--ink-line); box-shadow: 3px 3px 0 var(--ink-line); --bar: var(--accent); animation: cap-in 0.34s var(--ease) both; }
+/* The accent is a strip of screentone in the caption's colour down its left edge. */
+.cap::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 7px; background: radial-gradient(circle, var(--bar) 1.3px, transparent 1.6px) 0 0 / 4px 4px, color-mix(in oklab, var(--bar) 35%, var(--paper)); border-right: 1.5px solid var(--ink-line); }
+.cap .kicker, .cap .step, .cap .s { font-family: var(--sans); font-size: 10px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: var(--paper-mute); }
+.cap .t { font-family: var(--serif); font-size: 19px; font-weight: 800; line-height: 1.2; color: var(--paper-ink); }
+.cap .b { font-size: 14px; line-height: 1.5; color: var(--paper-ink); }
+.cap .jp { font-family: var(--brush); font-weight: 400; letter-spacing: 0.06em; }
+@keyframes cap-in { from { opacity: 0; clip-path: inset(0 100% 0 0); transform: translateX(-6px); } to { opacity: 1; clip-path: inset(0 -8px -8px 0); transform: none; } }
+@keyframes cap-out { to { opacity: 0; transform: translateX(-8px); } }
+
+.tracker { --bar: var(--gold); }
+.tracker .kicker { display: flex; align-items: center; gap: 7px; color: var(--gold-ink); }
+.tracker .kicker .gem { width: 8px; height: 8px; background: var(--gold); border: 1.5px solid var(--ink-line); transform: rotate(45deg); }
+.tracker .tr-title { font-family: var(--serif); font-size: 17px; font-weight: 800; line-height: 1.2; }
+.tracker .tr-sub { font-size: 12px; letter-spacing: 0.04em; color: var(--paper-mute); }
+/* Under a tutorial step the goal shrinks to one line. */
+.tracker.minor { grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 8px; padding-top: 6px; padding-bottom: 6px; }
+.tracker.minor .tr-title { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tracker.minor .tr-sub { display: none; }
+
+.objective { --bar: var(--accent); }
+.objective .step b { color: var(--paper-ink); }
+.objective .foot { margin-top: 3px; font-size: 11px; letter-spacing: 0.04em; color: var(--paper-mute); }
+
+.plaque { --bar: var(--ice); }
+.plaque .b { font-size: 13px; }
+
+.drill-hud { --bar: var(--ice); }
+.drill-hud .big { font-family: var(--serif); font-size: 30px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 10px; }
+.drill-hud .big small { font-family: var(--sans); font-size: 11px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--paper-mute); }
+.drill-hud .cue { justify-self: start; margin: 3px 0 1px; padding: 2px 10px; font-family: var(--serif); font-size: 17px; font-weight: 800; color: var(--paper); background: var(--ink-line); transform: skewX(-8deg); animation: cue-in 0.22s var(--ease); }
+@keyframes cue-in { from { opacity: 0; transform: skewX(-8deg) translateX(-8px); } }
+.drill-hud ul { margin: 2px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; line-height: 1.4; color: var(--paper-ink); }
+.drill-hud li:first-child { color: var(--paper-mute); }
+/* Once it runs, the opening line folds away and the answers stay, smaller. */
+.drill-hud.running li:first-child { display: none; }
+.drill-hud.running ul { font-size: 12px; gap: 2px; color: var(--paper-mute); }
+
+.toasts { display: grid; gap: 6px; justify-items: start; width: 100%; }
+.toast { position: relative; max-width: 100%; padding: 6px 11px 7px 15px; background: var(--paper); color: var(--paper-ink); border: 2px solid var(--ink-line); box-shadow: 3px 3px 0 var(--ink-line); font-size: 13px; line-height: 1.4; animation: cap-in 0.3s var(--ease) both, cap-out 0.3s ease-in 2.85s forwards; }
+.toast::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--paper-mute); border-right: 1.5px solid var(--ink-line); }
+.toast.good::before { background: #3bbf7a; }
+.toast.bad::before { background: #e5484d; }
+
+/* The key reminder: no box, just lettering, and only once you stand idle. */
+.at-hand { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; opacity: 0; transform: translateY(-4px); transition: opacity 0.5s var(--ease), transform 0.5s var(--ease); }
+.at-hand.on { opacity: 1; transform: none; }
+.at-hand span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+
+/* ---- Vitals: bottom-left --------------------------------------------- */
+.vitals { position: absolute; left: var(--hud-pad); bottom: var(--hud-pad); display: grid; gap: 7px; width: clamp(180px, 22vw, 280px); }
+.meter, .aura-meter { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; align-items: end; }
+.meter .lbl, .aura-meter .lbl { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; transition: opacity 0.6s var(--ease); }
+.meter .lbl .jp, .aura-meter .lbl .jp { display: inline-block; min-width: 1.3em; margin-right: 5px; font-family: var(--brush); font-size: 14px; font-weight: 400; color: var(--c, var(--paper)); }
+.meter.health .lbl .jp { color: var(--paper); }
+.aura-meter .lbl .jp { color: var(--a); }
+.meter .lbl .w, .aura-meter .lbl .w { transition: opacity 0.6s var(--ease); }
+.meter .val, .aura-meter .val { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; transition: opacity 0.6s var(--ease); }
+.meter .track, .aura-meter .track { grid-column: 1 / -1; height: 8px; position: relative; overflow: hidden; background: rgba(20,16,28,0.55); border: 1.5px solid var(--ink-line); box-shadow: 2px 2px 0 rgba(20,16,28,0.7); transform: skewX(-18deg); transition: height 0.5s var(--ease), opacity 0.5s var(--ease); }
+.meter .track > i, .aura-meter .track > i { position: absolute; inset: 0; right: auto; background: var(--paper); transition: width 0.18s var(--ease); }
+.meter.resource .track > i { background: var(--c); }
+.meter.strain .track > i { background: #ff6b6b; }
+.meter.health.low .track > i { background: #ff5a4a; animation: pulse 0.9s ease-in-out infinite; }
+/* At rest the words fade and the bars thin: the picture comes first. */
+.vitals.calm .lbl .w, .vitals.calm .val { opacity: 0; }
+.vitals.calm .track { height: 5px; opacity: 0.75; }
+
+/* ---- Abilities: bottom-right ----------------------------------------- */
+.abilities { position: absolute; right: var(--hud-pad); bottom: var(--hud-pad); display: grid; gap: 9px; justify-items: end; }
+.mains { display: flex; gap: 14px; align-items: flex-end; }
+.ab { display: flex; gap: 9px; align-items: center; }
+.ab .box, .x .box { position: relative; flex: none; display: grid; place-items: center; overflow: hidden; background: var(--paper); border: 2px solid var(--ink-line); box-shadow: 3px 3px 0 var(--ink-line); transition: transform 0.2s var(--ease), background 0.2s; }
+.ab .box { width: 46px; height: 46px; }
+.ab .box .glyph, .x .glyph { position: relative; z-index: 1; font-family: var(--serif); font-weight: 800; color: var(--c); -webkit-text-stroke: 0.6px var(--ink-line); }
+.ab .box .glyph { font-size: 25px; }
+/* Cooling down: screentone fills the panel from the bottom and drains. */
+.ab .cool, .x .cool { position: absolute; left: 0; right: 0; bottom: 0; background: radial-gradient(circle, rgba(20,16,28,0.62) 1.1px, transparent 1.45px) 0 0 / 4px 4px, rgba(20,16,28,0.12); border-top: 1.5px solid var(--ink-line); transition: height 0.1s linear; }
+.ab .cool[style*='height: 0%'], .x .cool[style*='height: 0%'] { border-top-width: 0; }
+.ab.max .box { border-radius: 50%; }
+.ab.max.ready .box { background: color-mix(in oklab, var(--c) 22%, var(--paper)); animation: ready-beat 1.8s var(--ease) infinite; }
+@keyframes ready-beat { 0%, 100% { transform: none; } 12% { transform: scale(1.07); } 24% { transform: none; } }
+.ab .txt { display: grid; gap: 1px; min-width: 0; max-width: 150px; }
+.ab .key { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.85; }
+.ab .key-short { display: none; }
+.ab.preview .key { color: var(--gold); }
+.ab .name { font-family: var(--serif); font-size: 15px; font-weight: 800; line-height: 1.15; }
+/* What a key does shows when its Ability is new to it, then folds away. */
+.ab .what { font-size: 12px; font-weight: 700; line-height: 1.3; max-height: 0; opacity: 0; overflow: hidden; transition: max-height 0.45s var(--ease), opacity 0.45s var(--ease); }
+.ab.fresh .what { max-height: 3em; opacity: 1; }
+.abilities.primed .ab .box, .abilities.primed .x .box { border-color: var(--c); box-shadow: 3px 3px 0 var(--c); }
+
+.xs { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
+.x { display: flex; align-items: center; gap: 6px; height: 30px; transition: opacity 0.25s; }
+.x .box { width: 26px; height: 26px; box-shadow: 2px 2px 0 var(--ink-line); }
+.x .glyph { font-size: 15px; }
+.x .name { font-family: var(--serif); font-size: 13px; font-weight: 800; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* An empty slot is its key alone, dashed and quiet. */
+.x.empty kbd { background: rgba(20,16,28,0.45); color: var(--mist); border-style: dashed; border-color: rgba(243,238,228,0.55); box-shadow: none; }
+.x.empty .name { display: none; }
+.x.preview .box { border-color: var(--gold); }
+.x.fresh .box { animation: stamp 0.4s var(--ease); }
+@keyframes stamp { from { transform: scale(1.35) rotate(-6deg); } }
+
+/* The full sign, above the cards: ring fills while signing, drains while primed. */
+.sign { display: flex; gap: 10px; align-items: center; animation: fade 0.25s var(--ease); }
+.sign .txt { display: grid; gap: 1px; text-align: right; }
+.sign .k { font-family: var(--serif); font-size: 15px; font-weight: 800; line-height: 1.1; }
+.sign .v { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; font-variant-numeric: tabular-nums; }
+.sign .ring { position: relative; width: 46px; height: 46px; display: grid; place-items: center; background: var(--paper); border-radius: 50%; border: 2px solid var(--ink-line); box-shadow: 3px 3px 0 var(--ink-line); }
+.sign .ring svg { position: absolute; inset: 2px; width: calc(100% - 4px); height: calc(100% - 4px); transform: rotate(-90deg); }
+.sign .ring circle { fill: none; stroke-width: 4; }
+.sign .ring .trk { stroke: rgba(20,16,28,0.14); }
+.sign .ring .arc { stroke: var(--c); stroke-linecap: butt; }
+.sign .glyph { font-family: var(--serif); font-size: 19px; font-weight: 800; color: var(--paper-ink); position: relative; }
+.sign.primed .glyph { color: var(--c); animation: pulse 1.2s ease-in-out infinite; }
+
+/* ---- Middle of the screen: kept for the fight ------------------------ */
+/* Above whichever bottom corner stands taller (--bottom-band, set by the HUD),
+   and centred with `translate` so the rise animation's transform keeps it centred. */
+.prompt { position: absolute; left: 50%; bottom: max(20%, calc(var(--hud-pad) + var(--bottom-band, 136px) + 14px)); translate: -50% 0; z-index: 4; max-width: calc(100% - 2 * var(--hud-pad)); display: flex; gap: 10px; align-items: center; padding: 6px 13px 6px 7px; background: var(--paper); color: var(--paper-ink); border: 2px solid var(--ink-line); box-shadow: 3px 3px 0 var(--ink-line); font-size: 13px; font-weight: 500; letter-spacing: 0.04em; animation: rise 0.35s var(--ease); }
+.prompt kbd { background: var(--ink-line); color: var(--paper); box-shadow: none; }
+.boss { position: absolute; left: 50%; top: var(--below-compass); transform: translateX(-50%); width: min(560px, var(--compass-w)); display: grid; gap: 6px; text-align: center; }
+.boss .n { font-family: var(--brush); font-size: 22px; letter-spacing: 0.16em; }
+.boss .track { height: 9px; background: rgba(20,16,28,0.55); border: 2px solid var(--ink-line); box-shadow: 3px 3px 0 var(--ink-line); position: relative; transform: skewX(-18deg); }
+.boss .track > i { position: absolute; inset: 0; right: auto; background: var(--c, #ff6a1a); transition: width 0.15s; }
+.banner { position: absolute; left: 0; right: 0; top: 30%; text-align: center; animation: banner 2.4s var(--ease) forwards; }
+.banner .big { font-family: var(--brush); font-size: clamp(42px, 7vw, 96px); font-weight: 400; letter-spacing: 0.08em; line-height: 1; color: var(--paper); -webkit-text-stroke: 8px var(--ink-line); paint-order: stroke fill; }
+.banner .small { display: inline-block; margin-top: 12px; padding: 3px 14px; font-size: 12px; font-weight: 700; letter-spacing: 0.4em; text-transform: uppercase; color: var(--paper-ink); background: var(--paper); border: 2px solid var(--ink-line); }
+.wager-arm { position: absolute; left: 50%; top: 56%; transform: translateX(-50%); font-size: 12px; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: #ffd34d; animation: pulse 0.9s ease-in-out infinite; }
+
+/* ---- Larger screens: the lettering grows with the page ---------------- */
+@media (min-width: 1700px) and (min-height: 950px) {
+  .captions, .vitals, .abilities { zoom: 1.18; }
+}
+
+/* ---- Smaller screens -------------------------------------------------- */
+/* Below 1000 wide the Ability cards drop their words and keep the panel and key. */
+@media (max-width: 1000px), (max-height: 520px) {
+  .ab { position: relative; }
+  .ab .txt { position: absolute; left: 0; right: 0; top: 100%; margin-top: 2px; max-width: none; justify-items: center; }
+  .ab .name, .ab .what, .ab .key { display: none; }
+  .ab .key-short { display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; white-space: nowrap; }
+  .abilities { bottom: calc(var(--hud-pad) + 12px); }
+  .mains { gap: 10px; }
+  .x .name { display: none; }
+  .ab .box, .sign .ring { width: 42px; height: 42px; }
+  .ab .box .glyph { font-size: 22px; }
+}
+/* A phone on its side: the vitals move to the bottom centre, so the
+   captions keep the whole left side above the corner. */
+@media (max-height: 520px) and (min-width: 601px) {
+  .vitals { left: 50%; transform: translateX(-50%); width: min(200px, 26vw); }
+}
+@media (max-height: 520px) {
+  .boss { top: calc(var(--hud-pad) + 60px); }
+  .boss .n { font-size: 16px; }
+  .cap { padding: 6px 11px 7px 15px; }
+  .cap .t { font-size: 16px; }
+  .cap .b { font-size: 12.5px; line-height: 1.4; }
+  .objective .foot { display: none; }
+  .vitals { gap: 4px; }
+  .aura-meter .sub { display: none; }
+  .drill-hud .big { font-size: 22px; }
+  .drill-hud ul { font-size: 11.5px; }
+}
+/* A phone held upright: the captions drop under the compass and take the width. */
+@media (max-width: 600px) {
+  #ui > .hud { --cap-w: calc(100vw - 2 * var(--hud-pad)); }
+  .captions { top: calc(var(--hud-pad) + 64px); transition: top 0.3s var(--ease); }
+  .boss { top: calc(var(--hud-pad) + 62px); }
+  .has-boss .captions { top: calc(var(--hud-pad) + 112px); }
+  .boss .n { font-size: 16px; letter-spacing: 0.08em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cap { max-width: 420px; }
+  .vitals { width: min(46vw, 200px); }
+}

@@ -1,11 +1,12 @@
 /* Navigation HUD: compass, tracked marker, landmark names, the top-left
    column, and the map. Tracked is gold, unlocked waypoints are ice blue. */
 :root { --gold: #ffd34d; --ice: #9fdfff; }
-.hud { --compass-w: clamp(360px, 34vw, 680px); }
+.hud { --compass-w: clamp(260px, 34vw, 620px); }
+@media (max-width: 600px) { .hud { --compass-w: calc(100vw - 2 * var(--hud-pad)); } }
 
 .top-center { position: absolute; left: 50%; top: var(--hud-pad); transform: translateX(-50%); display: grid; justify-items: center; gap: 8px; width: var(--compass-w); }
 .compass { position: relative; width: 100%; height: 52px; }
-.compass .strip { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8,10,14,0.62), rgba(8,10,14,0.3)); backdrop-filter: blur(5px); border-bottom: 1px solid rgba(243,238,228,0.3); -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14%, #000 86%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 14%, #000 86%, transparent 100%); }
+.compass .strip { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(20,16,28,0.7), rgba(20,16,28,0.35)); border-bottom: 2px solid var(--ink-line); box-shadow: inset 0 -1px 0 rgba(243,238,228,0.35); -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14%, #000 86%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 14%, #000 86%, transparent 100%); }
 .compass .tick { position: absolute; bottom: 0; width: 1px; height: 7px; background: rgba(243,238,228,0.5); transform: translateX(-50%); }
 .compass .tick.long { height: 12px; background: rgba(243,238,228,0.85); }
 .compass .dir { position: absolute; bottom: 5px; transform: translateX(-50%); font-family: var(--sans); font-size: 13px; font-weight: 500; letter-spacing: 0.1em; color: var(--mist); text-shadow: 0 1px 6px rgba(0,0,0,0.9); }
@@ -26,13 +27,14 @@
 .compass .tracked-pip .chev.right { left: 15px; transform: rotate(-135deg); }
 .compass .tracked-pip.off .d.r { left: 28px; }
 .compass .tracked-pip.off .d.l { right: 28px; }
-.zone-line { position: absolute; top: 76px; display: flex; gap: 12px; align-items: baseline; white-space: nowrap; text-shadow: 0 1px 8px rgba(0,0,0,0.9); animation: rise 0.8s var(--ease); }
-.zone-line .jp { font-size: 17px; font-weight: 600; letter-spacing: 0.24em; }
-.zone-line .en { font-size: 11px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--mist); }
+.zone-line { position: absolute; top: 72px; display: flex; gap: 12px; align-items: baseline; white-space: nowrap; animation: zone-card 5s var(--ease) forwards; }
+.zone-line .jp { font-family: var(--brush); font-size: 22px; letter-spacing: 0.22em; color: var(--paper); -webkit-text-stroke: 5px var(--ink-line); paint-order: stroke fill; }
+.zone-line .en { padding: 2px 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: var(--paper-ink); background: var(--paper); border: 1.5px solid var(--ink-line); }
+/* A place name is said on arrival, then leaves the screen to the place. */
+@keyframes zone-card { 0% { opacity: 0; transform: translateY(6px); } 10% { opacity: 1; transform: none; } 78% { opacity: 1; } 100% { opacity: 0; } }
 
 .nav-marker { position: absolute; width: 0; height: 0; z-index: 3; }
 .nav-marker .gem { left: -8.5px; top: -8.5px; width: 17px; height: 17px; }
-.nav-marker .d { position: absolute; left: 0; top: 16px; transform: translateX(-50%); font-size: 13px; font-weight: 700; letter-spacing: 0.06em; color: var(--gold); font-variant-numeric: tabular-nums; white-space: nowrap; text-shadow: 0 1px 6px rgba(0,0,0,0.95), 0 0 2px #000; }
 .nav-marker .name { position: absolute; left: 0; bottom: 16px; transform: translateX(-50%); font-family: var(--serif); font-size: 15px; letter-spacing: 0.06em; color: var(--paper); white-space: nowrap; text-shadow: 0 1px 8px rgba(0,0,0,0.95), 0 0 2px #000; }
 .nav-marker .arrow { position: absolute; left: -7px; top: -7px; width: 14px; height: 14px; transform-origin: 50% 50%; }
 .nav-marker .arrow::before { content: ''; position: absolute; left: 1px; top: 1px; width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 12px solid var(--gold); filter: drop-shadow(0 0 5px rgba(0,0,0,0.9)); }
@@ -43,16 +45,6 @@
 .nav-label .en { font-size: 11px; letter-spacing: 0.34em; padding-left: 0.34em; text-transform: uppercase; color: var(--mist); }
 
 
-.top-left { position: absolute; left: var(--hud-pad); top: var(--hud-pad); width: min(320px, calc(50vw - var(--compass-w) / 2 - 2 * var(--hud-pad))); min-width: 240px; display: grid; gap: 14px; justify-items: start; }
-.tracker { width: 100%; display: grid; gap: 4px; padding: 12px 14px 12px 16px; border-left: 2px solid var(--gold); background: linear-gradient(90deg, rgba(10,11,16,0.7), rgba(10,11,16,0.34)); backdrop-filter: blur(8px); animation: rise 0.5s var(--ease); }
-.tracker .kicker { display: flex; align-items: center; gap: 8px; font-size: 10px; letter-spacing: 0.26em; color: var(--gold); }
-.tracker .kicker .gem { width: 7px; height: 7px; background: var(--gold); transform: rotate(45deg); }
-.tracker .tr-title { font-family: var(--serif); font-size: 19px; line-height: 1.25; color: var(--paper); }
-.tracker .tr-sub { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; letter-spacing: 0.06em; color: var(--mist); }
-.tracker .tr-dist { color: var(--gold); font-weight: 700; font-variant-numeric: tabular-nums; }
-.top-left .hint { position: static; display: grid; gap: 4px; max-width: 100%; font-size: 13px; line-height: 1.45; letter-spacing: 0.04em; color: var(--mist); text-shadow: 0 1px 6px rgba(0,0,0,0.9); }
-.top-left .mastery { position: static; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 18px; margin-top: 4px; font-size: 12px; letter-spacing: 0.06em; color: var(--mist); text-shadow: 0 1px 6px rgba(0,0,0,0.9); }
-.top-left .mastery b { color: var(--mist); font-weight: 500; }
 
 /* Map */
 .nav-map { display: grid; grid-template-columns: auto minmax(300px, 1fr); gap: 24px; align-items: start; }
@@ -111,6 +103,5 @@
 .map-legend .ring { width: 11px; height: 11px; border-radius: 50%; border: 1px dashed rgba(243,238,228,0.5); }
 .map-legend .ring.on { border: 1.5px solid var(--ice); box-shadow: 0 0 6px rgba(159,223,255,0.7); }
 @media (max-width: 900px) { .nav-map { grid-template-columns: 1fr; } }
-.top-left .keys { display: flex; flex-wrap: wrap; gap: 2px 14px; }
-.top-left .keys span { white-space: nowrap; }
-.top-left .keys b { font-weight: 600; color: var(--paper); }
+/* A phone on its side: the map keeps its column and fills the height. */
+@media (max-height: 520px) and (min-width: 601px) { .nav-map { grid-template-columns: auto minmax(0, 1fr); gap: 16px; } .nav-map svg { width: calc(100vh - 140px); } }

@@ -141,7 +141,8 @@ export class Aura {
     const color = this.colorOf(null);
     const feet = me.clone().add(new THREE.Vector3(0, 0.08, 0));
     g.renderer.impactFrame(2, new THREE.Color(color), me.clone().add(new THREE.Vector3(0, 1, 0)));
-    g.clock.hitStop(0.07);
+    // A clash that began as the fields touched runs on the real clock.
+    if (!this.clash.active) g.clock.hitStop(0.07);
     g.vfx.ring(feet, color, 0.4, reach * 1.15, 0.45);
     g.vfx.ring(feet.clone().add(new THREE.Vector3(0, 1, 0)), 0xffffff, 0.3, reach * 0.8, 0.3);
     g.vfx.ring(feet, DUST, 0.6, reach * 0.95, 0.6, undefined, 0.6);
@@ -155,7 +156,8 @@ export class Aura {
       g.props.push(p, d.setY(0).normalize().setY(0.5).multiplyScalar(p.def.mass * 4 * (1 - dist / reach * 0.6)));
     }
     for (const e of g.encounters.enemies) {
-      if (!e.alive || e.def.ai === 'dummy') continue;
+      // A boss stands its ground, and a body held in a clash is not to be moved.
+      if (!e.alive || e.def.ai === 'dummy' || e.isBoss || e.locked > 0) continue;
       const dist = e.position.distanceTo(me);
       if (dist < reach * 0.6) e.hurt(0, { from: me, knock: 6 * (1 - dist / (reach * 0.6)) + 2, lift: 1.5 });
     }

@@ -386,11 +386,10 @@ export class Cutscenes {
     if (l.hold > 0) l.hold -= raw;
     else this.advance(raw);
     if (!this.live) return;
-    // The caster performs at full speed while the world it stands in holds
-    // still, arms drawn into the seal until the blow breaks it.
+    // The caster performs its sign at full speed while the world it stands
+    // in holds still.
     const c = l.run.caster;
     if (c.local) {
-      c.avatar.seal = l.beat !== null && l.t < l.beat - 0.22 ? 1 : 0;
       const own = g.clock.frozen ? raw * 0.04 : raw;
       if (own > dt) c.avatar.update(own - dt);
     }
@@ -446,7 +445,8 @@ export class Cutscenes {
     l.log.end = l.t;
     if (l.presenting) this.stopPresenting(l);
     if (!g.net) g.clock.slowMo = 1;
-    if (r.caster.local) r.caster.avatar.seal = 0;
+    // Ended before the blow: the sign it was building to breaks off.
+    if (!l.resolved) r.caster.avatar.release();
     // The two come out of it a beat apart: whoever took the blow reels first.
     if (r.target?.local) r.target.hold?.(0);
     if (r.caster.local && r.caster !== r.target) r.caster.hold?.(0);

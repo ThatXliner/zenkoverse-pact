@@ -24,9 +24,11 @@ export interface Gesture {
 
 export interface GestureSet { long: Gesture; short: Gesture; none: Gesture }
 
-export function resolvePose(p: PoseName | HandPose | undefined, fallback: HandPose): HandPose {
+// A named pose is looked up in `table`: the first-person poses, or a body's
+// restaging of them (src/character/gesture.ts).
+export function resolvePose(p: PoseName | HandPose | undefined, fallback: HandPose, table: Record<PoseName, HandPose> = POSES): HandPose {
   if (!p) return fallback;
-  return typeof p === 'string' ? POSES[p] : p;
+  return typeof p === 'string' ? table[p] : p;
 }
 
 // Shortens a long gesture by compressing time and dropping anticipation keys,

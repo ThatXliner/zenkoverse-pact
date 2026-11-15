@@ -4,6 +4,7 @@
 // rules.json, which the server imports too.
 import rulesJson from './rules.json';
 import type { ClashEvent, ClashRules, Pick } from './clash';
+import type { GestureVariant } from '../mastery/mastery';
 
 export const RULES = rulesJson as {
   maxPlayers: number; defaultRoom: string; tickHz: number; sendHz: number; interpMs: number; maxHp: number;
@@ -69,7 +70,8 @@ export type ClientMsg =
   | { type: 'hello'; room: string; name: string; token: string; tech: string }
   | { type: 'state'; s: PlayerState }
   | { type: 'tech'; tech: string }
-  | { type: 'cast'; ct: number; kind: string; tech: string; name: string; dir: Vec3 }
+  // `variant` and `speed` are the gesture the cast plays, so every screen draws the same one.
+  | { type: 'cast'; ct: number; kind: string; tech: string; name: string; dir: Vec3; variant: GestureVariant; speed: number }
   | { type: 'fx'; ct: number; calls: FxCall[] }
   | ({ type: 'hit'; seq: number; target: number; amount: number } & HitOpts)
   | { type: 'resolve'; hit: number; taken: number }
@@ -100,7 +102,7 @@ export type ServerMsg =
   | { type: 'leave'; id: number }
   | { type: 'info'; player: PlayerInfo }
   | { type: 'snap'; t: number; players: { id: number; hp: number; down: boolean; away: boolean; st: PlayerState[] }[] }
-  | { type: 'cast'; id: number; ct: number; kind: string; tech: string; name: string; dir: Vec3 }
+  | { type: 'cast'; id: number; ct: number; kind: string; tech: string; name: string; dir: Vec3; variant: GestureVariant; speed: number }
   | { type: 'fx'; id: number; ct: number; calls: FxCall[] }
   | ({ type: 'struck'; hit: number; by: number; amount: number } & HitOpts)
   | { type: 'hp'; id: number; hp: number; by: number | null; amount: number }

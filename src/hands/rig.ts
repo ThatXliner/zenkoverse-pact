@@ -32,6 +32,10 @@ export interface Arm {
   upperLen: number;
   foreLen: number;
   parentRest: THREE.Quaternion;
+  // Away from the body on this arm's side, and where the elbow bends toward:
+  // out, down and back.
+  outward: THREE.Vector3;
+  elbowHint: THREE.Vector3;
   fingers: Record<Finger, FingerJoint[]>;
   tips: Record<Finger, THREE.Bone>;
 }
@@ -48,6 +52,59 @@ const MAX_CURL: Record<'finger' | 'thumb', [number, number, number]> = { finger:
 const SPREAD: Record<Finger, number> = { thumb: 0, index: -1, middle: -0.2, ring: 0.5, pinky: 1.2 };
 // Fraction of the hand's roll the forearm takes, standing in for pronation.
 const FOREARM_TWIST = 0.55;
+
+// Measures both arms of a skeleton standing in its T-pose (its world
+// matrices current): each bone's rest frame, the bone lengths, and the
+// finger joints' curl and spread axes. Everything after works from these, so
+// the solver never assumes which local axis a bone points along.
+export function calibrateArms(bones: Map<string, THREE.Bone>): Record<Side, Arm> {
+  const b = (n: string): THREE.Bone => { const x = bones.get(n); if (!x) throw new Error(`human.glb lacks bone ${n}`); return x; };
+  const pos = (n: string) => b(n).getWorldPosition(new THREE.Vector3());
+  const quat = (n: string) => b(n).getWorldQuaternion(new THREE.Quaternion());
+  const aimed = (n: string, f: THREE.Vector3, u: THREE.Vector3): Aimed => ({ bone: b(n), rest: quat(n), frameInv: frameQuat(f, u).invert() });
+  // The body's own axes, whichever way the skeleton faces.
+  const right = pos('upperarm_r').sub(pos('upperarm_l')).normalize();
+  const back = new THREE.Vector3().crossVectors(right, UP).normalize();
+
+  const calibrate = (side: Side): Arm => {
+    const clavicleRoot = pos(`clavicle_${side}`), shoulder = pos(`upperarm_${side}`), elbow = pos(`lowerarm_${side}`), wrist = pos(`hand_${side}`);
+    const knuckle = pos(`middle_01_${side}`), index = pos(`index_01_${side}`), pinky = pos(`pinky_01_${side}`), thumb = pos(`thumb_01_${side}`);
+    const fingerDir = knuckle.clone().sub(wrist).normalize();
+    const across = pinky.clone().sub(index).normalize();
+    const palm = new THREE.Vector3().crossVectors(fingerDir, across).normalize();
+    if (palm.dot(thumb.clone().sub(wrist)) < 0) palm.negate();
+    // T-pose, palms down: the elbows point backward.
+    const elbowOut = back;
+    const outward = right.clone().multiplyScalar(side === 'r' ? 1 : -1);
+    const fingers = {} as Record<Finger, FingerJoint[]>;
+    const tips = {} as Record<Finger, THREE.Bone>;
+    for (const f of FINGERS) {
+      const names = [1, 2, 3].map((i) => `${f}_0${i}_${side}`);
+      const leaf = `${f}_04_leaf_${side}`;
+      const dir = pos(leaf).sub(pos(names[0]!)).normalize();
+      const curlWorld = f === 'thumb' ? new THREE.Vector3().crossVectors(dir, pinky.clone().sub(pos(names[0]!))).normalize() : new THREE.Vector3().crossVectors(dir, palm).normalize();
+      const spreadWorld = new THREE.Vector3().crossVectors(dir, across).normalize();
+      fingers[f] = names.map((n) => {
+        const inv = quat(n).invert();
+        return { bone: b(n), rest: b(n).quaternion.clone(), curl: curlWorld.clone().applyQuaternion(inv), spread: spreadWorld.clone().applyQuaternion(inv) };
+      });
+      tips[f] = b(leaf);
+    }
+    return {
+      side,
+      clavicle: aimed(`clavicle_${side}`, shoulder.clone().sub(clavicleRoot), UP),
+      upper: aimed(`upperarm_${side}`, elbow.clone().sub(shoulder), elbowOut),
+      fore: aimed(`lowerarm_${side}`, wrist.clone().sub(elbow), elbowOut),
+      hand: aimed(`hand_${side}`, fingerDir, palm.clone().negate()),
+      clavicleRoot, clavicleLen: shoulder.distanceTo(clavicleRoot), shoulder,
+      upperLen: elbow.distanceTo(shoulder), foreLen: wrist.distanceTo(elbow),
+      parentRest: quat('spine_03'),
+      outward, elbowHint: outward.clone().multiplyScalar(0.8).addScaledVector(UP, -1).addScaledVector(back, 0.3).normalize(),
+      fingers, tips,
+    };
+  };
+  return { l: calibrate('l'), r: calibrate('r') };
+}
 
 // First-person arm rig loaded from human.glb: the Arms mesh (skin and sleeve)
 // on the shared skeleton. Everything is calibrated from the T-pose, so the
@@ -81,96 +138,60 @@ export class ArmRig {
     for (const side of ['l', 'r']) bones.get(`hand_${side}`)?.scale.setScalar(1.06);
     this.object.updateMatrixWorld(true);
 
-    const b = (n: string): THREE.Bone => { const x = bones.get(n); if (!x) throw new Error(`human.glb lacks bone ${n}`); return x; };
-    const pos = (n: string) => b(n).getWorldPosition(new THREE.Vector3());
-    const quat = (n: string) => b(n).getWorldQuaternion(new THREE.Quaternion());
-    const aimed = (n: string, f: THREE.Vector3, u: THREE.Vector3): Aimed => ({ bone: b(n), rest: quat(n), frameInv: frameQuat(f, u).invert() });
-
-    const calibrate = (side: Side): Arm => {
-      const clavicleRoot = pos(`clavicle_${side}`), shoulder = pos(`upperarm_${side}`), elbow = pos(`lowerarm_${side}`), wrist = pos(`hand_${side}`);
-      const knuckle = pos(`middle_01_${side}`), index = pos(`index_01_${side}`), pinky = pos(`pinky_01_${side}`), thumb = pos(`thumb_01_${side}`);
-      const fingerDir = knuckle.clone().sub(wrist).normalize();
-      const across = pinky.clone().sub(index).normalize();
-      const palm = new THREE.Vector3().crossVectors(fingerDir, across).normalize();
-      if (palm.dot(thumb.clone().sub(wrist)) < 0) palm.negate();
-      // T-pose, palms down: the elbows point backward.
-      const elbowOut = new THREE.Vector3(0, 0, -1);
-      const fingers = {} as Record<Finger, FingerJoint[]>;
-      const tips = {} as Record<Finger, THREE.Bone>;
-      for (const f of FINGERS) {
-        const names = [1, 2, 3].map((i) => `${f}_0${i}_${side}`);
-        const leaf = `${f}_04_leaf_${side}`;
-        const dir = pos(leaf).sub(pos(names[0]!)).normalize();
-        const curlWorld = f === 'thumb' ? new THREE.Vector3().crossVectors(dir, pinky.clone().sub(pos(names[0]!))).normalize() : new THREE.Vector3().crossVectors(dir, palm).normalize();
-        const spreadWorld = new THREE.Vector3().crossVectors(dir, across).normalize();
-        fingers[f] = names.map((n) => {
-          const inv = quat(n).invert();
-          return { bone: b(n), rest: b(n).quaternion.clone(), curl: curlWorld.clone().applyQuaternion(inv), spread: spreadWorld.clone().applyQuaternion(inv) };
-        });
-        tips[f] = b(leaf);
-      }
-      return {
-        side,
-        clavicle: aimed(`clavicle_${side}`, shoulder.clone().sub(clavicleRoot), UP),
-        upper: aimed(`upperarm_${side}`, elbow.clone().sub(shoulder), elbowOut),
-        fore: aimed(`lowerarm_${side}`, wrist.clone().sub(elbow), elbowOut),
-        hand: aimed(`hand_${side}`, fingerDir, palm.clone().negate()),
-        clavicleRoot, clavicleLen: shoulder.distanceTo(clavicleRoot), shoulder,
-        upperLen: elbow.distanceTo(shoulder), foreLen: wrist.distanceTo(elbow),
-        parentRest: quat('spine_03'),
-        fingers, tips,
-      };
-    };
-    this.arms = { l: calibrate('l'), r: calibrate('r') };
+    this.arms = calibrateArms(bones);
   }
 
   // Poses one arm so the wrist reaches `t.wrist` with the hand oriented by
-  // `t.hand`, both in the rig's model space (character faces +Z).
-  solve(arm: Arm, t: ArmTarget): void {
-    const out = arm.side === 'r' ? -1 : 1;
-    const aim = (a: Aimed, f: THREE.Vector3, u: THREE.Vector3, parent: THREE.Quaternion): THREE.Quaternion => {
-      const world = frameQuat(f, u).multiply(a.frameInv).multiply(a.rest);
-      a.bone.quaternion.copy(parent).invert().multiply(world);
-      return world;
-    };
+  // `t.hand`, both in the space the arm was calibrated in.
+  solve(arm: Arm, t: ArmTarget): void { solveArm(arm, t); }
+}
 
-    // The clavicle follows a long reach so the shoulder comes with the arm.
-    const toTarget = t.wrist.clone().sub(arm.clavicleRoot);
-    const reach = THREE.MathUtils.clamp((t.wrist.distanceTo(arm.shoulder) - 0.34) / 0.16, 0, 1);
-    const lift = THREE.MathUtils.clamp((t.wrist.y - arm.shoulder.y) / 0.3, -0.3, 1);
-    const clavDir = arm.shoulder.clone().sub(arm.clavicleRoot).normalize().lerp(toTarget.normalize(), 0.3 * reach).add(new THREE.Vector3(0, 0.25 * Math.max(0, lift), 0)).normalize();
-    const clavQ = aim(arm.clavicle, clavDir, UP, arm.parentRest);
-    const shoulder = arm.clavicleRoot.clone().addScaledVector(clavDir, arm.clavicleLen);
+// Two-bone IK with the clavicle following a long reach, then the fingers.
+// Writes each bone's local rotation; the clavicle's is relative to the chest
+// as it stood at calibration, so a chest that leans or turns carries the arm.
+export function solveArm(arm: Arm, t: ArmTarget): void {
+  const aim = (a: Aimed, f: THREE.Vector3, u: THREE.Vector3, parent: THREE.Quaternion): THREE.Quaternion => {
+    const world = frameQuat(f, u).multiply(a.frameInv).multiply(a.rest);
+    a.bone.quaternion.copy(parent).invert().multiply(world);
+    return world;
+  };
 
-    // Two-bone IK with the elbow pushed out, down and back.
-    const d = THREE.MathUtils.clamp(t.wrist.distanceTo(shoulder), 0.05, arm.upperLen + arm.foreLen - 0.004);
-    const dir = t.wrist.clone().sub(shoulder).normalize();
-    const cosA = (arm.upperLen ** 2 + d * d - arm.foreLen ** 2) / (2 * arm.upperLen * d);
-    const a = Math.acos(THREE.MathUtils.clamp(cosA, -1, 1));
-    const hint = new THREE.Vector3(out * 0.8, -1, -0.3).normalize();
-    const bend = hint.clone().addScaledVector(dir, -hint.dot(dir));
-    if (bend.lengthSq() < 1e-6) bend.set(out, 0, 0);
-    bend.normalize();
-    const elbow = shoulder.clone().addScaledVector(dir, Math.cos(a) * arm.upperLen).addScaledVector(bend, Math.sin(a) * arm.upperLen);
-    const upperQ = aim(arm.upper, elbow.clone().sub(shoulder), bend, clavQ);
+  // The clavicle follows a long reach so the shoulder comes with the arm.
+  const toTarget = t.wrist.clone().sub(arm.clavicleRoot);
+  const reach = THREE.MathUtils.clamp((t.wrist.distanceTo(arm.shoulder) - 0.34) / 0.16, 0, 1);
+  const lift = THREE.MathUtils.clamp((t.wrist.y - arm.shoulder.y) / 0.3, -0.3, 1);
+  const clavDir = arm.shoulder.clone().sub(arm.clavicleRoot).normalize().lerp(toTarget.normalize(), 0.3 * reach).add(new THREE.Vector3(0, 0.25 * Math.max(0, lift), 0)).normalize();
+  const clavQ = aim(arm.clavicle, clavDir, UP, arm.parentRest);
+  const shoulder = arm.clavicleRoot.clone().addScaledVector(clavDir, arm.clavicleLen);
 
-    const handWorld = t.hand.clone().multiply(arm.hand.frameInv).multiply(arm.hand.rest);
-    const handUp = UP.clone().applyQuaternion(t.hand);
-    const foreAxis = t.wrist.clone().sub(elbow).normalize();
-    const handUpPerp = handUp.clone().addScaledVector(foreAxis, -handUp.dot(foreAxis));
-    const foreUp = bend.clone().lerp(handUpPerp, handUpPerp.lengthSq() > 0.05 ? FOREARM_TWIST : 0);
-    if (foreUp.lengthSq() < 1e-4) foreUp.copy(bend);
-    const foreQ = aim(arm.fore, t.wrist.clone().sub(elbow), foreUp, upperQ);
-    arm.hand.bone.quaternion.copy(foreQ).invert().multiply(handWorld);
+  // Two-bone IK with the elbow pushed out, down and back.
+  const d = THREE.MathUtils.clamp(t.wrist.distanceTo(shoulder), 0.05, arm.upperLen + arm.foreLen - 0.004);
+  const dir = t.wrist.clone().sub(shoulder).normalize();
+  const cosA = (arm.upperLen ** 2 + d * d - arm.foreLen ** 2) / (2 * arm.upperLen * d);
+  const a = Math.acos(THREE.MathUtils.clamp(cosA, -1, 1));
+  const hint = arm.elbowHint;
+  const bend = hint.clone().addScaledVector(dir, -hint.dot(dir));
+  if (bend.lengthSq() < 1e-6) bend.copy(arm.outward);
+  bend.normalize();
+  const elbow = shoulder.clone().addScaledVector(dir, Math.cos(a) * arm.upperLen).addScaledVector(bend, Math.sin(a) * arm.upperLen);
+  const upperQ = aim(arm.upper, elbow.clone().sub(shoulder), bend, clavQ);
 
-    for (const f of FINGERS) {
-      const max = MAX_CURL[f === 'thumb' ? 'thumb' : 'finger'];
-      const twitch = t.twitch?.finger === f ? t.twitch.amount : 0;
-      arm.fingers[f].forEach((j, i) => {
-        const angle = THREE.MathUtils.clamp(t.curl[f][i]! + twitch, 0, 1.15) * max[i]!;
-        j.bone.quaternion.copy(j.rest).multiply(new THREE.Quaternion().setFromAxisAngle(j.curl, angle));
-        if (i === 0 && f !== 'thumb') j.bone.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(j.spread, SPREAD[f] * t.spread * 0.3));
-      });
-    }
+  const handWorld = t.hand.clone().multiply(arm.hand.frameInv).multiply(arm.hand.rest);
+  const handUp = UP.clone().applyQuaternion(t.hand);
+  const foreAxis = t.wrist.clone().sub(elbow).normalize();
+  const handUpPerp = handUp.clone().addScaledVector(foreAxis, -handUp.dot(foreAxis));
+  const foreUp = bend.clone().lerp(handUpPerp, handUpPerp.lengthSq() > 0.05 ? FOREARM_TWIST : 0);
+  if (foreUp.lengthSq() < 1e-4) foreUp.copy(bend);
+  const foreQ = aim(arm.fore, t.wrist.clone().sub(elbow), foreUp, upperQ);
+  arm.hand.bone.quaternion.copy(foreQ).invert().multiply(handWorld);
+
+  for (const f of FINGERS) {
+    const max = MAX_CURL[f === 'thumb' ? 'thumb' : 'finger'];
+    const twitch = t.twitch?.finger === f ? t.twitch.amount : 0;
+    arm.fingers[f].forEach((j, i) => {
+      const angle = THREE.MathUtils.clamp(t.curl[f][i]! + twitch, 0, 1.15) * max[i]!;
+      j.bone.quaternion.copy(j.rest).multiply(new THREE.Quaternion().setFromAxisAngle(j.curl, angle));
+      if (i === 0 && f !== 'thumb') j.bone.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(j.spread, SPREAD[f] * t.spread * 0.3));
+    });
   }
 }

@@ -8,7 +8,8 @@ import type { Pact, TriggerValue } from '../pacts/schema';
 import { KEY_SLOTS, KIND_DEFS, kindOn, slotDef, type AbilityKind, type AbilitySlot, type KeySlot } from '../pacts/slots';
 import { restriction } from '../pacts/schema';
 import { describe } from '../pacts/resolve';
-import { pick } from '../hands/gestures';
+import { pick, type Gesture } from '../hands/gestures';
+import type { CameraKick } from '../player/camera';
 import type { GestureVariant } from '../mastery/mastery';
 import { MASTERY_CONFIG } from '../mastery/mastery';
 import type { Enemy } from '../combat/enemies';
@@ -96,7 +97,18 @@ export class Techniques {
     this.cast_ = null;
     this.sign = SIGN_IDLE;
     for (const k of Object.values(KITS)) k.effects.reset?.(this.game);
+    this.stopGesture();
+  }
+
+  // The first-person hands and the body play every gesture together.
+  private perform(gesture: Gesture, speed: number, onEvent: (e: string) => void = () => undefined, onCamera: (k: CameraKick) => void = (k) => this.game.cam.kick(k)): void {
+    this.game.hands.play(gesture, speed, onEvent, onCamera);
+    this.game.avatar.perform(gesture, speed);
+  }
+
+  private stopGesture(): void {
     this.game.hands.stop();
+    this.game.avatar.release();
   }
 
   // Drops the cast in flight, for an Aura Clash that locks the player. The
@@ -105,7 +117,7 @@ export class Techniques {
     if (!this.cast_) return;
     if (this.cast_.held) this.def.effects.release?.(this.cast_.ctx);
     this.cast_ = null;
-    this.game.hands.stop();
+    this.stopGesture();
   }
 
   get casting(): boolean { return this.cast_ !== null; }
@@ -237,12 +249,11 @@ export class Techniques {
     const held = restriction(pact ?? ({ clauses: [] } as unknown as Pact), 'duration') === 'held' || !!(!pact && kind === 'secondary' && this.def.effects.hold);
     // A Maximum Output's sign is already playing in its cutscene, timed to this beat.
     const cut = kind === 'max' && g.cutscenes.active;
-    if (!cut) g.hands.play(gesture, speed, () => undefined, (k) => g.cam.kick(k));
-    g.avatar.playUpper(this.def.avatarClips[kind], speed * 1.1);
+    if (!cut) this.perform(gesture, speed);
     this.cast_ = { slot, ctx, t: 0, impactAt: gesture.impactAt / speed, duration: gesture.duration / speed, fired: false, held };
     const a = this.def.audio[kind];
     if (!cut) g.audio.play(a.cast, a.volume ?? 0.6, (a.pitch ?? 1) * (variant === 'none' ? 1.15 : 1));
-    g.net?.cast(kind, kind === 'max' ? this.def.cutscene.title.en : pact?.name ?? `Raw ${this.def.primitive.name}`);
+    g.net?.cast(kind, kind === 'max' ? this.def.cutscene.title.en : pact?.name ?? `Raw ${this.def.primitive.name}`, variant, speed);
     this.cooldown[slot] = KIND_DEFS[kind].cooldown;
     if (kind === 'max') this.charge = 0;
     if (g.combat.wagerArmed) g.combat.wagerCommitted(slot);
@@ -278,7 +289,7 @@ export class Techniques {
     }
   }
 
-  seal(seconds: number): void { this.sealed = seconds; this.cast_ = null; this.game.hands.stop(); }
+  seal(seconds: number): void { this.sealed = seconds; this.cast_ = null; this.stopGesture(); }
   struck(): void { this.struckRecently = 2.5; }
 
   update(dt: number, raw: number): void {
@@ -317,7 +328,7 @@ export class Techniques {
       if (c.fired && c.held) {
         const down = inp.isDown(c.slot);
         if (down && this.resource > 0) { this.def.effects.hold?.(c.ctx, dt); this.resource = Math.max(0, this.resource - dt * this.def.resource.max * 0.12); }
-        else { this.def.effects.release?.(c.ctx); g.hands.stop(); this.cast_ = null; }
+        else { this.def.effects.release?.(c.ctx); this.stopGesture(); this.cast_ = null; }
       } else if (c.t >= c.duration) this.cast_ = null;
     }
     techUi.resource.value = this.resource / this.def.resource.max;
@@ -339,7 +350,7 @@ export class Techniques {
     const gesture = this.def.sign;
     this.sign = { kind: 'signing', t: 0, duration: gesture.duration };
     g.player.rooted = Math.max(g.player.rooted, gesture.duration);
-    g.hands.play(gesture, 1, (e) => this.onSignBeat(e), (k) => g.cam.kick(k));
+    this.perform(gesture, 1, (e) => this.onSignBeat(e));
     if (!g.cam.isFirst) this.signShot(gesture.impactAt + 0.1);
     g.audio.play('minimize_006', 0.3, 0.8);
     return true;
@@ -365,7 +376,6 @@ export class Techniques {
       g.audio.play('impactSoft_heavy_001', 0.5, 1.25);
     } else if (beat === 'release') {
       g.hands.pulse(0.8);
-      g.avatar.playUpper('Spell_Simple_Shoot', 1.2);
       g.renderer.impactFrame(1, new THREE.Color(this.def.color));
       const aim = g.cam.aimDirection();
       g.vfx.ring(g.player.eye().add(new THREE.Vector3(0, -0.35, 0)).addScaledVector(aim, 1.3), this.def.color, 0.1, 0.5, 0.25, aim);
@@ -377,13 +387,11 @@ export class Techniques {
     const s = this.sign, g = this.game;
     if (s.kind === 'signing') {
       s.t += dt;
-      // The avatar's arms gather to the seal through the anticipation, hold it, and break on the release.
-      g.avatar.seal = s.t < this.def.sign.impactAt ? Math.min(1, s.t / 0.45) : 0.3;
       if (s.t >= s.duration) { this.sign = { kind: 'primed', left: MASTERY_CONFIG.sign.window }; g.audio.play('tick_001', 0.35, 1.1); }
     } else if (s.kind === 'primed') {
       s.left -= dt;
-      if (s.left <= 0) { this.sign = SIGN_IDLE; g.hands.stop(); g.avatar.playUpper('Spell_Simple_Exit', 1); }
-    } else if (!g.cutscenes.active) g.avatar.seal = 0;
+      if (s.left <= 0) { this.sign = SIGN_IDLE; this.stopGesture(); }
+    }
   }
 
   // Maximum Output plays through the cutscene player (issue #27): the
@@ -407,7 +415,7 @@ export class Techniques {
       sub: `Maximum Output · ${this.def.name}`,
       gesture: (beatIn) => {
         const gesture = this.def.gestures.max!.long;
-        g.hands.play(gesture, gesture.impactAt / beatIn, () => undefined, () => undefined);
+        this.perform(gesture, gesture.impactAt / beatIn, undefined, () => undefined);
       },
       resolve: () => {
         g.cam.yaw = yaw;

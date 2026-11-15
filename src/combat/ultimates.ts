@@ -2,12 +2,16 @@ import * as THREE from 'three';
 import type { Game } from '../app/game';
 import { opening, blow, type CutsceneDef } from '../cutscene/cutscene';
 import type { Enemy, EnemyAi } from './enemies';
+import type { Gesture } from '../hands/gestures';
+import { MOVES } from './moves';
 
 // The bosses' Maximum Outputs (issue #27). They play through the same
 // cutscene player as the player's: the boss is the caster, the player is the
 // target pulled into the shot, and the blow lands on the beat.
 export interface BossUltimate {
   cutscene: CutsceneDef;
+  // The sign the boss plays in it, its strike on the blow.
+  sign: Gesture;
   // Whether the boss reaches for it on this cast.
   ready(e: Enemy): boolean;
   // The blow, from the boss onto the player and the props around.
@@ -47,10 +51,10 @@ export const BOSS_ULTIMATES: Partial<Record<EnemyAi, BossUltimate>> = {
   // Below seven tenths of her health, half her casts become the ultimate.
   ancient: {
     cutscene: fiveThousandYears,
+    sign: MOVES.fiveThousandYears,
     ready: (e) => e.hp < e.maxHp * 0.7 && Math.random() < 0.5,
     resolve(g, e) {
       const c = e.position.clone();
-      e.avatar.playUpper('Spell_Simple_Shoot', 1.1);
       for (let i = 1; i <= 4; i++) g.vfx.after(i * 0.06, () => g.vfx.ring(c.clone().add(new THREE.Vector3(0, 0.1 + i * 0.2, 0)), MASTER, 0.5, 6 * i, 0.7));
       g.vfx.flash(e.center(), MASTER, 120, 0.7, 30);
       const d = g.player.position.distanceTo(c);
@@ -61,11 +65,11 @@ export const BOSS_ULTIMATES: Partial<Record<EnemyAi, BossUltimate>> = {
   // Once a fight, the first cast after he falls below half.
   kuroda: {
     cutscene: flashpoint,
+    sign: MOVES.flashpoint,
     ready: (e) => e.hp < e.maxHp * 0.5 && !used.has(e),
     resolve(g, e) {
       used.add(e);
       const at = g.player.position.clone();
-      e.avatar.playUpper('Punch_Cross', 1.2);
       g.vfx.patch(at, 3.2, 'burn', 8);
       g.vfx.flash(at.clone().add(new THREE.Vector3(0, 1.2, 0)), KURODA, 140, 0.6, 26);
       g.vfx.burst(at.clone().add(new THREE.Vector3(0, 0.4, 0)), 40, 'spark', 9, 0xff8a2a);

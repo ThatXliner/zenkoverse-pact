@@ -39,7 +39,6 @@ export interface TechniqueKit {
   // roots the player and primes the next cast. Its last key is the primed
   // stance the hands hold until that cast.
   sign: Gesture;
-  avatarClips: Record<AbilityKind, string>;
   traits: Partial<Record<PropTrait, (prop: PropInstance, ctx: AbilityContext) => void>>;
   drill?: DrillDef;
   cutscene: CutsceneDef;

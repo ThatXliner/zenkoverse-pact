@@ -58,7 +58,6 @@ export const blink: TechniqueKit = {
     { t: 1.2, right: 'cupFlinch', left: 'cupFlinch', snap: true, camera: { fov: 9, pitch: -0.03 }, event: 'release' },
     { t: 1.42, left: 'flat' },
   ]),
-  avatarClips: { primary: 'Spell_Simple_Shoot', secondary: 'Hit_Chest', max: 'Spell_Simple_Enter' },
   traits: {},
   cutscene,
   effects: {

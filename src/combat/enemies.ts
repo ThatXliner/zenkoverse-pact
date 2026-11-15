@@ -5,6 +5,7 @@ import type { CostumeId } from '../character/costume';
 import { RAPIER, GROUP_ENEMY, GROUP_WORLD, GROUP_PROP, groups } from '../physics/world';
 import { AURA, AuraField } from './field';
 import { BOSS_ULTIMATES } from './ultimates';
+import { MOVES } from './moves';
 
 // 'rival' is another player in an online room (src/net/remote.ts): no AI, its
 // body follows the network and its hits go to the server.
@@ -203,12 +204,12 @@ export class Enemy {
           const reach = def.ai === 'ancient' ? 7 : 1.7;
           if (dist > reach) move.copy(toP).normalize().multiplyScalar(speed);
           if (def.ai === 'ancient' && dist < 5) move.copy(toP).normalize().multiplyScalar(-speed * 0.7);
-          if (dist <= reach + 0.3 && this.attackCd <= 0 && this.frozen <= 0 && g.encounters.claimAttack()) { this.state = 'windup'; this.t = 0; this.avatar.playUpper(def.ai === 'kuroda' ? 'Spell_Simple_Enter' : 'Punch_Jab', 1.1); }
+          if (dist <= reach + 0.3 && this.attackCd <= 0 && this.frozen <= 0 && g.encounters.claimAttack()) { this.state = 'windup'; this.t = 0; this.avatar.perform(def.ai === 'ancient' ? MOVES.palm : MOVES.jab); }
           if (def.ai !== 'thug' && this.castCd <= 0 && dist < 22 && this.frozen <= 0) {
             // A boss with a Maximum Output reaches for it in place of a cast when it is ready.
             const ult = BOSS_ULTIMATES[def.ai];
             if (ult && dist < ult.cutscene.reach && ult.ready(this) && g.encounters.bossUltimate(this)) { this.state = 'recover'; this.t = 0; this.castCd = 8; }
-            else { this.state = 'cast'; this.t = 0; this.avatar.playUpper('Spell_Simple_Shoot', 1); this.beginCast(); }
+            else { this.state = 'cast'; this.t = 0; this.avatar.perform(def.ai === 'ancient' ? MOVES.wave : MOVES.fuel); this.beginCast(); }
           }
           break;
         }

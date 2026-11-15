@@ -141,7 +141,6 @@ export const recoil: TechniqueKit = {
     { t: 0.55, right: 'fistToPalm', snap: true, camera: { fov: -4, pitch: 0.012 }, event: 'seal' },
     { t: 1.2, right: 'guard', left: 'guard', snap: true, camera: { fov: 6, roll: 0.02 }, event: 'release' },
   ]),
-  avatarClips: { primary: 'Punch_Jab', secondary: 'Spell_Simple_Enter', max: 'Punch_Cross' },
   traits: {
     'kinetic-source': (prop, ctx) => { ctx.game.techniques.resource += prop.def.mass * 0.1; },
   },

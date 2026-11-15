@@ -78,6 +78,9 @@ const PLANT = {
   step: 0.13, lift: 0.07,
 };
 
+// A contact point carried further than this in one frame was teleported.
+const TELEPORT = 0.5;
+
 type Contact = 'heel' | 'ball';
 
 // One leg. While the clip has a foot on the ground, whichever part of it is
@@ -91,7 +94,8 @@ export class Leg {
   private animQ = new THREE.Quaternion();
   private offset = new THREE.Vector3();
   private contact: Contact | null = null;
-  private prevC = new THREE.Vector3();
+  private prevHeel = new THREE.Vector3();
+  private prevBall = new THREE.Vector3();
   private stepFrom = new THREE.Vector3();
   private stepT = -1;
   private lift = 0;
@@ -108,20 +112,7 @@ export class Leg {
     this.ankle.getWorldPosition(this.anim);
     this.ankle.getWorldQuaternion(this.animQ);
     this.ball.getWorldPosition(this.ballAnim);
-    const thr = (this.contact ? PLANT.leave : PLANT.enter) * this.k;
-    const hHeel = this.anim.y - groundY - this.heelY, hBall = this.ballAnim.y - groundY - this.ballY;
-    const down = canPlant && !this.stepping && Math.min(hHeel, hBall) < thr;
-    if (down) {
-      const kind: Contact = hBall < hHeel ? 'ball' : 'heel';
-      const c = kind === 'ball' ? this.ballAnim : this.anim;
-      // The part on the ground stays put: whatever the clip and the body
-      // move it by goes into the offset that cancels it.
-      if (this.contact === kind) { this.offset.x -= c.x - this.prevC.x; this.offset.z -= c.z - this.prevC.z; }
-      this.contact = kind;
-      this.prevC.copy(c);
-      const drift = Math.hypot(this.offset.x, this.offset.z);
-      if (drift > (otherStepping ? PLANT.hard : PLANT.soft) * this.k) this.beginStep(true);
-    } else if (this.contact) this.beginStep(false);
+    // A step in flight moves on first, so the frame it lands is the frame it plants.
     if (this.stepping) {
       this.stepT += dt;
       const u = Math.min(1, this.stepT / PLANT.step);
@@ -130,6 +121,27 @@ export class Leg {
       this.lift = Math.sin(Math.PI * u) * this.liftHeight;
       if (u >= 1) { this.stepT = -1; this.offset.set(0, 0, 0); this.lift = 0; }
     }
+    const thr = (this.contact ? PLANT.leave : PLANT.enter) * this.k;
+    const hHeel = this.anim.y - groundY - this.heelY, hBall = this.ballAnim.y - groundY - this.ballY;
+    const down = canPlant && !this.stepping && Math.min(hHeel, hBall) < thr;
+    if (down) {
+      const kind: Contact = hBall < hHeel ? 'ball' : 'heel';
+      const c = kind === 'ball' ? this.ballAnim : this.anim;
+      const was = kind === 'ball' ? this.prevBall : this.prevHeel;
+      const dx = c.x - was.x, dz = c.z - was.z;
+      // The part on the ground stays put: whatever the clip and the body
+      // move it by goes into the offset that cancels it. Rolling from heel
+      // to ball hands over without a jump, since both are tracked. A body
+      // carried further than a stride in one frame was teleported (a
+      // respawn, a Shift, a Blink): its feet arrive with it.
+      if (Math.hypot(dx, dz) > TELEPORT * this.k) this.offset.set(0, 0, 0);
+      else if (this.contact) { this.offset.x -= dx; this.offset.z -= dz; }
+      this.contact = kind;
+      const drift = Math.hypot(this.offset.x, this.offset.z);
+      if (drift > (otherStepping ? PLANT.hard : PLANT.soft) * this.k) this.beginStep(true);
+    } else if (this.contact) this.beginStep(false);
+    this.prevHeel.copy(this.anim);
+    this.prevBall.copy(this.ballAnim);
     if (!canPlant) { this.offset.set(0, 0, 0); this.contact = null; this.stepT = -1; this.lift = 0; }
     this.target.copy(this.anim).add(this.offset);
     this.target.y += this.lift;

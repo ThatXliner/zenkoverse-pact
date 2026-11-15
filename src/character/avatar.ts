@@ -5,6 +5,7 @@ import { toon } from '../render/materials';
 import { dress, type CostumeId } from './costume';
 import { BodyGesture } from './gesture';
 import { Leg, Spring, measureGroundSpeeds } from './motion';
+import { applyPosture, type Posture } from './posture';
 import type { Gesture } from '../hands/gestures';
 
 // Every character is the one rigged human in human.glb, drawn like the rest
@@ -38,7 +39,7 @@ const UPPER_BONE = /^(spine_0[1-3]|neck_01|Head|clavicle|upperarm|lowerarm|hand|
 const SPINE = ['spine_01', 'spine_02', 'spine_03'];
 const LEG_BONES = ['thigh', 'calf', 'foot'].flatMap((b) => [`${b}_l`, `${b}_r`]);
 // Bones the procedural layers turn or move on top of the clips.
-const LAYERED = ['pelvis', ...SPINE, 'neck_01', 'Head', ...LEG_BONES, 'clavicle_l', 'clavicle_r', 'upperarm_l', 'upperarm_r'];
+const LAYERED = ['pelvis', ...SPINE, 'neck_01', 'Head', ...LEG_BONES, 'clavicle_l', 'clavicle_r', 'upperarm_l', 'upperarm_r', 'lowerarm_l', 'lowerarm_r'];
 const GAIT: Locomotion[] = ['walk', 'run', 'sprint'];
 const UP = new THREE.Vector3(0, 1, 0);
 const MODEL_BASE = new THREE.Quaternion().setFromAxisAngle(UP, Math.PI);
@@ -50,13 +51,20 @@ const WEIGHT = {
   leanAccel: 0.01, leanSpeed: 0.014, leanFwdMax: 0.16, leanBackMax: 0.12,
   bank: 0.022, bankMax: 0.15,
   // A landing sinks the hips by this many metres per m/s of fall, at most `landMax`.
-  land: 0.016, landMax: 0.17,
+  land: 0.024, landMax: 0.2,
 };
 // The phase rate never runs a gait faster than this many cycles a second
 // (the walk clip's own cadence is 0.75).
 const MAX_CADENCE = 1.6;
 // The fastest a body turns, in radians a second: a half turn takes about a quarter second.
 const TURN_SPEED = 13;
+// Seconds off the ground before a body counts as airborne.
+const GROUND_GRACE = 0.1;
+// The gait phase a start from standing begins at: the jog has the right foot
+// planted and the left passing under the hips there.
+const START_PHASE = 0.6;
+// Spin, in rad/s, a blow of strength 1 gives the chest.
+const ROCK_KICK = 8.5;
 // Beyond this angle from the facing, travel plays the cycle backward.
 const BACKING = THREE.MathUtils.degToRad(100);
 const MAX_HIP_YAW = 1.2;
@@ -75,7 +83,7 @@ function upperBodyClip(clip: THREE.AnimationClip): THREE.AnimationClip {
   return new THREE.AnimationClip(clip.name + '_upper', clip.duration, clip.tracks.filter((t) => UPPER_BONE.test(t.name.split('.')[0] ?? '')));
 }
 
-export interface AvatarOptions { targetHeight?: number; tint?: number; emissive?: number; build?: number; costume?: CostumeId }
+export interface AvatarOptions { targetHeight?: number; tint?: number; emissive?: number; build?: number; costume?: CostumeId; posture?: Posture }
 
 export class Avatar {
   readonly root = new THREE.Group();
@@ -109,6 +117,7 @@ export class Avatar {
   private rockX = new Spring(12, 0.32);
   private rockZ = new Spring(12, 0.32);
   private legs: Leg[] = [];
+  private posture: Posture | null;
 
   private oneShot: THREE.AnimationAction | null = null;
   readonly height: number;
@@ -121,6 +130,7 @@ export class Avatar {
   constructor(assets: Assets, which: CharacterModel, opts: AvatarOptions = {}) {
     const gltf = assets.model('characters/human');
     const look = LOOKS[which];
+    this.posture = opts.posture ?? null;
     this.clipSpeed = { ...(gltf.userData as { clipSpeeds?: Record<string, number> }).clipSpeeds };
     this.model = cloneSkeleton(gltf.scene);
     const drop: THREE.Object3D[] = [];
@@ -221,8 +231,14 @@ export class Avatar {
     // Direction of travel as a yaw from the facing, positive to the left.
     const travel = Math.atan2(fwd.z * velocity.x - fwd.x * velocity.z, fwd.x * velocity.x + fwd.z * velocity.z);
     const backing = Math.abs(travel) > BACKING;
+    // The physics loses the ground for a frame or two at a sprint; a body
+    // that is not rising counts as on its feet until it has been off them
+    // for a moment, so a blip neither lifts the planted feet nor blends
+    // toward the jump.
+    if (!grounded) { this.airT += dt; this.fallSpeed = Math.max(0, -velocity.y); }
+    const footed = grounded || (this.airT < GROUND_GRACE && velocity.y < 1);
     const targets: Partial<Record<Locomotion, number>> = {};
-    if (!grounded) targets.air = 1;
+    if (!footed) targets.air = 1;
     else if (speed < 0.12) targets.idle = 1;
     else {
       // From a standstill the walk comes in with the speed, so the first
@@ -235,6 +251,10 @@ export class Avatar {
       targets.run = move * walkRun * (1 - runSprint);
       targets.sprint = move * walkRun * runSprint;
     }
+    // Setting off from a standstill, the stride starts where the clips have
+    // both feet under the hips, so blending them in does not swing a foot.
+    const gaitNow = GAIT.reduce((s, l) => s + (this.weights[l] ?? 0), 0);
+    if (gaitNow < 0.02 && GAIT.some((l) => (targets[l] ?? 0) > 0)) this.phase = START_PHASE;
     let stride = 0, best = 0;
     for (const l of LOOPS) {
       const cur = this.weights[l] ?? 0;
@@ -247,11 +267,11 @@ export class Avatar {
     }
     const walk = this.actions.get(LOCO_CLIP.walk)?.getClip();
     const minStride = walk ? 0.3 * (this.clipSpeed[walk.name] ?? 1) * walk.duration : 0.3;
-    this.phaseRate = grounded ? Math.min(MAX_CADENCE, speed / Math.max(stride, minStride)) * (backing ? -1 : 1) : 0;
+    this.phaseRate = footed ? Math.min(MAX_CADENCE, speed / Math.max(stride, minStride)) * (backing ? -1 : 1) : 0;
     // Off-axis travel turns the hips so the legs run along it, forward or
     // backward, while the spine twists back so the chest keeps the facing.
     const legs = backing ? Math.atan2(-Math.sin(travel), -Math.cos(travel)) : travel;
-    const wantHip = grounded && speed > 0.35 ? THREE.MathUtils.clamp(legs, -MAX_HIP_YAW, MAX_HIP_YAW) : 0;
+    const wantHip = footed && speed > 0.35 ? THREE.MathUtils.clamp(legs, -MAX_HIP_YAW, MAX_HIP_YAW) : 0;
     this.hipYaw += (wantHip - this.hipYaw) * (1 - Math.exp(-8 * dt));
 
     if (dt > 1e-4) {
@@ -263,10 +283,9 @@ export class Avatar {
     this.lastVel.copy(velocity);
     this.speed = speed;
     // A landing: the hips sink by the speed of the fall and spring back.
-    if (!grounded) { this.airT += dt; this.fallSpeed = Math.max(0, -velocity.y); }
-    else if (!this.grounded && this.airT > 0.08) this.land(this.fallSpeed);
+    if (grounded && this.airT > GROUND_GRACE) this.land(this.fallSpeed);
     if (grounded) this.airT = 0;
-    this.grounded = grounded;
+    this.grounded = footed;
   }
 
   // Sinks the hips into a landing from a fall of `speed` m/s; the legs bend under it.
@@ -281,7 +300,9 @@ export class Avatar {
   impact(dir: THREE.Vector3, strength: number): void {
     const q = this.root.getWorldQuaternion(new THREE.Quaternion()).invert();
     const local = dir.clone().setY(0).normalize().applyQuaternion(q);
-    const s = Math.min(1.6, strength) * 3.4;
+    // The rock peaks near 0.5 rad per unit of strength: a jab tips the chest a
+    // hand's width, a heavy blow throws it back on its heels.
+    const s = Math.min(1.1, strength) * ROCK_KICK;
     this.rockX.kick(local.x * s);
     this.rockZ.kick(local.z * s);
   }
@@ -495,6 +516,14 @@ export class Avatar {
       this.rotateAbout('spine_02', right, this.aimPitch * 0.3);
       this.rotateAbout('spine_03', right, this.aimPitch * 0.25);
       this.rotateAbout('Head', right, this.aimPitch * 0.35);
+      if (this.posture) {
+        // A clash stance takes the whole body; otherwise the role's carriage
+        // sits under everything, and a gesture blends its arms from it.
+        const stance = Math.max(...STANCES.map((k) => this.stanceAmt[k]));
+        const rootQ = this.root.getWorldQuaternion(new THREE.Quaternion());
+        const moving = (this.weights.run ?? 0) + (this.weights.sprint ?? 0);
+        applyPosture(this.posture, (b, axis, angle) => this.rotateAbout(b, axis, angle), right, new THREE.Vector3(0, 0, -1).applyQuaternion(rootQ), UP, 1 - stance, Math.min(1, moving));
+      }
       this.gesture.apply(dt, this.root, (b, axis, angle) => this.rotateAbout(b, axis, angle), right, this.aimPitch);
       this.applyStance(dt);
       this.applyWeight(dt);

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Game } from '../app/game';
 import { Avatar, type CharacterModel } from '../character/avatar';
 import type { CostumeId } from '../character/costume';
+import { POSTURES, type Posture } from '../character/posture';
 import { RAPIER, GROUP_ENEMY, GROUP_WORLD, GROUP_PROP, groups } from '../physics/world';
 import { AURA, AuraField } from './field';
 import { BOSS_ULTIMATES } from './ultimates';
@@ -12,19 +13,19 @@ import { MOVES } from './moves';
 export type EnemyAi = 'thug' | 'kuroda' | 'ancient' | 'dummy' | 'rival';
 // `tint` is the suit: one flat, saturated colour per role, far from any skin
 // tone. `costume` is what the role wears over it (src/character/costume.ts):
-// with `height` and `build` (the chest's width) it gives each role its own
+// with `height`, `build` (the chest's width) and `posture` (src/character/posture.ts) it gives each role its own
 // silhouette from the top-down camera. A rival (another player) wears none.
-export interface EnemyDef { name: string; model: CharacterModel; costume?: CostumeId; hp: number; speed: number; dmg: number; ai: EnemyAi; boss?: boolean; tint?: number; emissive?: number; height?: number; build?: number; title?: string }
+export interface EnemyDef { name: string; model: CharacterModel; costume?: CostumeId; hp: number; speed: number; dmg: number; ai: EnemyAi; boss?: boolean; tint?: number; emissive?: number; height?: number; build?: number; title?: string; posture?: Posture }
 
 export const ENEMY_DEFS: Record<string, EnemyDef> = {
-  thug: { name: 'Underworld Thug', model: 'bald', costume: 'thug', hp: 70, speed: 3.6, dmg: 11, ai: 'thug', tint: 0x5b5560 },
-  bruiser: { name: 'Bristle Brawler', model: 'beard', costume: 'bruiser', hp: 120, speed: 3.0, dmg: 16, ai: 'thug', tint: 0x9b2335, height: 1.95, build: 1.18 },
-  kuroda: { name: 'Kuroda Enforcer', model: 'parted', costume: 'kuroda', hp: 620, speed: 3.2, dmg: 15, ai: 'kuroda', boss: true, tint: 0xd4661a, emissive: 0xff3a00, height: 1.9, build: 1.1, title: 'Kuroda Enforcer, whose "fire" is fuel' },
-  ancient: { name: 'The Ancient Echo Master', model: 'long', costume: 'ancient', hp: 1300, speed: 2.6, dmg: 20, ai: 'ancient', boss: true, tint: 0xeef3ea, emissive: 0x7dffb2, height: 1.7, build: 0.94, title: 'The Ancient Echo Master' },
+  thug: { name: 'Underworld Thug', model: 'bald', costume: 'thug', posture: POSTURES.thug, hp: 70, speed: 3.6, dmg: 11, ai: 'thug', tint: 0x5b5560 },
+  bruiser: { name: 'Bristle Brawler', model: 'beard', costume: 'bruiser', posture: POSTURES.bruiser, hp: 120, speed: 3.0, dmg: 16, ai: 'thug', tint: 0x9b2335, height: 1.95, build: 1.18 },
+  kuroda: { name: 'Kuroda Enforcer', model: 'parted', costume: 'kuroda', posture: POSTURES.kuroda, hp: 620, speed: 3.2, dmg: 15, ai: 'kuroda', boss: true, tint: 0xd4661a, emissive: 0xff3a00, height: 1.9, build: 1.1, title: 'Kuroda Enforcer, whose "fire" is fuel' },
+  ancient: { name: 'The Ancient Echo Master', model: 'long', costume: 'ancient', posture: POSTURES.ancient, hp: 1300, speed: 2.6, dmg: 20, ai: 'ancient', boss: true, tint: 0xeef3ea, emissive: 0x7dffb2, height: 1.7, build: 0.94, title: 'The Ancient Echo Master' },
   dummy: { name: 'Training Dummy', model: 'buzzed', costume: 'dummy', hp: 100000, speed: 0, dmg: 0, ai: 'dummy', tint: 0x8c9a7a },
   // Rooftop-trial roster: the same thug AI at other speeds, weights and hit points.
-  runner: { name: 'Spring Leaper', model: 'buzzed', costume: 'runner', hp: 52, speed: 5.2, dmg: 14, ai: 'thug', tint: 0x2f9e5a, height: 1.72, build: 0.92 },
-  husk: { name: 'Husk Shell', model: 'beard', costume: 'husk', hp: 190, speed: 2.3, dmg: 20, ai: 'thug', tint: 0x6b2f6e, height: 2.05, build: 1.24 },
+  runner: { name: 'Spring Leaper', model: 'buzzed', costume: 'runner', posture: POSTURES.runner, hp: 52, speed: 5.2, dmg: 14, ai: 'thug', tint: 0x2f9e5a, height: 1.72, build: 0.92 },
+  husk: { name: 'Husk Shell', model: 'beard', costume: 'husk', posture: POSTURES.husk, hp: 190, speed: 2.3, dmg: 20, ai: 'thug', tint: 0x6b2f6e, height: 2.05, build: 1.24 },
   rival: { name: 'Rival', model: 'parted', hp: 100, speed: 0, dmg: 0, ai: 'rival', height: 1.78 },
 };
 
@@ -105,7 +106,7 @@ export class Enemy {
     this.hp = this.maxHp = def.hp * scale.hp;
     this.dmg = def.dmg * scale.dmg;
     this.position = pos.clone();
-    this.avatar = new Avatar(game.assets, def.model, { targetHeight: def.height ?? 1.8, tint: def.tint, emissive: def.emissive, build: def.build, costume: def.costume });
+    this.avatar = new Avatar(game.assets, def.model, { targetHeight: def.height ?? 1.8, tint: def.tint, emissive: def.emissive, build: def.build, costume: def.costume, posture: def.posture });
     this.avatar.root.position.copy(pos);
     game.renderer.scene.add(this.avatar.root);
     const h = def.height ?? 1.8, r = 0.36;

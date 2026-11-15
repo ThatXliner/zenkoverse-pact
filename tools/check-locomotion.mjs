@@ -3,6 +3,11 @@
 // the feet point along the line of travel, backward moves included, and the sparring partners face the way they walk.
 // Facing is read from the model itself (authored facing +Z, which the idle
 // stance's toes confirm), not from any yaw the code stores.
+// Then weight: a planted foot does not slide across the ground in a walk,
+// a sprint, a start, a stop, a reversal, a turn or a top-down strafe; a
+// sprint leaves nothing drawn on the ground behind it (third-person runs
+// once left a trail of white discs); a landing sinks the hips; and a blow
+// rocks the struck body away from it.
 // Usage: npm run check:locomotion -- [url] [--url http://localhost:4173/] [--port 4173]
 // Without a URL it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
@@ -11,6 +16,9 @@ import { resolveTarget } from './lib/target.mjs';
 const { url, stop } = await resolveTarget();
 const CHEST_LIMIT = 25;
 const FEET_LIMIT = 35;
+// How fast, in m/s, a planted foot may cross the ground. Before the legs
+// planted their feet a start slid at 3.3 and a stop at 0.8.
+const SLIDE_LIMIT = 0.3;
 const browser = await chromium.launch({ channel: 'chrome', args: ['--use-angle=metal', '--enable-gpu'] });
 const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
 const pageErrors = [];
@@ -110,6 +118,81 @@ const walkers = await page.evaluate(() => {
   g.teleport([-8, 0, 13]); g.step(4);
   return sample(g.game.encounters.enemies.map((e) => ({ kind: `enemy:${e.def.ai}`, av: e.avatar, velocity: e.velocity })), 150);
 });
+// Weight: planted feet stay planted, a run leaves nothing on the ground, a
+// landing sinks the hips, and a blow rocks a body away from it.
+const weight = await page.evaluate((SLIDE_MOVES) => {
+  const g = window.game; const game = g.game;
+  const V = game.player.position.constructor;
+  const av = game.avatar;
+  const KEYS = ['forward', 'back', 'left', 'right', 'sprint'];
+  const keysOff = () => { for (const k of KEYS) g.hold(k, false); };
+  g.god(true); game.encounters.reset();
+  keysOff(); g.teleport([-4, 0, 9]); g.camera('third'); g.step(90);
+  const ground0 = game.player.position.y;
+  const stand = {};
+  for (const s of ['l', 'r']) stand[s] = { heel: av.boneWorld(`foot_${s}`, new V()).y - ground0, ball: av.boneWorld(`ball_${s}`, new V()).y - ground0 };
+  // For each foot, the part on the ground (heel or ball, whichever is lower
+  // against its standing height, within 3 cm) and how fast it crosses the ground.
+  const slide = (mode, keysAt, frames, from) => {
+    keysOff(); g.teleport([-4, 0, 9]); g.camera(mode); g.look(-Math.PI / 2, -0.2); g.step(40);
+    const prev = { l: null, r: null };
+    let sum = 0, n = 0;
+    for (let f = 0; f < frames; f++) {
+      const keys = keysAt(f); for (const k of KEYS) g.hold(k, keys.includes(k));
+      g.step(1);
+      const ground = game.player.position.y;
+      for (const s of ['l', 'r']) {
+        const heel = av.boneWorld(`foot_${s}`, new V()), ball = av.boneWorld(`ball_${s}`, new V());
+        const hh = heel.y - ground - stand[s].heel, hb = ball.y - ground - stand[s].ball;
+        const kind = hb < hh ? 'ball' : 'heel', p = kind === 'ball' ? ball : heel;
+        const down = Math.min(hh, hb) < 0.03 && game.player.grounded;
+        if (down && prev[s] && prev[s].kind === kind && f >= from) { sum += Math.hypot(p.x - prev[s].p.x, p.z - prev[s].p.z) * 60; n++; }
+        prev[s] = down ? { kind, p } : null;
+      }
+    }
+    keysOff();
+    return { mean: sum / Math.max(1, n), n };
+  };
+  const script = {
+    walk: ['third', () => ['forward'], 150, 60],
+    sprint: ['third', () => ['forward', 'sprint'], 120, 60],
+    start: ['third', () => ['forward'], 30, 0],
+    stop: ['third', (f) => (f < 60 ? ['forward', 'sprint'] : []), 100, 60],
+    reverse: ['top', (f) => (f < 50 ? ['right'] : ['left']), 90, 50],
+    'quarter turn': ['top', (f) => (f < 50 ? ['right'] : ['forward']), 130, 50],
+    'top-down diagonal': ['top', () => ['forward', 'right'], 120, 50],
+    'top-down backing': ['top', () => ['back'], 120, 50],
+  };
+  const slides = SLIDE_MOVES.map((name) => ({ name, ...slide(...script[name]) }));
+
+  // Everything drawn near the ground after a sprint has settled is what was
+  // there before it: footsteps leave no marks behind.
+  const nearGround = () => { let c = 0; game.renderer.scene.traverse((o) => { if (o.isMesh && o.visible) { const p = o.getWorldPosition(new V()); if (p.y < 0.4) c++; } }); return c; };
+  keysOff(); g.teleport([-4, 0, 9]); g.camera('third'); g.look(-Math.PI / 2, -0.3); g.step(60);
+  const before = nearGround();
+  g.hold('forward', true); g.hold('sprint', true); g.step(150); keysOff(); g.step(200);
+  const after = nearGround();
+
+  // A jump from standing: the hips' lowest point in the half second after touchdown, against standing.
+  g.teleport([-4, 0, 9]); g.step(60);
+  const pelvisAt = () => av.boneWorld('pelvis', new V()).y - game.player.position.y;
+  const standing = pelvisAt();
+  g.hold('jump', true); g.step(1); g.hold('jump', false);
+  let landed = -1, lowest = Infinity;
+  for (let i = 0; i < 90; i++) { g.step(1); if (landed < 0 && i > 5 && game.player.grounded) landed = i; if (landed >= 0 && i - landed < 30) lowest = Math.min(lowest, pelvisAt()); }
+
+  // A blow from the player: the struck thug's chest moves away from it.
+  g.teleport([4, 0, 8]); g.step(10);
+  const e = game.encounters.spawn('thug', new V(4, 0, 6.5));
+  e.hold(1e9); e.yaw = Math.PI; g.step(30);
+  const chest = () => e.avatar.boneWorld('neck_01', new V()).sub(e.position);
+  const rest = chest();
+  e.locked = 0; e.hurt(10, { from: game.player.position.clone(), knock: 0 });
+  let rock = 0;
+  for (let i = 0; i < 20; i++) { g.step(1); rock = Math.max(rock, rest.z - chest().z); }
+  game.encounters.reset(); g.god(false);
+  return { slides, before, after, sink: standing - lowest, rock };
+}, ['walk', 'sprint', 'start', 'stop', 'reverse', 'quarter turn', 'top-down diagonal', 'top-down backing']);
 const debugErrors = await page.evaluate(() => window.game.errors);
 await browser.close();
 stop();
@@ -128,5 +211,9 @@ for (const kind of [...new Set(walkers.map((w) => w.kind))]) {
   report(backward === 0, `${kind}: faces its direction of travel in ${s.length - backward}/${s.length} samples (min facing·velocity ${Math.min(...s.map((w) => w.dot))})`);
 }
 report(walkers.some((w) => w.kind.startsWith('enemy')), 'sampled enemies while they walked');
+for (const s of weight.slides) report(s.n >= 5 && s.mean <= SLIDE_LIMIT, `${s.name}: a planted foot stays put (slides ${s.mean.toFixed(2)} m/s over ${s.n} planted frames, limit ${SLIDE_LIMIT})`);
+report(weight.after <= weight.before, `a sprint leaves nothing on the ground (${weight.before} meshes near the ground before, ${weight.after} after)`);
+report(weight.sink >= 0.05, `a landing sinks the hips (${(weight.sink * 100).toFixed(1)} cm)`);
+report(weight.rock >= 0.09, `a blow rocks the struck chest away from it, measured at the neck (${(weight.rock * 100).toFixed(1)} cm)`);
 report(pageErrors.length === 0 && debugErrors.length === 0, `no page errors (${[...pageErrors, ...debugErrors].join('; ') || 'none'})`);
 if (failed) { console.error(`${failed} locomotion checks failed`); process.exit(1); }

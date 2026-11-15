@@ -28,7 +28,8 @@ export interface DrillDef {
   jp: string;
   brief: string;
   // The rules as short lines for the drill panel, shown for the whole drill.
-  howTo?: string[];
+  // Read when the panel renders, so they name the keys as bound now.
+  howTo?: () => string[];
   // A line under the score while the drill runs, if the drill has one.
   cue?: () => string;
   position: [number, number, number];
@@ -92,7 +93,7 @@ export class Drills {
     const c = this.current;
     if (!c) { drillUi.active.value = null; return; }
     const t = c.def.tiers[c.tier]!;
-    drillUi.active.value = { title: c.def.title, jp: c.def.jp, tier: t.name, score: c.score, needed: t.pass, left: t.count - c.spawned + c.live.length, best: this.progress[c.def.id] ?? 0, cue: c.def.cue?.() ?? '', howTo: c.def.howTo ?? [c.def.brief], waiting: c.waiting };
+    drillUi.active.value = { title: c.def.title, jp: c.def.jp, tier: t.name, score: c.score, needed: t.pass, left: t.count - c.spawned + c.live.length, best: this.progress[c.def.id] ?? 0, cue: c.def.cue?.() ?? '', howTo: c.def.howTo?.() ?? [c.def.brief], waiting: c.waiting };
   }
 
   // Kits call this when a Technique acts on a prop, so the drill can score it.
@@ -170,6 +171,7 @@ export class Drills {
       g.audio.play('drill.fail');
     }
     try { localStorage.setItem(KEY, JSON.stringify(this.progress)); } catch { /* */ }
+    g.tutorial.notify(passed ? 'drill-passed' : 'drill-failed');
     this.current = null;
     drillUi.active.value = null;
     setState({ kind: c.resume === 'tutorial' ? 'tutorial' : 'explore', ...(c.resume === 'tutorial' ? { step: g.tutorial.stepId } : {}) } as never);

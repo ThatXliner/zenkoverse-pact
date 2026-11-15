@@ -38,9 +38,10 @@ export const UNLOCK_RADIUS = 5;
 export const ARRIVE_RADIUS = 8;
 
 // The tutorial step is a tracked objective whenever it points at a place.
+// These match the tutorial's beacons (src/tutorial/tutorial.ts).
 export const TUTORIAL_TARGETS: Partial<Record<TutorialStepId, { title: string; jp: string; at: THREE.Vector3 } | { poi: PoiId }>> = {
-  look: { title: 'The hoist', jp: '起重機', at: v(-20, 5, 3) },
-  secondary: { title: 'Crates by the hoist', jp: '木箱', at: v(-22.6, 0, 10.6) },
+  move: { title: 'The gold ring', jp: '標', at: v(1.5, 0, 2.5) },
+  clash: { title: 'The listening stone', jp: '気読み', at: v(6, 0, 3.2) },
   done: { poi: 'hall' },
 };
 

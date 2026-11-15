@@ -447,7 +447,7 @@ if (run('tutorial')) {
   await startRun('recoil', { tutorial: true });
   await step(30);
   await shot('tutorial', 'step-move');
-  for (const s of ['camera', 'primary', 'pact', 'max']) {
+  for (const s of ['camera', 'primary', 'reserve', 'sign', 'aura', 'clash', 'pact', 'max']) {
     await api((g, st) => g.tutorialStep(st), s);
     await step(20);
     await shot('tutorial', `step-${s}`);

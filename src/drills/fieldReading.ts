@@ -4,6 +4,7 @@ import type { DrillDef, DrillItem } from './drills';
 import { toon } from '../render/materials';
 import { FieldView } from '../combat/fieldView';
 import { PICKS, counterTo, type Pick } from '../net/clash';
+import { keyLabel } from '../app/keymap';
 
 // Reading the Field (気読み), the aura drill (issue #4). It trains refinement,
 // the mastery stat that sets how dense and strong the player's field is. A
@@ -13,7 +14,7 @@ import { PICKS, counterTo, type Pick } from '../net/clash';
 // with the pick that beats it, before the tell fades. Any Technique can run
 // it; the gains go to the Technique in hand, capped by its potential.
 
-const STAND: [number, number, number] = [6, 0, 3.2];
+export const STAND: [number, number, number] = [6, 0, 3.2];
 const STONE = new THREE.Vector3(6, 0, -0.4);
 const RADIUS = 3.1;
 const COLOR = 0x9fe3ff;
@@ -51,11 +52,11 @@ export function fieldReading(game: Game): DrillDef {
   return {
     id: 'field-reading', technique: null, title: 'Reading the Field', jp: '気読み',
     brief: 'Watch the stone\'s field. Each change warns of a move; answer with the move that beats it.',
-    howTo: [
+    howTo: () => [
       'The stone\'s field warns you before it moves. Answer before the warning fades.',
-      'Swells toward you: a push is coming. Feint with A or D.',
-      'Draws in tight: a hold is coming. Push with W.',
-      'Far side flickers: a feint is coming. Hold with S.',
+      `Swells toward you: a push is coming. Feint with ${keyLabel('left')} or ${keyLabel('right')}.`,
+      `Draws in tight: a hold is coming. Push with ${keyLabel('forward')}.`,
+      `Far side flickers: a feint is coming. Hold with ${keyLabel('back')}.`,
       'An Aura Clash is read the same way.',
     ],
     position: STAND,

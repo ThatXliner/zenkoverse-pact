@@ -27,6 +27,7 @@ const SCENES = [
   { name: 'yard', js: `${fresh} g.teleport("courtyard"); g.step(20);` },
   { name: 'tutorial', js: 'g.game.startRun(); g.step(5); g.tutorialStep("camera"); g.step(20);' },
   { name: 'tutorial-pact', js: 'g.game.startRun(); g.step(5); g.tutorialStep("pact"); g.step(20);' },
+  { name: 'tutorial-clash', js: 'g.game.startRun(); g.step(5); g.tutorialStep("clash"); g.teleport([6, 0, 3.2]); g.step(20);' },
   { name: 'drill-wait', js: `${fresh} g.teleport([6, 0, 3.2]); g.step(5); g.game.drills.begin("field-reading", false); g.step(20);` },
   { name: 'drill-run', js: `${fresh} g.teleport([6, 0, 3.2]); g.step(5); g.drill("field-reading"); g.step(120);` },
   { name: 'stone-prompt', js: `${fresh} g.teleport([6, 0, 3.2]); g.step(20);` },

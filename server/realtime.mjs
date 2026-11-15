@@ -21,6 +21,8 @@ import rules from '../src/net/rules.json' with { type: 'json' };
 import { ClashReferee, isPick } from '../src/net/clash.js';
 
 const TICK_MS = 1000 / rules.tickHz;
+// The gesture a cast plays: the full sign, the shortened one, or the flick.
+const VARIANTS = ['long', 'short', 'none'];
 const AWAY_MS = 1500;
 const HITS_PER_SECOND = 40;
 // The server is public on a home machine: bound what one script can cost it.
@@ -314,7 +316,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
         return;
       case 'cast':
         if (p.down) return;
-        broadcast(room, { type: 'cast', id: p.id, ct: Number(m.ct) || 0, kind: String(m.kind).slice(0, 16), tech: String(m.tech).slice(0, 16), name: String(m.name ?? '').slice(0, 40), dir: vec(m.dir) ?? [0, 0, -1] }, p);
+        broadcast(room, { type: 'cast', id: p.id, ct: Number(m.ct) || 0, kind: String(m.kind).slice(0, 16), tech: String(m.tech).slice(0, 16), name: String(m.name ?? '').slice(0, 40), dir: vec(m.dir) ?? [0, 0, -1], variant: VARIANTS.includes(m.variant) ? m.variant : 'long', speed: Number.isFinite(m.speed) ? num(m.speed, 0.25, 4) : 1 }, p);
         return;
       case 'fx':
         if (Array.isArray(m.calls) && m.calls.length <= 64) broadcast(room, { type: 'fx', id: p.id, ct: Number(m.ct) || 0, calls: m.calls }, p);

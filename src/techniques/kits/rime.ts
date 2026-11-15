@@ -122,7 +122,6 @@ export const rime: TechniqueKit = {
     { t: 1.2, right: 'quietSpread', left: 'quietSpread', snap: true, camera: { fov: 7, pitch: -0.01 }, event: 'release' },
     { t: 1.42, right: 'clawReady', left: 'clawReady' },
   ]),
-  avatarClips: { primary: 'Sword_Attack', secondary: 'Spell_Simple_Shoot', max: 'Spell_Simple_Enter' },
   traits: {
     freezable: (prop, ctx) => freezeProp(ctx, prop, 6),
   },

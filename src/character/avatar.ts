@@ -3,6 +3,8 @@ import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.j
 import type { Assets } from '../app/assets';
 import { toon, addInkHulls } from '../render/materials';
 import { dress, type CostumeId } from './costume';
+import { BodyGesture } from './gesture';
+import type { Gesture } from '../hands/gestures';
 
 // Every character is the one rigged human in human.glb, drawn cel-shaded: flat
 // skin and hair fills over the toon ramp, a flat suit in the role's colour, an
@@ -30,7 +32,7 @@ export type Locomotion = 'idle' | 'walk' | 'run' | 'sprint' | 'air' | 'land' | '
 // Backing up is the walk and jog clips played in reverse, not a clip of its own.
 const LOCO_CLIP: Record<Locomotion, string> = { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Jog_Fwd_Loop', sprint: 'Sprint_Loop', air: 'Jump_Loop', land: 'Jump_Land', dead: 'Death01' };
 const LOOPS: Locomotion[] = ['idle', 'walk', 'run', 'sprint', 'air'];
-const UPPER_CLIPS = ['Punch_Jab', 'Punch_Cross', 'Spell_Simple_Enter', 'Spell_Simple_Exit', 'Spell_Simple_Shoot', 'Spell_Simple_Idle_Loop', 'Hit_Chest', 'Hit_Head', 'Interact', 'PickUp_Table', 'Sword_Attack'];
+const UPPER_CLIPS = ['Hit_Chest'];
 const UPPER_BONE = /^(spine_0[1-3]|neck_01|Head|clavicle|upperarm|lowerarm|hand|thumb|index|middle|ring|pinky)/;
 const SPINE = ['spine_01', 'spine_02', 'spine_03'];
 // Bones the procedural layer turns on top of the clips.
@@ -77,6 +79,7 @@ export class Avatar {
   private materials: THREE.MeshToonMaterial[] = [];
   private hulls: THREE.SkinnedMesh[] = [];
   private flashT = 0;
+  private gesture: BodyGesture;
 
   constructor(assets: Assets, which: CharacterModel, opts: AvatarOptions = {}) {
     const gltf = assets.model('characters/human');
@@ -127,6 +130,11 @@ export class Avatar {
     for (const side of ['l', 'r']) this.bones.get(`hand_${side}`)?.scale.setScalar(HAND_SCALE);
     const build = opts.build ?? 1;
     if (build !== 1) for (const n of ['spine_02', 'spine_03']) this.bones.get(n)?.scale.set(build, 1, build);
+    // The arms are measured for the gesture layer here, in the T-pose the
+    // file binds to, before any clip has posed them.
+    this.root.updateMatrixWorld(true);
+    const eye = (gltf.userData as { eye?: [number, number, number] }).eye ?? [0, 1.7, 0.07];
+    this.gesture = new BodyGesture(this.bones, this.model.localToWorld(new THREE.Vector3(...eye)), target / 1.78);
 
     this.mixer = new THREE.AnimationMixer(this.model);
     for (const clip of gltf.animations) {
@@ -214,6 +222,7 @@ export class Avatar {
   }
 
   die(): void {
+    this.gesture.release();
     for (const a of this.actions.values()) a.fadeOut(0.15);
     const d = this.actions.get(LOCO_CLIP.dead);
     if (d) { d.reset(); d.setLoop(THREE.LoopOnce, 1); d.clampWhenFinished = true; d.setEffectiveWeight(1); d.fadeIn(0.1).play(); }
@@ -240,29 +249,18 @@ export class Avatar {
   // Pitch of the aim in radians, positive looking up.
   setAimPitch(p: number): void { this.aimPitch = p; }
 
-  // How far the arms are drawn into the hand seal, 0 to 1. The full sign
-  // drives it, because no clip in the library brings the hands together.
-  seal = 0;
-  private sealAmt = 0;
-
-  // World-axis turns on top of the clip pose: the upper arms lift forward
-  // and swing in, the forearms fold across, and the hands meet at the chin.
-  // The idle clip holds the left arm a little forward, so the left lifts
-  // less to land level with the right (measured, not mirrored).
-  private applySeal(dt: number): void {
-    this.sealAmt += (this.seal - this.sealAmt) * (1 - Math.exp(-(this.seal > this.sealAmt ? 9 : 14) * dt));
-    const s = this.sealAmt;
-    if (s < 0.002) return;
-    const rootQ = this.root.getWorldQuaternion(new THREE.Quaternion());
-    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(rootQ);
-    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(rootQ);
-    for (const [side, m, raise] of [['r', 1, 1.3], ['l', -1, 0.7]] as const) {
-      this.rotateAbout(`upperarm_${side}`, right, raise * s);
-      this.rotateAbout(`upperarm_${side}`, UP, m * 0.5 * s);
-      this.rotateAbout(`upperarm_${side}`, fwd, m * -0.15 * s);
-      this.rotateAbout(`lowerarm_${side}`, UP, m * 1.6 * s);
-    }
+  // Plays a gesture on the arms and chest (src/character/gesture.ts): a
+  // cast, the full sign, an enemy's wind-up. A gesture that holds keeps its
+  // last pose until `release`.
+  perform(g: Gesture, speed = 1): void {
+    if (this.current === 'dead') return;
+    for (const a of this.upper.values()) if (a.isRunning()) a.fadeOut(0.08);
+    this.root.updateMatrixWorld(true);
+    this.gesture.play(g, speed, this.root);
   }
+
+  release(only?: Gesture): void { this.gesture.release(only); }
+  get performing(): boolean { return this.gesture.playing; }
 
   // A clash stance (src/combat/clash.ts), read from the whole body because a
   // robe hides the legs, and shaped to read in profile from the side-on clash
@@ -327,18 +325,19 @@ export class Avatar {
     // clip) would keep last frame's turn and gain another each frame. Hand the
     // mixer back the pose it wrote before layering on top of it again.
     for (const l of this.layered) l.bone.quaternion.copy(l.clip);
+    this.gesture.restore();
     this.mixer.update(dt);
     for (const l of this.layered) l.clip.copy(l.bone.quaternion);
     if (this.oneShot && !this.oneShot.isRunning()) { this.oneShot.fadeOut(0.2); this.oneShot = null; }
     if (this.current !== 'dead') {
-      this.model.updateMatrixWorld(true);
+      this.root.updateMatrixWorld(true);
       this.rotateAbout('pelvis', UP, this.hipYaw);
       for (const s of SPINE) this.rotateAbout(s, UP, -this.hipYaw / 3);
       const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.root.getWorldQuaternion(new THREE.Quaternion()));
       this.rotateAbout('spine_02', right, this.aimPitch * 0.3);
       this.rotateAbout('spine_03', right, this.aimPitch * 0.25);
       this.rotateAbout('Head', right, this.aimPitch * 0.35);
-      this.applySeal(dt);
+      this.gesture.apply(dt, this.root, (b, axis, angle) => this.rotateAbout(b, axis, angle), right, this.aimPitch);
       this.applyStance(dt);
     }
     this.flashT *= Math.exp(-12 * dt);

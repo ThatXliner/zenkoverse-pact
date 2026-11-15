@@ -10,6 +10,8 @@ import { freezePond } from '../techniques/kits/rime';
 import { RemotePlayer, seatSuit } from './remote';
 import { RULES, type ClientMsg, type PlayerInfo, type ServerMsg, type Vec3 } from './protocol';
 import type { Pick } from './clash';
+import { pick } from '../hands/gestures';
+import type { GestureVariant } from '../mastery/mastery';
 import { cutsceneTiming, enemyActor, playerActor, type CutsceneDef } from '../cutscene/cutscene';
 
 const kitOfCutscene = (id: string) => Object.values(KITS).find((k) => k.cutscene.id === id) ?? null;
@@ -233,8 +235,9 @@ export class Net {
         const kit = KITS[m.tech as keyof typeof KITS];
         if (!r || !kit) return;
         r.at(m.ct, () => {
-          const kind = m.kind as keyof typeof kit.avatarClips;
-          r.avatar.playUpper(kit.avatarClips[kind] ?? kit.avatarClips.primary, 1.1);
+          const kind = m.kind as keyof typeof kit.audio;
+          // A Maximum Output's sign is already playing, from its start.
+          if (kind !== 'max') r.avatar.perform(pick(kit.gestures[kind] ?? kit.gestures.primary!, m.variant), m.speed);
           // Their sound, quieter with distance.
           const d = r.position.distanceTo(g.player.position);
           const a = kit.audio[kind] ?? kit.audio.primary;
@@ -339,6 +342,9 @@ export class Net {
     if (m.caster === this.id) { g.cutscenes.confirm(); return; }
     const caster = this.remotes.get(m.caster), kit = kitOfCutscene(m.cut);
     if (!caster || !kit) return;
+    // The caster's body plays its Output's sign, its strike on the blow.
+    const sign = kit.gestures.max!.long;
+    const signTo = (beatIn: number) => caster.avatar.perform(sign, sign.impactAt / Math.max(0.4, beatIn));
     if (m.target === this.id && !this.downed) {
       // Our own Output, if one is starting, lost the race at the server.
       if (g.cutscenes.active) g.cutscenes.cancel();
@@ -346,12 +352,13 @@ export class Net {
       g.cutscenes.play({
         def: kit.cutscene, caster: enemyActor(caster), target: playerActor(g), role: 'target', yaw: m.yaw, origin: new THREE.Vector3(...m.p),
         sub: `${caster.info.name} · Maximum Output`, partner: m.caster,
-        gesture: () => undefined,
+        gesture: signTo,
         // The blow itself arrives from the caster through the server.
         resolve: () => undefined,
       });
       return;
     }
+    signTo(cutsceneTiming(kit.cutscene).beat ?? 1.4);
     const target = m.target === null ? null : this.nameOf(m.target);
     this.feed(target ? `${caster.info.name}: ${kit.cutscene.title.en} on ${target}` : `${caster.info.name}: ${kit.cutscene.title.en}`);
   }
@@ -394,8 +401,8 @@ export class Net {
   }
   endMax(): void { this.send({ type: 'max-end' }); }
 
-  cast(kind: string, name: string): void {
-    this.send({ type: 'cast', ct: performance.now(), kind, tech: this.game.techniqueId, name, dir: v3(this.game.cam.aimDirection()) });
+  cast(kind: string, name: string, variant: GestureVariant, speed: number): void {
+    this.send({ type: 'cast', ct: performance.now(), kind, tech: this.game.techniqueId, name, dir: v3(this.game.cam.aimDirection()), variant, speed: Math.round(speed * 100) / 100 });
   }
 
   setTechnique(id: string): void { this.send({ type: 'tech', tech: id }); }

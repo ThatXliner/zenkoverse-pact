@@ -69,7 +69,6 @@ export const echo: TechniqueKit = {
     { t: 1.2, right: 'snapped', snap: true, camera: { fov: 6 }, event: 'release' },
     { t: 1.42, right: 'snapReady', left: 'palmSurface' },
   ]),
-  avatarClips: { primary: 'Spell_Simple_Shoot', secondary: 'Spell_Simple_Idle_Loop', max: 'Spell_Simple_Enter' },
   traits: {
     resonant: (prop, ctx) => {
       prop.resonance += 1.2 * ctx.potency + 0.3;

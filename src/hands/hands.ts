@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { POSES, FINGERS, mirror, type HandPose, type Finger, type PoseName } from './poses';
-import { resolvePose, type Gesture } from './gestures';
+import { POSES, FINGERS, type Finger, type PoseName } from './poses';
+import type { Gesture } from './gestures';
+import { GestureClock, handSpring, aimSpring, poseSpring, stepSpring, type HandSpring } from './performer';
 import { ArmRig, type Arm } from './rig';
 import type { PlayerController } from '../player/controller';
 import type { CameraRig } from '../player/camera';
@@ -10,22 +11,10 @@ import type { Assets } from '../app/assets';
 import { toon, addInkHulls } from '../render/materials';
 import { PLAYER_SUIT } from '../character/avatar';
 
-// Spring state per hand. Poses are authored in view space for the right
-// hand; the left hand runs the mirrored pose through its own calibrated arm.
-interface HandState {
-  side: 1 | -1;
-  arm: Arm;
-  pos: THREE.Vector3;
-  vel: THREE.Vector3;
-  rot: THREE.Quaternion;
-  rotVel: THREE.Vector3;
-  curl: Record<Finger, [number, number, number]>;
-  spread: number;
-  targetPose: HandPose;
-  stiffness: number;
-  damping: number;
-  claws: THREE.Mesh[];
-}
+// Each hand is a spring (src/hands/performer.ts) run through its own
+// calibrated arm. Poses are authored in view space for the right hand; the
+// left hand runs the mirrored pose.
+interface HandState extends HandSpring { arm: Arm; claws: THREE.Mesh[] }
 
 // Where the rig sits against the camera and how pose coordinates become
 // wrist targets. The eye of the model lands on the camera plus `eye`, so
@@ -47,10 +36,7 @@ export class Hands {
   private hands: HandState[] = [];
   private skin: THREE.MeshToonMaterial;
   private clawMat: THREE.MeshStandardMaterial;
-  private gesture: Gesture | null = null;
-  private gestureT = 0;
-  private gestureKey = -1;
-  private gestureSpeed = 1;
+  private clock = new GestureClock();
   private onEvent: ((e: string) => void) | null = null;
   private onCamera: ((k: { fov: number; pitch?: number; roll?: number }) => void) | null = null;
   private idleT = 0;
@@ -90,17 +76,7 @@ export class Hands {
     this.rigRoot.position.set(this.rig.eye.x, -this.rig.eye.y, this.rig.eye.z).multiplyScalar(VIEW.scaleRig).add(VIEW.eye);
     this.rigRoot.add(this.rig.object);
     this.root.add(this.rigRoot);
-    for (const [side, arm] of [[1, this.rig.arms.r], [-1, this.rig.arms.l]] as const) {
-      const rest = side === 1 ? POSES.rest : mirror(POSES.rest);
-      this.hands.push({
-        side, arm,
-        pos: new THREE.Vector3(...rest.pos), vel: new THREE.Vector3(),
-        rot: new THREE.Quaternion().setFromEuler(new THREE.Euler(...rest.rot, 'YXZ')), rotVel: new THREE.Vector3(),
-        curl: structuredClone(rest.fingers) as HandState['curl'], spread: rest.spread,
-        targetPose: rest, stiffness: 140, damping: 18,
-        claws: this.buildClaws(arm),
-      });
-    }
+    for (const [side, arm] of [[1, this.rig.arms.r], [-1, this.rig.arms.l]] as const) this.hands.push({ ...handSpring(side, POSES.rest), arm, claws: this.buildClaws(arm) });
 
     this.light = new THREE.PointLight(0xffffff, 0, 1.6, 2);
     this.light.position.set(0, -0.1, -0.35);
@@ -139,16 +115,13 @@ export class Hands {
   }
 
   play(g: Gesture, speed: number, onEvent: (e: string) => void, onCamera: (k: { fov: number; pitch?: number; roll?: number }) => void): void {
-    this.gesture = g;
-    this.gestureT = 0;
-    this.gestureKey = -1;
-    this.gestureSpeed = speed;
+    this.clock.play(g, speed);
     this.onEvent = onEvent;
     this.onCamera = onCamera;
   }
 
-  stop(): void { this.gesture = null; }
-  get playing(): boolean { return this.gesture !== null; }
+  stop(): void { this.clock.stop(); }
+  get playing(): boolean { return this.clock.gesture !== null; }
 
   step(speed: number): void { this.landDip = Math.min(this.landDip + 0.004 * Math.min(1, speed / 6), 0.02); }
   land(v: number): void { this.landDip += Math.min(0.09, v * 0.012); }
@@ -164,7 +137,7 @@ export class Hands {
     this.landDip *= Math.exp(-7 * dtc);
     this.jumpLift *= Math.exp(-6 * dtc);
     this.dashT = Math.max(0, this.dashT - dtc);
-    if (Math.random() < dtc * 0.2 && !this.gesture) this.twitch();
+    if (Math.random() < dtc * 0.2 && !this.playing) this.twitch();
     for (const t of this.idleTwitch) t.t -= dtc;
     this.idleTwitch = this.idleTwitch.filter((t) => t.t > 0);
 
@@ -174,38 +147,21 @@ export class Hands {
     this.sway.addScaledVector(this.swayVel, dtc);
 
     const speed = player.planarSpeed.value;
-    const sprinting = input.isDown('sprint') && speed > 5 && !this.gesture;
+    const sprinting = input.isDown('sprint') && speed > 5 && !this.playing;
     const bobAmp = player.grounded ? THREE.MathUtils.clamp(speed / 6.6, 0, 1) : 0;
     const cyc = player.stepCycle * Math.PI * 2;
     const bob = new THREE.Vector3(Math.cos(cyc * 0.5) * 0.012 * bobAmp, Math.abs(Math.sin(cyc * 0.5)) * -0.016 * bobAmp + this.landDip * -1.2 + this.jumpLift, 0);
     const breathe = Math.sin(this.idleT * 1.3) * 0.004;
 
-    if (this.gesture) {
-      this.gestureT += dtc * this.gestureSpeed;
-      const g = this.gesture;
-      let k = this.gestureKey;
-      while (k + 1 < g.keys.length && g.keys[k + 1]!.t <= this.gestureT) {
-        k++;
-        const key = g.keys[k]!;
-        for (const h of this.hands) {
-          const named = h.side === 1 ? key.right : key.left;
-          const pose = resolvePose(named, h.targetPose);
-          h.targetPose = h.side === 1 || typeof named !== 'string' ? pose : mirror(pose);
-          h.stiffness = key.snap ? 520 : key.slow ? 60 : 180;
-          h.damping = key.snap ? 16 : key.slow ? 14 : 20;
-        }
-        if (key.camera) this.onCamera?.(key.camera);
-        if (key.event) this.onEvent?.(key.event);
-      }
-      this.gestureKey = k;
-      if (this.gestureT >= g.duration && !g.hold) { this.gesture = null; this.onEvent?.('end'); }
-    }
-    if (!this.gesture) {
-      for (const h of this.hands) {
-        const base = this.debugPose ? POSES[this.debugPose] : sprinting ? POSES.sprint : this.dashT > 0 ? POSES.guard : speed > 1 ? POSES.rest : POSES.restLow;
-        h.targetPose = h.side === 1 ? base : mirror(base);
-        h.stiffness = this.debugPose ? 400 : 70; h.damping = this.debugPose ? 30 : 13;
-      }
+    const ended = this.clock.advance(dtc, (key) => {
+      for (const h of this.hands) aimSpring(h, key);
+      if (key.camera) this.onCamera?.(key.camera);
+      if (key.event) this.onEvent?.(key.event);
+    });
+    if (ended) this.onEvent?.('end');
+    if (!this.playing) {
+      const base = this.debugPose ? POSES[this.debugPose] : sprinting ? POSES.sprint : this.dashT > 0 ? POSES.guard : speed > 1 ? POSES.rest : POSES.restLow;
+      for (const h of this.hands) poseSpring(h, base, this.debugPose ? 400 : 70, this.debugPose ? 30 : 13);
     }
 
     for (const h of this.hands) {
@@ -214,20 +170,8 @@ export class Hands {
       target.y += breathe;
       target.x += this.sway.x * (h.side === 1 ? 1.2 : 0.9);
       target.y += this.sway.y;
-      const acc = target.clone().sub(h.pos).multiplyScalar(h.stiffness).addScaledVector(h.vel, -h.damping);
-      h.vel.addScaledVector(acc, dtc);
-      h.pos.addScaledVector(h.vel, dtc);
       const tq = new THREE.Quaternion().setFromEuler(new THREE.Euler(tp.rot[0] - this.sway.y * 1.5, tp.rot[1] + this.sway.x * (h.side === 1 ? -1.5 : 1.5), tp.rot[2], 'YXZ'));
-      const err = new THREE.Quaternion().copy(h.rot).invert().multiply(tq);
-      const axis = new THREE.Vector3(err.x, err.y, err.z);
-      const angle = 2 * Math.atan2(axis.length(), err.w);
-      if (axis.lengthSq() > 1e-9) axis.normalize().multiplyScalar(angle > Math.PI ? angle - 2 * Math.PI : angle);
-      h.rotVel.addScaledVector(axis.multiplyScalar(h.stiffness * 0.9).addScaledVector(h.rotVel, -h.damping), dtc);
-      if (h.rotVel.lengthSq() > 1e-10) h.rot.multiply(new THREE.Quaternion().setFromAxisAngle(h.rotVel.clone().normalize(), h.rotVel.length() * dtc)).normalize();
-
-      const curlRate = h.stiffness > 300 ? 40 : 16;
-      for (const f of FINGERS) for (let j = 0; j < 3; j++) h.curl[f][j] = THREE.MathUtils.lerp(h.curl[f][j]!, tp.fingers[f][j]!, 1 - Math.exp(-curlRate * dtc));
-      h.spread = THREE.MathUtils.lerp(h.spread, tp.spread, 1 - Math.exp(-14 * dtc));
+      stepSpring(h, target, tq, dtc);
 
       const twitch = this.idleTwitch.find((t) => t.side === h.side);
       this.rig.solve(h.arm, {
@@ -245,7 +189,7 @@ export class Hands {
       this.root.position.copy(pivot).sub(pivot.clone().applyQuaternion(this.root.quaternion));
     } else { this.root.quaternion.identity(); this.root.position.set(0, 0, 0); }
 
-    const glowTarget = this.gesture ? 1 : 0;
+    const glowTarget = this.playing ? 1 : 0;
     this.glow += (glowTarget - this.glow) * (1 - Math.exp(-8 * dtc));
     this.pulseT *= Math.exp(-5 * dtc);
     this.light.intensity = this.glow * 0.03 + this.pulseT * 2.5;

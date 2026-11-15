@@ -3,6 +3,7 @@ import type { Game } from '../app/game';
 import { Enemy, ENEMY_DEFS, NO_SCALE } from '../combat/enemies';
 import type { CharacterModel } from '../character/avatar';
 import { RULES, type PlayerInfo, type PlayerState } from './protocol';
+import { KITS } from '../techniques/techniques';
 
 // Each seat in a room has a suit colour and a look, the same on every screen.
 export const SEAT_SUITS = [0x2a4a9e, 0xb3263a, 0x1f8a80, 0xd98a1c, 0x6a3fa0, 0x3f8f3a, 0x3a3d48, 0xc0407e];
@@ -38,6 +39,7 @@ export class RemotePlayer extends Enemy {
   private offset: number | null = null;
   private events: Timed[] = [];
   private lastFrozen = 0;
+  private signShown: PlayerState['sign'] = 0;
   private sample: PlayerState | null = null;
   // Hits this client sent that the server has not confirmed yet. The name
   // plate subtracts them, so the attacker sees the bar drop on the blow
@@ -182,7 +184,15 @@ export class RemotePlayer extends Enemy {
       root.rotation.y = s.yaw;
       this.avatar.setLocomotion(this.velocity, s.g, dt);
       this.avatar.setAimPitch(s.pitch);
-      this.avatar.seal = s.sign === 1 ? 1 : 0;
+      if (s.sign !== this.signShown) {
+        // The full sign starts on this body when it starts on its owner's,
+        // and a prime that lapses lets the stance go. A Maximum Output's
+        // sign plays from its own message instead.
+        const kit = KITS[this.info.tech as keyof typeof KITS];
+        if (kit && s.sign === 1 && !s.cine) this.avatar.perform(kit.sign);
+        else if (kit && s.sign === 0) this.avatar.release(kit.sign);
+        this.signShown = s.sign;
+      }
       // In a Maximum Output's cutscene: the two in it glow for everyone
       // watching, but not in the cutscene's own close-ups.
       if (s.cine && this.game.cutscenes.partner !== this.id) this.avatar.flash(0.55);

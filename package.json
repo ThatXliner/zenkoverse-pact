@@ -11,6 +11,7 @@
     "assets": "node tools/build-assets.mjs",
     "capture": "node tools/capture.mjs",
     "check:aura": "node tools/check-aura.mjs",
+    "check:casts": "node tools/check-casts.mjs",
     "check:controls": "node tools/check-controls.mjs",
     "check:cutscenes": "node tools/check-cutscenes.mjs",
     "check:effects": "node tools/check-effects.mjs",

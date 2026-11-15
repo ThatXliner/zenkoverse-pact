@@ -83,7 +83,6 @@ export const shift: TechniqueKit = {
     { t: 1.2, right: 'pointFar', left: 'guard', snap: true, camera: { fov: 8, roll: 0.03 }, event: 'release' },
     { t: 1.42, right: 'point' },
   ]),
-  avatarClips: { primary: 'Punch_Jab', secondary: 'Spell_Simple_Shoot', max: 'Sword_Attack' },
   traits: {},
   cutscene,
   effects: {

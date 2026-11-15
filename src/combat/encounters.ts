@@ -105,7 +105,7 @@ export class Encounters {
     boss.yaw = yaw;
     return g.cutscenes.play({
       def: ult.cutscene, caster: enemyActor(boss), target: playerActor(g), role: 'target', yaw, sub: boss.def.name,
-      gesture: () => boss.avatar.playUpper('Spell_Simple_Enter', 0.8),
+      gesture: (beatIn) => boss.avatar.perform(ult.sign, ult.sign.impactAt / beatIn),
       resolve: () => ult.resolve(g, boss),
     });
   }

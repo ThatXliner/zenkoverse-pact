@@ -12,6 +12,7 @@ import { AURA, AuraField, auraPotential, fieldFor, type FieldEnd, type FieldStat
 import { FieldView } from './fieldView';
 import { Clash } from './clash';
 import { fieldReading } from '../drills/fieldReading';
+import { MOVES } from './moves';
 
 export interface AuraReadout { state: FieldState; pool: number; left: number; holds: number; ended: FieldEnd | null; guardBroken: boolean }
 export interface AuraTraining { refinement: number; trained: number; potential: number; breadth: number; pacts: number }
@@ -109,7 +110,7 @@ export class Aura {
     g.audio.play('phaserUp3', 0.55, 0.45);
     g.audio.play('impactSoft_heavy_001', 0.5, 0.7);
     g.cam.kick({ fov: 6, pitch: 0.01 });
-    g.avatar.playUpper('Spell_Simple_Shoot', 1.1);
+    g.avatar.perform(MOVES.field);
     g.tutorial.notify('aura');
     return true;
   }

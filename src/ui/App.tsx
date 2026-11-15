@@ -157,6 +157,7 @@ function Pause({ game, tab }: { game: Game; tab: PauseTab }) {
             <div class="pause-main">
               <div class="pause-menu">
                 <button data-autofocus onClick={back}>Resume</button>
+                {(game.book.preview.value || game.encounters.inDummyRoom) && <button onClick={() => { resume(); game.stopTrying(); game.requestLock(); }}>Stop trying the draft</button>}
                 <button onClick={() => { resume(); game.tutorial.skip(); game.requestLock(); }}>Skip tutorial</button>
                 <button onClick={() => { resume(); game.startRun(); }}>Replay tutorial</button>
                 {st.kind === 'paused' && st.resume.kind === 'rooftop' && <button onClick={() => game.rooftop.abandon()}>Leave the rooftop</button>}

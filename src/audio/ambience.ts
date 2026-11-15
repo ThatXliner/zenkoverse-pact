@@ -4,7 +4,7 @@ import type { Library } from './library';
 
 // The compound at dusk, and the score over it. The bed is built from the
 // same noise and oscillators as the cues and runs for as long as the game
-// does: wind that breathes and gusts through the leaves, crickets, a bird now
+// does: wind that breathes and gusts through the leaves, a bird now
 // and then, the pond lapping where it is (a point source, so it swells as you
 // walk up to it), a temple bell far off. Under a roof the outside is heard
 // through the walls (low-passed and quieter) and the hall's own room tone
@@ -19,7 +19,7 @@ export type MusicMode = 'title' | 'calm' | 'fight' | 'clash';
 export interface AmbienceView {
   indoors: number;
   mode: MusicMode;
-  layers: Record<'wind' | 'leaves' | 'insects' | 'pond' | 'room' | 'drone' | 'taiko', number>;
+  layers: Record<'wind' | 'leaves' | 'pond' | 'room' | 'drone' | 'taiko', number>;
   events: { birds: number; bells: number; creaks: number; koto: number; taiko: number };
 }
 
@@ -37,7 +37,6 @@ export class Ambience {
   private wind: GainNode;
   private windFilter: BiquadFilterNode;
   private leaves: GainNode;
-  private insects: GainNode;
   private room: GainNode;
   private pond: GainNode;
   private pondPanner: PannerNode;
@@ -86,23 +85,6 @@ export class Ambience {
     this.leaves = ctx.createGain();
     this.leaves.gain.value = 0;
     this.loop('pink', 2).connect(leafHp).connect(this.leaves).connect(this.outsideFilter);
-
-    // Crickets: a narrow band of noise, not a tone, so they rasp instead of
-    // beep. A fast sine tremolo gives the chirp and a slow one lets each
-    // insect swell and fall away; three of them, apart, at different rates.
-    this.insects = ctx.createGain();
-    this.insects.gain.value = 0.12;
-    this.insects.connect(this.outsideFilter);
-    for (const [f, chirp, swell, pan] of [[4300, 23, 0.11, -0.6], [4700, 29, 0.07, 0.55], [3900, 19, 0.05, 0.1]] as const) {
-      const band = ctx.createBiquadFilter();
-      band.type = 'bandpass'; band.frequency.value = f; band.Q.value = 9;
-      const fast = ctx.createGain(); fast.gain.value = 0.5;
-      const slow = ctx.createGain(); slow.gain.value = 0.5;
-      this.lfo(chirp, 0.5, fast.gain);
-      this.lfo(swell, 0.5, slow.gain);
-      const p = ctx.createStereoPanner(); p.pan.value = pan;
-      this.loop('white', 2).connect(band).connect(fast).connect(slow).connect(p).connect(this.insects);
-    }
 
     // The pond: low lapping where the pond is.
     this.pondPanner = ctx.createPanner();
@@ -208,7 +190,7 @@ export class Ambience {
 
   view(): AmbienceView {
     const g = (n: GainNode) => Math.round(n.gain.value * 1000) / 1000;
-    return { indoors: this.indoors, mode: this.mode, layers: { wind: g(this.wind) * g(this.outside), leaves: g(this.leaves) * g(this.outside), insects: g(this.insects) * g(this.outside), pond: g(this.pond) * g(this.outside), room: g(this.room), drone: g(this.drone), taiko: g(this.taikoBus) }, events: { ...this.counts } };
+    return { indoors: this.indoors, mode: this.mode, layers: { wind: g(this.wind) * g(this.outside), leaves: g(this.leaves) * g(this.outside), pond: g(this.pond) * g(this.outside), room: g(this.room), drone: g(this.drone), taiko: g(this.taikoBus) }, events: { ...this.counts } };
   }
 
   private voice(out: AudioNode, t: number, gain: number, pitch = 1): Voice {

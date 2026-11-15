@@ -131,9 +131,9 @@ check(await castFrom('art1', () => page.keyboard.press('KeyZ')), 'Z casts Shockl
 await idle();
 
 console.log('the tutorial cards and key hints follow the bindings');
-await page.evaluate(() => window.game.tutorialStep('art'));
+await page.evaluate(() => window.game.tutorialStep('wager'));
 await page.waitForTimeout(800);
-check(/Z fires Shockline/.test(await text('.objective .b')), `the extra-slot card names Z: ${await text('.objective .b')}`);
+check(/Z fires Shockline/.test(await text('.objective .b')), `the Wager card names Shockline on Z: ${await text('.objective .b')}`);
 await page.evaluate(() => window.game.tutorialStep('primary'));
 await page.waitForTimeout(500);
 check(/^Left click fires Kinetic Release/.test(await text('.objective .b')), 'the primary card names left click');

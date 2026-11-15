@@ -240,6 +240,7 @@ export class Net {
           // A Maximum Output's sign is already playing, from its start.
           // Their cast's sound comes over the effects wire, placed at them.
           if (kind !== 'max') r.avatar.perform(pick(kit.gestures[kind] ?? kit.gestures.primary!, m.variant), m.speed);
+          if (m.shout && m.name) this.game.techniques.declarations.shout(m.name, () => (r.disposed ? null : r.position.clone().add(new THREE.Vector3(0, 2.25, 0))), kit.color);
         });
         return;
       }
@@ -399,9 +400,10 @@ export class Net {
   }
   endMax(): void { this.send({ type: 'max-end' }); }
 
+  // `shout` asks the others to letter the Pact's name over this player (src/techniques/declarations.ts).
   // `tech` is the Technique cast: the player's own, or the one a Vault Eye holds.
-  cast(kind: string, name: string, variant: GestureVariant, speed: number, tech: string = this.game.techniqueId): void {
-    this.send({ type: 'cast', ct: performance.now(), kind, tech, name, dir: v3(this.game.cam.aimDirection()), variant, speed: Math.round(speed * 100) / 100 });
+  cast(kind: string, name: string, variant: GestureVariant, speed: number, shout = false, tech: string = this.game.techniqueId): void {
+    this.send({ type: 'cast', ct: performance.now(), kind, tech, name, dir: v3(this.game.cam.aimDirection()), variant, speed: Math.round(speed * 100) / 100, shout });
   }
 
   setTechnique(id: string): void { this.send({ type: 'tech', tech: id }); }

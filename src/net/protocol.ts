@@ -73,7 +73,7 @@ export type ClientMsg =
   | { type: 'state'; s: PlayerState }
   | { type: 'tech'; tech: string }
   // `variant` and `speed` are the gesture the cast plays, so every screen draws the same one.
-  | { type: 'cast'; ct: number; kind: string; tech: string; name: string; dir: Vec3; variant: GestureVariant; speed: number }
+  | { type: 'cast'; ct: number; kind: string; tech: string; name: string; dir: Vec3; variant: GestureVariant; speed: number; shout?: boolean }
   | { type: 'fx'; ct: number; calls: FxCall[] }
   | ({ type: 'hit'; seq: number; target: number; amount: number } & HitOpts)
   | { type: 'resolve'; hit: number; taken: number }
@@ -104,7 +104,7 @@ export type ServerMsg =
   | { type: 'leave'; id: number }
   | { type: 'info'; player: PlayerInfo }
   | { type: 'snap'; t: number; players: { id: number; hp: number; down: boolean; away: boolean; st: PlayerState[] }[] }
-  | { type: 'cast'; id: number; ct: number; kind: string; tech: string; name: string; dir: Vec3; variant: GestureVariant; speed: number }
+  | { type: 'cast'; id: number; ct: number; kind: string; tech: string; name: string; dir: Vec3; variant: GestureVariant; speed: number; shout?: boolean }
   | { type: 'fx'; id: number; ct: number; calls: FxCall[] }
   | ({ type: 'struck'; hit: number; by: number; amount: number } & HitOpts)
   | { type: 'hp'; id: number; hp: number; by: number | null; amount: number }

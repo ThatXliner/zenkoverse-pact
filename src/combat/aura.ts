@@ -30,6 +30,14 @@ type Owner = Enemy | RemotePlayer;
 const CLASH_DOME = 0.1;
 const CLASH_FILL = 0.35;
 
+// The expansion's beat, in seconds: a gather, the release, and the field
+// settling out to its reach (with a little overshoot) after it. The field is
+// open by the rules from the press, so nothing about it waits online; only
+// how it is drawn keeps the beat.
+const GATHER = 0.3;
+const SETTLE = 0.4;
+const DUST = 0x9c8b72;
+
 // Aura Expansion on F (issue #4): the player's field, the fields of the
 // Master and of other players, what an open field does to the bodies in it,
 // and the clashes where two fields touch. The rules are in field.ts and
@@ -46,6 +54,9 @@ export class Aura {
   private leanTo = new THREE.Vector3();
   private asked = new Map<number, number>();
   private nag = 0;
+  // Seconds since the last expansion began; Infinity when none is playing.
+  private since = Infinity;
+  private shimmer = 0;
 
   constructor(private game: Game) {
     this.mine = new FieldView(game.renderer.scene, 0xffffff);
@@ -104,14 +115,52 @@ export class Aura {
     const f = fieldFor(this.refinement());
     this.field.recovers = f.recovers;
     if (!this.field.expand(f.reach, f.density, f.holds)) return false;
+    const color = this.colorOf(null);
     const feet = g.player.position.clone().add(new THREE.Vector3(0, 0.08, 0));
-    g.vfx.ring(feet, this.colorOf(null), 0.4, f.reach * 1.15, 0.45);
-    g.vfx.ring(feet.clone().add(new THREE.Vector3(0, 1, 0)), 0xffffff, 0.3, f.reach * 0.8, 0.3);
+    // The gather: the body draws in, and the air and the dust around it are
+    // pulled toward it while the sound inhales.
+    this.since = 0;
+    g.avatar.perform(MOVES.field, MOVES.field.impactAt / GATHER);
+    g.vfx.gather(feet, f.reach * 0.75, 18, GATHER, DUST);
+    g.vfx.ring(feet, color, f.reach * 0.5, 0.4, GATHER, undefined, 0.5);
     g.audio.play('aura.expand');
-    g.cam.kick({ fov: 6, pitch: 0.01 });
-    g.avatar.perform(MOVES.field);
+    g.cam.kick({ fov: -5, pitch: -0.01 });
+    g.vfx.after(GATHER, () => this.release(f.reach));
     g.tutorial.notify('aura');
     return true;
+  }
+
+  // The release: one held inked frame and a catch, then a shockwave that
+  // raises the dust, shoves loose props and throws back the bodies near.
+  // Other players are never moved or held by it: online the clock ignores
+  // the catch, and the shove only reaches props and this screen's enemies.
+  private release(reach: number): void {
+    const g = this.game;
+    if (!this.field.open) return;
+    const me = g.player.position;
+    const color = this.colorOf(null);
+    const feet = me.clone().add(new THREE.Vector3(0, 0.08, 0));
+    g.renderer.impactFrame(2, new THREE.Color(color), me.clone().add(new THREE.Vector3(0, 1, 0)));
+    // A clash that began as the fields touched runs on the real clock.
+    if (!this.clash.active) g.clock.hitStop(0.07);
+    g.vfx.ring(feet, color, 0.4, reach * 1.15, 0.45);
+    g.vfx.ring(feet.clone().add(new THREE.Vector3(0, 1, 0)), 0xffffff, 0.3, reach * 0.8, 0.3);
+    g.vfx.ring(feet, DUST, 0.6, reach * 0.95, 0.6, undefined, 0.6);
+    g.vfx.burst(feet.clone().add(new THREE.Vector3(0, 0.1, 0)), 10, 'debris', 4);
+    g.cam.shake(0.35);
+    g.cam.kick({ fov: 10, pitch: 0.02 });
+    for (const p of g.props.instances) {
+      const d = p.mesh.position.clone().sub(me);
+      const dist = d.length();
+      if (dist > reach || dist < 0.01) continue;
+      g.props.push(p, d.setY(0).normalize().setY(0.5).multiplyScalar(p.def.mass * 4 * (1 - dist / reach * 0.6)));
+    }
+    for (const e of g.encounters.enemies) {
+      // A boss stands its ground, and a body held in a clash is not to be moved.
+      if (!e.alive || e.def.ai === 'dummy' || e.isBoss || e.locked > 0) continue;
+      const dist = e.position.distanceTo(me);
+      if (dist < reach * 0.6) e.hurt(0, { from: me, knock: 6 * (1 - dist / (reach * 0.6)) + 2, lift: 1.5 });
+    }
   }
 
   // By choice: the field draws back in, calmly, and the pool starts from empty.
@@ -179,7 +228,16 @@ export class Aura {
     const zone = g.world.zoneAt(me);
     this.mine.color = this.colorOf(null);
     if (this.lean > 0) this.mine.tell(null, this.leanTo);
-    this.mine.draw(raw, g.clock.time, me, this.field.radius, this.field.open ? this.field.density : 0.4, { inside: true, dome: this.clash.active ? CLASH_DOME : g.cam.isFirst ? 0.5 : g.cam.isTop ? 0.6 : 0.85, fill: this.clash.active ? CLASH_FILL : 1, ceiling: zone?.indoors ? zone.max.y - me.y : undefined, lean: this.lean });
+    // The drawn field: held tight through the gather, then out past its reach and back.
+    this.since += raw;
+    const u = (this.since - GATHER) / SETTLE;
+    const drawn = this.since < GATHER ? 0.12 : u < 1 ? 1 + 0.08 * Math.sin(Math.min(1, u) * Math.PI) : 1;
+    // While it stays open, a faint ripple runs out across it now and then.
+    if (this.field.open && this.since > GATHER + SETTLE && (this.shimmer -= dt) <= 0) {
+      this.shimmer = 1.4;
+      g.vfx.ring(me.clone().add(new THREE.Vector3(0, 0.08, 0)), this.colorOf(null), this.field.radius * 0.2, this.field.radius * 0.95, 1.2, undefined, 0.35);
+    }
+    this.mine.draw(raw, g.clock.time, me, this.field.radius * drawn, this.field.open ? this.field.density : 0.4, { inside: true, dome: this.clash.active ? CLASH_DOME : g.cam.isFirst ? 0.5 : g.cam.isTop ? 0.6 : 0.85, fill: this.clash.active ? CLASH_FILL : 1, ceiling: zone?.indoors ? zone.max.y - me.y : undefined, lean: this.lean });
     this.publish();
   }
 

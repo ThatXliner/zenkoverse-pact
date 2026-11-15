@@ -32,11 +32,11 @@ export class ThreadSight implements Sight {
   private ties = new Map<Enemy, Tie>();
   private knots = new Map<Enemy, GroundMark>();
   private carries: Carry[] = [];
-  private fuel: Strand;
+  private fuel: Strand[];
   private regroup = 0;
 
   constructor(private game: Game) {
-    this.fuel = new Strand(game.renderer.scene, COLOR);
+    this.fuel = [0, 1, 2].map(() => new Strand(game.renderer.scene, COLOR));
   }
 
   private anchorOf(e: Enemy): Enemy | null { const t = this.ties.get(e); return t && t.snap < 0 && t.anchor.alive ? t.anchor : null; }
@@ -139,12 +139,16 @@ export class ThreadSight implements Sight {
     this.castThread(bodies);
   }
 
+  // The Kuroda's pour hangs from him until it burns: hit him out of the
+  // cast and it never lights.
   private castThread(bodies: Enemy[]): void {
     const kuroda = bodies.find((e) => e.def.ai === 'kuroda' && e.state === 'cast');
-    const at = kuroda ? (kuroda as Enemy & { fuelAt?: THREE.Vector3 }).fuelAt : undefined;
-    if (!kuroda || !at) { this.fuel.hide(); return; }
-    const k = Math.min(1, kuroda.stateTime / CAST_SECONDS);
-    this.fuel.set(kuroda.center(), at.clone().add(new THREE.Vector3(0, 0.1, 0)), this.game.renderer.camera, 0.05, 0.75, 0.6, k);
+    const pools = kuroda?.pour ?? [];
+    this.fuel.forEach((f, i) => {
+      const at = pools[i];
+      if (!kuroda || !at) { f.hide(); return; }
+      f.set(kuroda.center(), at.clone().add(new THREE.Vector3(0, 0.1, 0)), this.game.renderer.camera, 0.05, 0.75, 0.6, Math.min(1, kuroda.stateTime / CAST_SECONDS));
+    });
   }
 
   dealt(e: Enemy): { mult: number } {
@@ -162,7 +166,7 @@ export class ThreadSight implements Sight {
   dispose(): void {
     for (const t of this.ties.values()) t.strand.dispose();
     for (const k of this.knots.values()) k.dispose();
-    this.fuel.dispose();
+    for (const f of this.fuel) f.dispose();
     this.ties.clear(); this.knots.clear(); this.carries = [];
   }
 }

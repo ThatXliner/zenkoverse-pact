@@ -31,7 +31,7 @@ const GENERIC: Template[] = [
   { id: 'footing', name: 'Firm Footing', kinds: ['primary'], restrict: ['trigger:grounded', 'range:medium', 'resource:half'] },
   { id: 'blood', name: 'Blood Price', kinds: ['primary'], restrict: ['resource:health', 'direction:front'] },
   { id: 'winded', name: 'Borrowed Breath', kinds: ['primary'], restrict: ['resource:strain', 'trigger:grounded', 'target:single'] },
-  { id: 'gambler', name: 'Gambler\'s Hand', kinds: ['primary'], restrict: ['direction:front', 'range:short'], extra: [{ kind: 'wager', predict: 'hit' }] },
+  { id: 'gambler', name: 'Gambler\'s Hand', kinds: ['primary'], restrict: ['direction:front', 'range:short'], extra: [{ kind: 'wager', declare: 'hit', reward: 'output', forfeit: 'seal' }] },
   { id: 'overreach', name: 'Overreach', kinds: ['primary'], restrict: ['range:short', 'trigger:grounded'], extra: [{ kind: 'risk', beyond: 'range', cost: 'health' }] },
   { id: 'stone', name: 'Stone Hands', kinds: ['primary'], restrict: ['body:noMove', 'range:medium', 'direction:front'] },
   { id: 'stillwater', name: 'Stillwater', kinds: ['secondary'], restrict: ['trigger:still', 'resource:half'] },

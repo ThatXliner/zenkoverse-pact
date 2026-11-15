@@ -94,7 +94,6 @@ function pilot(maxFrames) {
   return page.evaluate((maxFrames) => {
     const g = window.game, G = g.game;
     const V = G.player.position.constructor;
-    let wagered = false;
     const top = G.cam.mode === 'top';
     for (let f = 0; f < maxFrames; f += 4) {
       if (g.rooftop.status().app !== 'rooftop') break;
@@ -116,7 +115,7 @@ function pilot(maxFrames) {
           g.look(Math.atan2(-d.x, -d.z), Math.atan2(near.position.y + 1.1 - (p.y + 1.64), flat));
           g.hold('forward', flat > 1.3);
         }
-        if (flat < 3.2) { if (!wagered && f > 40) { g.hold('wager', true); g.step(1); g.hold('wager', false); wagered = true; } g.hold('primary', true); g.step(1); g.hold('primary', false); }
+        if (flat < 3.2) { g.hold('primary', true); g.step(1); g.hold('primary', false); }
       } else for (const k of ['forward', 'back', 'left', 'right']) g.hold(k, false);
       g.step(4);
     }

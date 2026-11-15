@@ -53,7 +53,7 @@ export class VaultSight implements Sight {
     g.hands.play(gesture, 1, () => undefined, (k) => g.cam.kick(k));
     g.avatar.perform(gesture, 1);
     g.audio.play(this.kit.audio.primary);
-    g.net?.cast('primary', `Vault · ${this.kit.name}`, 'long', 1, this.tech);
+    g.net?.cast('primary', `Vault · ${this.kit.name}`, 'long', 1, false, this.tech);
     this.pending = { t: 0, at: gesture.impactAt };
     this.cd = COOLDOWN;
     return true;

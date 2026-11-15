@@ -243,8 +243,7 @@ export class Rooftop {
     g.combat.hp = Math.min(g.combat.maxHp, g.combat.hp + g.combat.maxHp * HEAL_BETWEEN);
     combatUi.hp.value = g.combat.hp / g.combat.maxHp;
     g.techniques.sealed = 0;
-    g.combat.wagerArmed = false;
-    combatUi.wagerArmed.value = false;
+    g.techniques.wagers.clear();
     g.audio.play('roof.clear');
     if (wave + 1 >= WAVE_COUNT) { this.finish(true); return; }
     const steps: OfferStep[] = [];

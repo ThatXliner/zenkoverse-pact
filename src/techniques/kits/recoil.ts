@@ -17,7 +17,7 @@ const catalogue: Pact[] = [
   { id: 'recoil.zero-hour', technique: 'recoil', name: 'Zero Hour', slot: 'max', grant: { shape: 'zeroHour' }, clauses: [
     { kind: 'restrict', restriction: { param: 'resource', value: 'all' } }, { kind: 'restrict', restriction: { param: 'trigger', value: 'declared' } }, { kind: 'restrict', restriction: { param: 'body', value: 'noMove' } }] },
   { id: 'recoil.shockline', technique: 'recoil', name: 'Shockline', slot: 'primary', grant: { shape: 'line' }, clauses: [
-    { kind: 'restrict', restriction: { param: 'direction', value: 'line' } }, { kind: 'restrict', restriction: { param: 'trigger', value: 'grounded' } }, { kind: 'wager', predict: 'hit' }] },
+    { kind: 'restrict', restriction: { param: 'direction', value: 'line' } }, { kind: 'restrict', restriction: { param: 'trigger', value: 'grounded' } }, { kind: 'wager', declare: 'hit', reward: 'output', forfeit: 'seal' }] },
 ];
 
 const held: { prop: PropInstance; offset: THREE.Vector3 }[] = [];
@@ -158,7 +158,9 @@ export const recoil: TechniqueKit = {
         shoveProps(ctx, props, 3 + 8 * reserveFrac * ctx.potency);
         g.techniques.resource *= 0.4;
         const fist = ctx.origin.clone().addScaledVector(ctx.dir, 0.9).add(new THREE.Vector3(0, -0.25, 0));
-        g.vfx.ring(fist, COLOR, 0.15, 1.6 + reserveFrac * 2, 0.35, ctx.dir);
+        // The shock where the blow lands, sized to the Reserve behind it but
+        // never larger than a body: the hit, not the screen, carries the weight.
+        g.vfx.ring(hits[0] ? hits[0].center() : fist, COLOR, 0.15, 0.7 + reserveFrac * 0.8, 0.3, ctx.dir);
         g.vfx.trail([ctx.origin.clone().add(new THREE.Vector3(0.2, -0.3, 0)), fist, fist.clone().addScaledVector(ctx.dir, 0.6)], COLOR, 0.22, 0.14);
         if (hits.length || props.length) { g.vfx.burst(fist.clone().addScaledVector(ctx.dir, 0.5), 10, 'spark', 5, 0xffb070, ctx.dir); g.audio.play('recoil.punch.hit', { weight: reserveFrac }); }
         else g.audio.play('recoil.punch.whiff');

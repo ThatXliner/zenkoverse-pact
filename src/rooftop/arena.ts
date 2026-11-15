@@ -53,6 +53,7 @@ export function buildArena(world: World, physics: Physics, scene: THREE.Scene, p
 
   // Lanterns on tall posts at the four corners, lit for the evening.
   const post = toon(PALETTE.woodDark);
+  let roofMark: THREE.Mesh | null = null;
   const paper = emissive(PALETTE.lantern, 2.6);
   for (const [sx, sz] of [[-1, -1], [-1, 1], [1, -1], [1, 1]] as const) {
     const foot = rel(sx * (HALF.x - 1.2), sz * (HALF.z - 1.0));
@@ -64,6 +65,7 @@ export function buildArena(world: World, physics: Physics, scene: THREE.Scene, p
     const cap = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.22, 10), post);
     cap.position.copy(foot).add(new THREE.Vector3(0, 3.4, 0));
     add(pole); add(lamp); add(cap);
+    roofMark ??= pole;
     physics.staticBox(pole.position, new THREE.Vector3(0.12, 1.6, 0.12));
     lights.add({ kind: 'point', position: lamp.position.clone(), color: new THREE.Color(PALETTE.lantern), intensity: 14, distance: 12, decay: 2 });
   }
@@ -107,6 +109,17 @@ export function buildArena(world: World, physics: Physics, scene: THREE.Scene, p
     stairFoot: SPAWN.stairs.clone(),
     stairTop: SPAWN.roof.clone().set(-16.2, DECK_Y, -12.3),
     consoleAt: rel(-11.0, 4.0),
-    update() { /* nothing moves on the roof between waves */ },
+    // Crates and barrels are physics props, not part of the baked roof, so
+    // they cannot fade with it. While the hall roof is cut away (a lantern
+    // pole, registered with it, is hidden) every prop standing on the deck
+    // hides too, rather than float over the hall.
+    update() {
+      const cut = roofMark ? !roofMark.visible : false;
+      for (const p of props.instances) {
+        const at = p.mesh.position;
+        const onDeck = at.y > DECK_Y - 0.5 && Math.abs(at.x - CENTER.x) < HALF.x + 1 && Math.abs(at.z - CENTER.z) < HALF.z + 1;
+        p.mesh.visible = !(cut && onDeck);
+      }
+    },
   };
 }

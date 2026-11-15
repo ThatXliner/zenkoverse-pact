@@ -146,6 +146,17 @@ async function walk(walker, watcher, key, label) {
   check(jump < 0.35, `${label}: no frame-to-frame jump (largest step ${(jump * 100).toFixed(0)} cm at running speed)`);
   return steps;
 }
+console.log('\nan Eye is seen on its bearer');
+{
+  await A.api((g) => g.eye('horizon'));
+  const markOf = (p, id) => p.api((g, id) => g.game.net.remotes.get(id)?.eyeMark.id ?? null, id);
+  let seen = null;
+  for (let t0 = Date.now(); Date.now() - t0 < 3000 * slack && seen !== 'horizon'; await wait(100)) seen = await markOf(B, idA);
+  check(seen === 'horizon', `B draws the mark of A's Horizon Eye on A (${seen})`);
+  check((await markOf(A, idB)) === null, 'A draws no mark on B, who carries no Eye');
+  await A.api((g) => g.eye(null));
+}
+
 console.log('\nmovement');
 await walk(A, B, 'KeyS', 'A walks, B watches');
 await walk(B, A, 'KeyW', 'B walks, A watches');

@@ -208,11 +208,13 @@ async function victoryRun(camera, viewport) {
       if (w === 3) {
         const eyes = await page.locator('.rt-offer.eye').count();
         const locked = await page.locator('.rt-offer.eye.locked').count();
-        check(eyes === 4 && locked === 1, `${tag}: the Eye offer comes after wave 3 (${eyes} Eyes, ${locked} locked)`);
+        check(eyes === 5 && locked === 1, `${tag}: the Eye offer comes after wave 3 (${eyes} Eyes, ${locked} locked)`);
         await fits(`${tag} Eye offer`);
         if (camera === 'top') await shot('eye-offer');
         await page.locator('.rt-offer.eye[data-eye="horizon"]').click();
         check((await status()).eye === 'horizon', `${tag}: the Horizon Eye is installed`);
+        // The installation plays over the sheet and ends on its own, or on a key.
+        await page.locator('.eye-install').waitFor({ state: 'detached', timeout: 5000 }).catch(() => undefined);
       }
       const cards = await readOffers(`${tag} wave ${w} offer`);
       if (w === 1) { await fits(`${tag} Pact offer`); if (camera === 'top') await shot('pact-offer'); }
@@ -242,6 +244,7 @@ async function victoryRun(camera, viewport) {
   await fits(`${tag} end screen`);
   if (camera === 'top') await shot('end-victory');
   check((await bookState()) === before, `${tag}: Pacts taken on the roof are gone from the real book afterwards`);
+  check((await status()).eye === 'horizon' && await page.evaluate(() => JSON.parse(localStorage.getItem('zenko.eye.v1') ?? 'null')?.id === 'horizon'), `${tag}: the Eye installed on the roof is kept after the run, as installing one is for good`);
 }
 
 async function defeatRun(camera, viewport) {

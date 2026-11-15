@@ -7,7 +7,8 @@ import { keyLabel } from '../app/keymap';
 import { Controls } from './Controls';
 import { KITS } from '../techniques/techniques';
 import { TECHNIQUE_IDS, type TechniqueId } from '../pacts/schema';
-import { EYES } from '../combat/combat';
+import { EYES } from '../eyes/registry';
+import { EyeInstall } from '../eyes/EyeInstall';
 import { Workshop } from '../workshop/Workshop';
 import { RooftopLayer } from '../rooftop/RooftopUi';
 import { NavMap } from './nav/NavMap';
@@ -27,6 +28,7 @@ export function App({ game }: { game: Game }) {
       {st.kind === 'title' && <Title game={game} />}
       {(st.kind === 'tutorial' || st.kind === 'explore' || st.kind === 'encounter' || st.kind === 'drill' || st.kind === 'cinematic' || st.kind === 'rooftop' || st.kind === 'paused') && <Hud game={game} />}
       <RooftopLayer game={game} />
+      <EyeInstall />
       {st.kind === 'workshop' && <Workshop game={game} />}
       {st.kind === 'paused' && <Pause game={game} tab={st.tab} />}
       {st.kind === 'defeat' && <Defeat game={game} />}

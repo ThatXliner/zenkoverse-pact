@@ -36,6 +36,8 @@ export interface PlayerState {
   cine: boolean;
   // The aura field as drawn: radius in metres (0 when there is none) and density 0..1.
   f?: [number, number];
+  // The installed Eye, as its place in EYE_IDS plus one (src/eyes/registry.ts), 0 for none.
+  e?: number;
 }
 
 // What everyone knows about a player in the room. The server owns hp, down,

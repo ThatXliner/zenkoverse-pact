@@ -32,6 +32,9 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
   rival: { name: 'Rival', model: 'parted', hp: 100, speed: 0, dmg: 0, ai: 'rival', height: 1.78 },
 };
 
+// Seconds from the start of a cast to its effect landing.
+export const CAST_SECONDS = 1.1;
+
 export interface EnemyScale { hp: number; dmg: number }
 export const NO_SCALE: EnemyScale = { hp: 1, dmg: 1 };
 
@@ -87,6 +90,7 @@ export class Enemy {
   hp: number;
   readonly maxHp: number;
   state: State = 'idle';
+  // Seconds in the current state.
   private t = 0;
   alive = true;
   grounded = true;
@@ -101,8 +105,10 @@ export class Enemy {
   locked = 0;
   // Seconds left of a broken guard after losing a clash: blows land harder.
   guardBroken = 0;
-  private attackCd = 1;
-  private castCd = 4;
+  // Seconds until this body may start its next blow and its next cast. The
+  // Horizon Eye reads them to see what a body can do next (src/eyes/horizon.ts).
+  attackCd = 1;
+  castCd = 4;
   damageTaken = 0;
   // The melee blow this role throws, the wind-up's mark on the ground, and
   // the heading it locked to when it committed.
@@ -223,6 +229,16 @@ export class Enemy {
 
   // Every change of state goes through here, so a wind-up or a cast that is
   // cut short always takes its mark off the ground with it.
+  get stateTime(): number { return this.t; }
+  // Where the Kuroda's pour lies while it waits to burn, for the Thread Eye.
+  get pour(): THREE.Vector3[] { return this.fuse && !this.fuse.done ? this.fuse.waiting : []; }
+
+  // Drops whatever the body was doing for a moment, as a blow does.
+  stagger(): void {
+    if (!this.alive || this.def.ai === 'dummy' || this.def.ai === 'rival' || this.state === 'knocked') return;
+    this.setState('stagger'); this.avatar.playOneShot('Hit_Chest');
+  }
+
   private setState(next: State): void {
     if (this.state === 'windup' && next !== 'strike') { this.mark?.cancel(); this.mark = null; }
     if (this.state === 'cast' && next !== 'recover') { this.castMark?.cancel(); this.castMark = null; this.fuse?.fizzle(); }
@@ -312,8 +328,8 @@ export class Enemy {
           break;
         case 'cast':
           this.face(p, dt, def.ai === 'ancient' ? 2.5 : 4);
-          if (this.castMark) this.castMark.progress = this.t / 1.1;
-          if (this.t > 1.1) { this.resolveCast(); this.setState('recover'); this.castCd = def.ai === 'kuroda' ? (this.phase2 ? 4 : 5) : 6.5; }
+          if (this.castMark) this.castMark.progress = this.t / CAST_SECONDS;
+          if (this.t > CAST_SECONDS) { this.resolveCast(); this.setState('recover'); this.castCd = def.ai === 'kuroda' ? (this.phase2 ? 4 : 5) : 6.5; }
           break;
       }
     }

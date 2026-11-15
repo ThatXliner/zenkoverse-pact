@@ -205,6 +205,9 @@ uniform vec2 speedDir;
 uniform float radial;
 uniform float panel;
 uniform float seed;
+uniform float eyeSide;
+uniform float eyeK;
+uniform vec3 eyeTint;
 ${common}
 
 // The brush: the strongest mark within reach whose own width covers this pixel.
@@ -363,6 +366,25 @@ void mainImage( const in vec4 inputColor, const in vec2 uv, out vec4 outputColor
     col = mix( col, neg, negative );
   }
 
+  // An installed Eye, in first person: the side it looks from is ruled off
+  // like a narrow panel, and inside it the frame is printed in two inks with
+  // the Eye's colour for paper. Light, so the fight still reads through it.
+  if ( eyeK > 0.0 ) {
+    float x = eyeSide > 0.0 ? uv.x : 1.0 - uv.x;
+    float wob = ( mnoise( vec2( 7.0, frag.y / ( 60.0 * stride ) ) ) - 0.5 ) * 0.006;
+    float edge = 1.0 - 0.115 * eyeK + wob;
+    float px = 1.0 / resolution.x;
+    float inside = smoothstep( edge - px, edge + px, x );
+    float lum = luminance( col );
+    vec3 seen = mix( ink, mix( paper, eyeTint, 0.75 ), smoothstep( 0.1, 0.6, lum ) );
+    // A soft shade gathers along the inside of the rule, as in a gutter.
+    float gutter = 1.0 - smoothstep( 0.0, 0.03, x - edge );
+    vec3 band = mix( col * mix( vec3( 1.0 ), eyeTint, 0.55 ), seen, 0.62 ) * ( 1.0 - 0.18 * gutter );
+    col = mix( col, band, inside * eyeK );
+    float t = 1.3 * stride * px;
+    col = mix( col, ink, ( 1.0 - smoothstep( t * 0.5, t * 1.5, abs( x - edge ) ) ) * eyeK * 0.85 );
+  }
+
   // The panel: paper margin and a hand-ruled border.
   if ( panel > 0.0 ) {
     float m = panel * stride;
@@ -407,6 +429,9 @@ export class PageEffect extends Effect {
         ['radial', new THREE.Uniform(0)],
         ['panel', new THREE.Uniform(9)],
         ['seed', new THREE.Uniform(0)],
+        ['eyeSide', new THREE.Uniform(1)],
+        ['eyeK', new THREE.Uniform(0)],
+        ['eyeTint', new THREE.Uniform(new THREE.Color(1, 1, 1))],
       ]),
     });
   }

@@ -72,6 +72,9 @@ export class Fuse {
     g.vfx.flash(this.line[0]!.clone().add(new THREE.Vector3(0, 0.6, 0)), FLAME, 25, 0.3, 6);
   }
 
+  // The pools not burning yet.
+  get waiting(): THREE.Vector3[] { return this.pools.filter((p) => !p.lit).map((p) => p.at); }
+
   // Hit out of the cast before the snap: the fuel stays, unlit and harmless.
   fizzle(): void {
     if (this.snapAt !== null) return;

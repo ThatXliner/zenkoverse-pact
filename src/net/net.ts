@@ -8,6 +8,7 @@ import { FxWire } from './fxwire';
 import { PropSync } from './propsync';
 import { freezePond } from '../techniques/kits/rime';
 import { RemotePlayer, seatSuit } from './remote';
+import { eyeCode } from '../eyes/registry';
 import { RULES, type ClientMsg, type PlayerInfo, type ServerMsg, type Vec3 } from './protocol';
 import type { Pick } from './clash';
 import { pick } from '../hands/gestures';
@@ -400,8 +401,9 @@ export class Net {
   endMax(): void { this.send({ type: 'max-end' }); }
 
   // `shout` asks the others to letter the Pact's name over this player (src/techniques/declarations.ts).
-  cast(kind: string, name: string, variant: GestureVariant, speed: number, shout = false): void {
-    this.send({ type: 'cast', ct: performance.now(), kind, tech: this.game.techniqueId, name, dir: v3(this.game.cam.aimDirection()), variant, speed: Math.round(speed * 100) / 100, shout });
+  // `tech` is the Technique cast: the player's own, or the one a Vault Eye holds.
+  cast(kind: string, name: string, variant: GestureVariant, speed: number, shout = false, tech: string = this.game.techniqueId): void {
+    this.send({ type: 'cast', ct: performance.now(), kind, tech, name, dir: v3(this.game.cam.aimDirection()), variant, speed: Math.round(speed * 100) / 100, shout });
   }
 
   setTechnique(id: string): void { this.send({ type: 'tech', tech: id }); }
@@ -424,7 +426,7 @@ export class Net {
       if (now - this.lastSend >= SEND_MS - 2) {
         this.lastSend = now;
         const s = g.techniques.sign;
-        this.send({ type: 'state', s: { ct: now, p: v3(g.player.position), v: v3(g.player.velocity), yaw: Math.round(g.bodyYaw * 1000) / 1000, pitch: g.cam.isTop ? 0 : Math.round(g.cam.pitch * 1000) / 1000, g: g.player.grounded, sign: s.kind === 'signing' || g.cutscenes.sealing ? 1 : s.kind === 'primed' ? 2 : 0, cine: g.cutscenes.active, f: [Math.round(g.aura.field.radius * 100) / 100, Math.round(g.aura.field.density * 100) / 100] } });
+        this.send({ type: 'state', s: { ct: now, p: v3(g.player.position), v: v3(g.player.velocity), yaw: Math.round(g.bodyYaw * 1000) / 1000, pitch: g.cam.isTop ? 0 : Math.round(g.cam.pitch * 1000) / 1000, g: g.player.grounded, sign: s.kind === 'signing' || g.cutscenes.sealing ? 1 : s.kind === 'primed' ? 2 : 0, cine: g.cutscenes.active, f: [Math.round(g.aura.field.radius * 100) / 100, Math.round(g.aura.field.density * 100) / 100], e: eyeCode(g.combat.eye) } });
       }
     } else this.fx.take();
     this.props.update(raw);

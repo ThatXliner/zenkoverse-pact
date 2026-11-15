@@ -365,8 +365,7 @@ export class Game {
     const v = this.player.velocity;
     if (this.aimHold > 0) this.bodyYaw = this.cam.yaw;
     else if (moving && this.player.grounded) this.bodyYaw = Math.atan2(-v.x, -v.z);
-    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.bodyYaw);
-    this.avatar.root.quaternion.slerp(q, 1 - Math.exp(-(moving ? 14 : 8) * raw));
+    this.avatar.turnTo(this.bodyYaw, raw, moving ? 14 : 8);
     if (!this.net?.downed) this.avatar.setLocomotion(this.player.velocity, this.player.grounded, raw);
     this.avatar.setAimPitch(this.cam.isTop ? 0 : this.cam.pitch);
     this.avatar.update(dt);

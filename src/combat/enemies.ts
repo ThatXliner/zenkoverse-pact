@@ -33,6 +33,8 @@ export const NO_SCALE: EnemyScale = { hp: 1, dmg: 1 };
 
 const STILL = new THREE.Vector3();
 const CORPSE_SECONDS = 6;
+// How hard a thrown body's skid brakes on the ground, in m/s².
+const KNOCK_FRICTION = 9;
 const CAM_RIGHT = new THREE.Vector3();
 
 // A thin bar above the head that appears once the enemy is hurt. The sprites
@@ -128,10 +130,13 @@ export class Enemy {
     this.hp -= amount;
     this.damageTaken += amount;
     this.avatar.flash(1.2);
-    if (this.def.ai === 'dummy') { this.avatar.playOneShot('Hit_Chest'); return; }
     const from = opts.from ?? this.game.player.position;
     const away = this.position.clone().sub(from).setY(0).normalize();
     const knock = (opts.knock ?? 0) * (this.isBoss ? 0.25 : 1);
+    // The body rocks away from the blow, by its weight and the blow's: a jab
+    // jolts the chest, a heavy blow throws it back on its heels.
+    this.avatar.impact(away, (0.35 + Math.min(1, amount / 40) * 0.5 + knock * 0.12) * (this.isBoss ? 0.6 : 1));
+    if (this.def.ai === 'dummy') { this.avatar.playOneShot('Hit_Chest'); return; }
     if (knock > 0) {
       this.velocity.addScaledVector(away, knock);
       this.velocity.y += (opts.lift ?? knock * 0.35) * (this.isBoss ? 0.3 : 1);
@@ -227,7 +232,7 @@ export class Enemy {
           if (this.t > 0.45) this.state = 'chase';
           break;
         case 'knocked':
-          if (this.grounded && this.t > 0.6) { this.state = 'recover'; this.t = 0; }
+          if (this.grounded && this.t > 0.6 && Math.hypot(this.velocity.x, this.velocity.z) < 1) { this.state = 'recover'; this.t = 0; }
           break;
         case 'cast':
           this.face(p, dt, 4);
@@ -236,8 +241,16 @@ export class Enemy {
       }
     }
 
-    this.velocity.x = THREE.MathUtils.lerp(this.velocity.x, move.x, 1 - Math.exp(-(this.state === 'knocked' ? 1 : 10) * dt));
-    this.velocity.z = THREE.MathUtils.lerp(this.velocity.z, move.z, 1 - Math.exp(-(this.state === 'knocked' ? 1 : 10) * dt));
+    if (this.state === 'knocked') {
+      // Thrown: no footing in the air, and on the ground a skid that the
+      // feet fight with steps until it stops, rather than a glide.
+      const v = Math.hypot(this.velocity.x, this.velocity.z);
+      const slow = this.grounded ? Math.max(0, v - KNOCK_FRICTION * dt) / (v || 1) : Math.exp(-0.4 * dt);
+      this.velocity.x *= slow; this.velocity.z *= slow;
+    } else {
+      this.velocity.x = THREE.MathUtils.lerp(this.velocity.x, move.x, 1 - Math.exp(-10 * dt));
+      this.velocity.z = THREE.MathUtils.lerp(this.velocity.z, move.z, 1 - Math.exp(-10 * dt));
+    }
     this.velocity.y -= 20 * dt;
     const step = this.velocity.clone().multiplyScalar(dt);
     this.ctrl.computeColliderMovement(this.collider, step, undefined, groups(GROUP_ENEMY, GROUP_WORLD | GROUP_PROP | GROUP_ENEMY));

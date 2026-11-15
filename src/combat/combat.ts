@@ -123,6 +123,12 @@ export class Combat {
     if (g.net) { if (!opts.pvp) g.net.selfDamage(a); }
     else { this.hp = Math.max(0, this.hp - a); combatUi.hp.value = this.hp / this.maxHp; }
     hud.hurt.value = Date.now();
+    // The body takes the blow: it rocks away from it, and a physical one shoves it back a step.
+    if (opts.from && !opts.self) {
+      const away = g.player.position.clone().sub(opts.from).setY(0);
+      g.avatar.impact(away, 0.4 + Math.min(1, a / 30) * 0.6);
+      if (opts.kinetic) g.player.shove(away.normalize().multiplyScalar(Math.min(5, 1.5 + a / 8)));
+    }
     g.cam.shake(Math.min(0.8, a / 30));
     g.cam.kick({ fov: -4, pitch: opts.from ? 0.02 : 0 });
     g.audio.play(opts.self ? 'impactSoft_heavy_000' : 'impactPunch_heavy_000', 0.6, 1);

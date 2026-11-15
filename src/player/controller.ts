@@ -12,6 +12,8 @@ export interface MoveEvents {
 export const PLAYER_RADIUS = 0.34;
 export const PLAYER_HEIGHT = 1.78;
 export const EYE_HEIGHT = 1.64;
+// How fast a shove dies away, per second.
+const PUSH_DECAY = 6;
 
 export class PlayerController {
   readonly position = new THREE.Vector3();
@@ -33,6 +35,7 @@ export class PlayerController {
   dashCooldown = 0;
   dashTimer = 0;
   private dashDir = new THREE.Vector3();
+  private push = new THREE.Vector3();
   private coyote = 0;
   private stepPhase = 0;
   private mantleT = 0;
@@ -60,9 +63,14 @@ export class PlayerController {
     this.ctrl.setCharacterMass(78);
   }
 
+  // A blow's shove: carried on top of the walk and dying away on its own, so
+  // the keys keep control while the body is pushed back a step.
+  shove(v: THREE.Vector3): void { this.push.add(v.clone().setY(0)); }
+
   teleport(p: THREE.Vector3): void {
     this.position.copy(p);
     this.velocity.set(0, 0, 0);
+    this.push.set(0, 0, 0);
     this.body.setNextKinematicTranslation({ x: p.x, y: p.y + PLAYER_HEIGHT / 2, z: p.z });
     this.body.setTranslation({ x: p.x, y: p.y + PLAYER_HEIGHT / 2, z: p.z }, true);
   }
@@ -81,8 +89,11 @@ export class PlayerController {
     const facing = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const wish = locked ? new THREE.Vector3() : new THREE.Vector3().addScaledVector(forward, axis.y).addScaledVector(right, axis.x);
     const targetSpeed = (wantsSprint ? 6.6 : 4.1) * this.speedScale * this.fieldScale;
-    const accel = this.grounded ? 22 : 7;
     const planar = new THREE.Vector3(this.velocity.x, 0, this.velocity.z);
+    // Reversing at speed, the body has to brake its own weight first: the
+    // pivot takes a beat longer than starting from a standstill.
+    const reversing = wish.lengthSq() > 0.01 && planar.lengthSq() > 2.5 * 2.5 && planar.dot(wish) < -0.3 * planar.length() * wish.length();
+    const accel = this.grounded ? (reversing ? 12 : 22) : 7;
     const target = wish.multiplyScalar(targetSpeed);
     planar.lerp(target, 1 - Math.exp(-accel * dt));
     if (this.grounded && wish.lengthSq() < 0.01) planar.multiplyScalar(Math.exp(-14 * dt));
@@ -119,7 +130,8 @@ export class PlayerController {
       return;
     }
 
-    const move = this.velocity.clone().multiplyScalar(dt);
+    const move = this.velocity.clone().add(this.push).multiplyScalar(dt);
+    this.push.multiplyScalar(Math.exp(-PUSH_DECAY * dt));
     this.ctrl.computeColliderMovement(this.collider, move, undefined, groups(GROUP_PLAYER, GROUP_WORLD | GROUP_PROP));
     const out = this.ctrl.computedMovement();
     this.wasGrounded = this.grounded;

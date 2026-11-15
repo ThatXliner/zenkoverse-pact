@@ -15,6 +15,7 @@
     "check:controls": "node tools/check-controls.mjs",
     "check:cutscenes": "node tools/check-cutscenes.mjs",
     "check:effects": "node tools/check-effects.mjs",
+    "check:hud": "node tools/check-hud.mjs",
     "check:keybinds": "node tools/check-keybinds.mjs",
     "check:locomotion": "node tools/check-locomotion.mjs",
     "check:multiplayer": "node tools/check-multiplayer.mjs",
@@ -30,15 +31,15 @@
     "postprocessing": "6.36.4",
     "preact": "10.25.4",
     "three": "0.170.0",
-    "ws": "8.18.0"
+    "ws": "8.23.0"
   },
   "devDependencies": {
-    "@gltf-transform/cli": "4.1.1",
+    "@gltf-transform/cli": "4.5.1",
     "@preact/preset-vite": "2.9.3",
     "@types/three": "0.170.0",
     "playwright": "^1.56.1",
-    "sharp": "0.33.5",
+    "sharp": "0.35.5",
     "typescript": "5.7.2",
-    "vite": "6.0.7"
+    "vite": "6.4.6"
   }
 }

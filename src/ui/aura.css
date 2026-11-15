@@ -1,15 +1,12 @@
 /* Aura (issue #4): the meter under the vitals and the clash sheet. */
-.aura-meter { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: end; --a: #9fe3ff; }
-.aura-meter .lbl, .aura-meter .val { font-size: 13px; letter-spacing: 0.08em; color: var(--mist); text-shadow: 0 1px 6px rgba(0,0,0,0.7); font-variant-numeric: tabular-nums; }
-.aura-meter .lbl b { font-weight: 700; color: var(--a); margin-right: 2px; }
-.aura-meter .track { grid-column: 1 / -1; height: 3px; background: rgba(243,238,228,0.1); position: relative; }
-.aura-meter .track > i { position: absolute; inset: 0; right: auto; background: var(--a); transition: width 0.18s var(--ease); }
-.aura-meter .track > s { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--dim); display: none; }
-.aura-meter .sub { grid-column: 1 / -1; font-size: 11px; letter-spacing: 0.06em; color: var(--dim); text-shadow: 0 1px 6px rgba(0,0,0,0.7); }
-.aura-meter .sub b { color: var(--mist); font-weight: 500; font-variant-numeric: tabular-nums; }
-.aura-meter .broken { grid-column: 1 / -1; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #ff8a7a; }
-.aura-meter.ready .lbl { color: var(--paper); }
-.aura-meter.ready .track > i { box-shadow: 0 0 12px color-mix(in oklab, var(--a) 60%, transparent); }
+.aura-meter { --a: #9fe3ff; }
+.aura-meter .track > i { background: var(--a); }
+.aura-meter .track > s { display: none; }
+/* Refinement against potential: shown during the drill and when it moves. */
+.aura-meter .sub { grid-column: 1 / -1; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; max-height: 0; opacity: 0; overflow: hidden; transition: max-height 0.4s var(--ease), opacity 0.4s var(--ease); }
+.aura-meter .sub.on { max-height: 2em; opacity: 1; }
+.aura-meter .sub b { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--a); }
+.aura-meter .broken { grid-column: 1 / -1; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #ff8a7a !important; }
 .aura-meter.open .track > i { background: #ffffff; }
 .aura-meter.recovering .track > i { background: rgba(159,227,255,0.45); }
 .aura-meter.recovering.collapsed .track > i { background: #ff6a5a; }
@@ -37,7 +34,7 @@
 .clash-layer .tell[data-tell]:not([data-tell='']) { color: var(--them); }
 .clash-layer .picks { position: absolute; left: 50%; bottom: calc(11vh + 18px); transform: translateX(-50%); display: flex; gap: 10px; pointer-events: auto; }
 .clash-layer .pick { width: 132px; display: grid; justify-items: center; gap: 2px; padding: 10px 8px 9px; background: var(--glass); border: 1px solid var(--line); transition: transform 0.18s var(--ease), border-color 0.18s, opacity 0.18s; }
-.clash-layer .pick kbd { font-family: var(--sans); font-size: 11px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 3px; color: var(--mist); }
+.clash-layer .pick kbd { font-size: 11px; padding: 2px 6px; }
 .clash-layer .pick .g { font-size: 34px; line-height: 1.1; }
 .clash-layer .pick .n { font-family: var(--sans); font-size: 13px; letter-spacing: 0.2em; text-transform: uppercase; }
 .clash-layer .pick .b { font-size: 11px; color: var(--dim); }

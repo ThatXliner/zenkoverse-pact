@@ -7,6 +7,7 @@ import type { Avatar } from '../character/avatar';
 import type { Enemy } from '../combat/enemies';
 import { GROUP_WORLD } from '../physics/world';
 import type { LookId } from '../render/manga';
+import type { CueName } from '../audio/cues';
 
 // Maximum Output cutscenes (issue #27), in the manner of a fighting game's
 // ultimate: a hard cut to a close-up of the full hand sign, the title card,
@@ -40,7 +41,7 @@ export type CutEvent =
   | { at: number; kind: 'hitStop'; seconds: number }
   | { at: number; kind: 'shake'; amount: number }
   | { at: number; kind: 'vfx'; id: CutVfx }
-  | { at: number; kind: 'sfx'; id: string; volume?: number; pitch?: number };
+  | { at: number; kind: 'sfx'; id: CueName; volume?: number; pitch?: number };
 
 // Effects the player draws itself, in the cutscene's colour, around the caster.
 export type CutVfx = 'charge' | 'aura' | 'flash';
@@ -80,19 +81,19 @@ export interface CutsceneDef {
 // The beats every Output shares, so a definition reads as its camera work.
 // The opening: the sign starts at once and the ground charges; the card
 // lands once the hands have met, and leaves just before the blow.
-export function opening(sfx: string, pitch = 0.6): CutEvent[] {
+export function opening(sfx: CueName): CutEvent[] {
   return [
-    { at: 0, kind: 'gesture' }, { at: 0.02, kind: 'vfx', id: 'charge' }, { at: 0.04, kind: 'sfx', id: sfx, pitch },
-    { at: 0.5, kind: 'title' }, { at: 0.5, kind: 'sfx', id: 'impactBell_heavy_002', volume: 0.35, pitch: 1.6 }, { at: 0.35, kind: 'vfx', id: 'aura' },
+    { at: 0, kind: 'gesture' }, { at: 0.02, kind: 'vfx', id: 'charge' }, { at: 0.04, kind: 'sfx', id: sfx },
+    { at: 0.5, kind: 'title' }, { at: 0.5, kind: 'sfx', id: 'cutscene.title' }, { at: 0.35, kind: 'vfx', id: 'aura' },
   ];
 }
 // The blow, `at` seconds into its shot (0: the cut to the blow is the blow,
 // and the shot frames where the blow left everyone): an impact frame, the hit,
 // a dead stop, the shake and the sound.
-export function blow(at: number, sfx: string, pitch = 0.6, shake = 0.9): CutEvent[] {
+export function blow(at: number, sfx: CueName, shake = 0.9): CutEvent[] {
   return [
     { at, kind: 'impactFrame', frames: 3 }, { at, kind: 'resolveHit' }, { at, kind: 'hitStop', seconds: 0.12 },
-    { at, kind: 'shake', amount: shake }, { at, kind: 'sfx', id: sfx, volume: 0.9, pitch }, { at, kind: 'vfx', id: 'flash' },
+    { at, kind: 'shake', amount: shake }, { at, kind: 'sfx', id: sfx }, { at, kind: 'vfx', id: 'flash' },
   ];
 }
 
@@ -448,7 +449,7 @@ export class Cutscenes {
       case 'impactFrame': g.renderer.impactFrame(e.frames, new THREE.Color(color), l.aim.clone().add(new THREE.Vector3(0, 1.1, 0))); break;
       case 'hitStop': l.hold = e.seconds; if (!g.net) g.clock.hitStop(e.seconds); break;
       case 'shake': g.cam.shake(e.amount); break;
-      case 'sfx': g.audio.play(e.id, e.volume ?? 0.6, e.pitch ?? 1); break;
+      case 'sfx': g.audio.play(e.id, { gain: e.volume, pitch: e.pitch }); break;
       case 'vfx': {
         const feet = r.caster.position.clone();
         const chest = feet.clone().add(new THREE.Vector3(0, r.caster.height * 0.6, 0));

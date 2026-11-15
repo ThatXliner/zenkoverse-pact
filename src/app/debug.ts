@@ -17,6 +17,8 @@ import { setSetting, type Settings } from './settings';
 import { KITS } from '../techniques/techniques';
 import { BOSS_ULTIMATES } from '../combat/ultimates';
 import { cutsceneTiming, type CutsceneLog } from '../cutscene/cutscene';
+import type { AudioView } from '../audio/audio';
+import { CUES, isCue } from '../audio/cues';
 
 export interface DebugApi {
   game: Game;
@@ -67,6 +69,14 @@ export interface DebugApi {
   // The online room as the multiplayer check reads it: this player, the
   // others as drawn here, and the hits sent and health changes heard.
   net(): NetView | null;
+  // The mixer as the checks read it: whether a gesture unlocked it, what is
+  // loaded, the bed and the score, and every cue asked for (played or not).
+  audio(): AudioView;
+  // Empties the cue log, so a check reads only what its own step played.
+  audioClear(): void;
+  // Every cue's name, and one cue rendered offline and measured.
+  audioCues(): string[];
+  audioRender(name: string): Promise<{ peak: number; rms: number; seconds: number; missing: string[] } | null>;
 }
 
 export interface CutsceneView {
@@ -189,6 +199,10 @@ export function installDebug(game: Game): void {
       const t = game.techniqueId;
       game.mastery.stats.value = { ...game.mastery.stats.value, [t]: { ...game.mastery.stats.value[t], refinement: v } };
     },
+    audio() { return game.audio.view(); },
+    audioClear() { game.audio.log.length = 0; },
+    audioCues() { return Object.keys(CUES); },
+    audioRender(name) { return isCue(name) && game.audio.unlocked ? game.audio.render(name) : Promise.resolve(null); },
     auraReady() { if (!game.aura.field.open) game.aura.field.reset(); },
     stats() {
       const i = game.renderer.gl.info;

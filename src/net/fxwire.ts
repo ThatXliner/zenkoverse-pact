@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import type { Vfx } from '../techniques/vfx';
+import type { Audio } from '../audio/audio';
 import type { FxCall } from './protocol';
 
 // Online, everything a player's Techniques draw through the shared effect
 // pool is drawn on the other screens too: the same rings, sparks, ice and
 // afterimages, from the same calls. The pool is wrapped, not changed, so a
-// kit never knows whether anyone is watching.
+// kit never knows whether anyone is watching. The Techniques' sounds travel
+// the same way (`sfx`) and play on the other screens at the caster.
 const MIRRORED = ['ring', 'burst', 'flash', 'trail', 'patch', 'iceSpike', 'afterimage'] as const;
 type Mirrored = (typeof MIRRORED)[number];
 
@@ -39,7 +41,10 @@ export class FxWire {
   private replaying = false;
   private originals = new Map<Mirrored, (...a: unknown[]) => unknown>();
 
-  constructor(private vfx: Vfx) {
+  constructor(private vfx: Vfx, private audio: Audio) {
+    audio.mirror = (cue, at, gain, pitch) => {
+      if (!this.replaying && this.calls.length < 64) this.calls.push({ f: 'sfx', a: [cue, at ? encode(at) : null, r2(gain), r2(pitch)] });
+    };
     const pool = vfx as unknown as Record<Mirrored, (...a: unknown[]) => unknown>;
     for (const f of MIRRORED) {
       const original = pool[f].bind(vfx);
@@ -63,6 +68,11 @@ export class FxWire {
     this.replaying = true;
     try {
       for (const c of calls) {
+        if (c.f === 'sfx' && Array.isArray(c.a)) {
+          const at = decode(c.a[1], self);
+          this.audio.replay(c.a[0], at instanceof THREE.Vector3 ? at : null, c.a[2], c.a[3], self.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 1.2, 0)));
+          continue;
+        }
         const fn = this.originals.get(c.f as Mirrored);
         if (!fn || !Array.isArray(c.a)) continue;
         fn(...c.a.map((w) => decode(w, self)));
@@ -82,6 +92,7 @@ export class FxWire {
   dispose(): void {
     const pool = this.vfx as unknown as Record<Mirrored, (...a: unknown[]) => unknown>;
     for (const f of MIRRORED) delete (pool as Partial<typeof pool>)[f];
+    this.audio.mirror = null;
     this.calls = [];
   }
 }

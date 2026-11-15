@@ -76,7 +76,7 @@ export class Net {
   readonly log = { sent: [] as { target: number; amount: number; t: number }[], hp: [] as { id: number; hp: number; by: number | null; amount: number; t: number }[] };
 
   constructor(private game: Game) {
-    this.fx = new FxWire(game.vfx);
+    this.fx = new FxWire(game.vfx, game.audio);
     this.props = new PropSync(game, (m) => this.send(m), () => this.connected, (fn) => this.fx.quiet(fn));
   }
 
@@ -235,13 +235,10 @@ export class Net {
         const kit = KITS[m.tech as keyof typeof KITS];
         if (!r || !kit) return;
         r.at(m.ct, () => {
-          const kind = m.kind as keyof typeof kit.audio;
+          const kind = m.kind as keyof typeof kit.gestures;
           // A Maximum Output's sign is already playing, from its start.
+          // Their cast's sound comes over the effects wire, placed at them.
           if (kind !== 'max') r.avatar.perform(pick(kit.gestures[kind] ?? kit.gestures.primary!, m.variant), m.speed);
-          // Their sound, quieter with distance.
-          const d = r.position.distanceTo(g.player.position);
-          const a = kit.audio[kind] ?? kit.audio.primary;
-          if (d < 30) g.audio.play(a.cast, (a.volume ?? 0.6) * (1 - d / 30) * 0.8, a.pitch ?? 1);
         });
         return;
       }
@@ -284,7 +281,7 @@ export class Net {
         if (!r) return;
         r.die();
         this.feed(by ? `${by} downed ${r.info.name}` : `${r.info.name} went down`);
-        if (m.by === this.id) g.audio.play('confirmation_002', 0.6);
+        if (m.by === this.id) g.audio.play('encounter.clear');
         return;
       }
       case 'respawn': {

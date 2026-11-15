@@ -21,6 +21,7 @@ import { Encounters } from '../combat/encounters';
 import { Aura } from '../combat/aura';
 import { Vfx } from '../techniques/vfx';
 import { Audio } from '../audio/audio';
+import { bindUiSounds } from '../audio/ui';
 import { Cutscenes } from '../cutscene/cutscene';
 import { Tutorial } from '../tutorial/tutorial';
 import { Drills } from '../drills/drills';
@@ -128,7 +129,8 @@ export class Game {
     this.env = setupEnvironment(scene);
     this.props = new PropSystem(this.assets, this.physics, scene);
     this.world = buildCompound(this.assets, this.physics, scene, this.props, this.renderer.lights);
-    this.audio = new Audio(this.assets);
+    this.audio = new Audio(this);
+    bindUiSounds(this.audio, hud);
     this.vfx = new Vfx(scene, this.renderer.lights);
     this.cam = new CameraRig(this.renderer.camera, this.physics);
     this.cam.snap(settings.value.camera);
@@ -136,8 +138,8 @@ export class Game {
     this.player = new PlayerController(this.physics, SPAWN.courtyard.clone(), {
       onStep: (speed, surface) => { this.audio.footstep(surface, speed); this.hands.step(speed); },
       onLand: (v) => { this.cam.land(v); this.audio.land(v); this.hands.land(v); },
-      onJump: () => this.hands.jump(),
-      onDash: () => { this.cam.kick({ fov: 9 }); this.audio.play('phaserUp3', 0.25, 1.4); this.hands.dash(); },
+      onJump: () => { this.audio.play('jump'); this.hands.jump(); },
+      onDash: () => { this.cam.kick({ fov: 9 }); this.audio.play('dash'); this.hands.dash(); },
     });
     this.avatar = new Avatar(this.assets, 'player', { targetHeight: 1.78 });
     scene.add(this.avatar.root);
@@ -194,7 +196,6 @@ export class Game {
     this.net = new Net(this);
     this.net.connect(room, name);
     this.requestLock();
-    this.audio.resumeContext();
   }
 
   leaveOnline(): void {
@@ -246,7 +247,6 @@ export class Game {
       this.tutorial.start();
     }
     this.requestLock();
-    this.audio.resumeContext();
   }
 
   // Changes the camera view, from the key, the settings sheet or a check.
@@ -267,7 +267,6 @@ export class Game {
     this.input.releaseLock();
     this.book.preview.value = null;
     openWorkshop();
-    this.audio.play('open_001', 0.4);
     this.tutorial.notify('workshop');
   }
 
@@ -275,7 +274,6 @@ export class Game {
     if (appState.value.kind !== 'workshop') return;
     resume();
     this.requestLock();
-    this.audio.play('close_001', 0.4);
   }
 
   // Try a draft before inscribing it: the draft defines its key until the
@@ -326,6 +324,7 @@ export class Game {
       this.simulate(dt, raw, st);
     }
     this.net?.update(raw);
+    this.audio.update(raw);
 
     this.world.update(this.clock.time);
     this.waypoints.update(raw, this.clock.time);
@@ -341,7 +340,7 @@ export class Game {
     const s = settings.value;
     this.cam.baseFov = s.fov;
     const look = this.input.consumeLook();
-    if (this.input.hit('camera') && !this.cam.inShot) { this.setCamera(this.cam.cycleMode(), true); this.audio.play('toggle_001', 0.3); this.tutorial.notify('camera'); }
+    if (this.input.hit('camera') && !this.cam.inShot) { this.setCamera(this.cam.cycleMode(), true); this.audio.play('ui.camera'); this.tutorial.notify('camera'); }
     if (this.input.wheel && !this.cam.inShot) { const to = this.cam.zoom(-this.input.wheel); if (to) { this.setCamera(to, true); this.tutorial.notify('camera'); } }
     if (this.cam.isTop) {
       if (!this.cam.inShot) this.aimAtCursor();
@@ -443,12 +442,12 @@ export class Game {
   private updateInteract(): void {
     let best: { text: string; act: () => void } | null = null;
     for (const p of this.world.plaques) {
-      if (p.position.distanceTo(this.player.position) < 2.2) { best = { text: p.found ? `Reread: ${p.title}` : `Read plaque: ${p.title}`, act: () => { p.found = true; hud.plaque.value = { title: p.title, body: p.body }; this.audio.play('glass_002', 0.4); setTimeout(() => { hud.plaque.value = null; }, 7000); } }; break; }
+      if (p.position.distanceTo(this.player.position) < 2.2) { best = { text: p.found ? `Reread: ${p.title}` : `Read plaque: ${p.title}`, act: () => { p.found = true; hud.plaque.value = { title: p.title, body: p.body }; setTimeout(() => { hud.plaque.value = null; }, 7000); } }; break; }
     }
     // The Architect explains first; after that, the desk opens the Workshop.
     if (!best && ARCHITECT_DESK.distanceTo(this.player.position) < 3.0) best = hud.plaque.value?.title === ARCHITECT.title
       ? { text: 'Open the Pact Workshop', act: () => { hud.plaque.value = null; this.openWorkshop(); } }
-      : { text: 'Speak with the Pact Architect', act: () => { hud.plaque.value = ARCHITECT; this.audio.play('glass_002', 0.4); } };
+      : { text: 'Speak with the Pact Architect', act: () => { hud.plaque.value = ARCHITECT; } };
     else if (hud.plaque.value?.title === ARCHITECT.title && ARCHITECT_DESK.distanceTo(this.player.position) > 4.5) hud.plaque.value = null;
     // The fights, the rooftop trial and the drills are single-player.
     if (!this.net) {

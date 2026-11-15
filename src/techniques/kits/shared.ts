@@ -92,7 +92,7 @@ export function shatterProp(g: Game, p: PropInstance, from?: THREE.Vector3): voi
   const wood = p.def.traits.includes('wood') || p.def.traits.includes('porous');
   g.vfx.burst(c, p.def.breakable?.pieces ?? 5, 'debris', 5, wood ? undefined : 0x888c92, dir);
   g.vfx.burst(c, 8, 'spark', 4, wood ? 0xd8a060 : 0xfff0c0, dir);
-  g.audio.play(wood ? 'impactWood_heavy_001' : 'impactMetal_heavy_001', 0.7, 0.9 + Math.random() * 0.2);
+  g.audio.play(wood ? 'prop.wood' : 'prop.metal', { at: c });
   g.props.remove(p);
 }
 

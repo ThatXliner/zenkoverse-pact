@@ -81,7 +81,7 @@ export class Tutorial {
     setState({ kind: 'tutorial', step: s.id });
     if (s.id === 'max') this.game.techniques.charge = 1;
     if (s.id === 'done') this.doneT = 9;
-    this.game.audio.play('select_003', 0.4);
+    this.game.audio.play('ui.step');
   }
 
   update(dt: number): void {
@@ -97,7 +97,6 @@ export class Tutorial {
     if (Math.abs(turned) > 1.2) this.events.add('looked');
     if (this.settleT <= 0 && s.objective(this.game, this.events)) {
       toast(`${s.title}: done`, 'good');
-      this.game.audio.play('confirmation_001', 0.5);
       this.advance();
     }
   }

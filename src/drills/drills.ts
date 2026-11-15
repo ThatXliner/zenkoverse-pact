@@ -84,6 +84,7 @@ export class Drills {
     this.current = { def, tier, score: 0, spawned: 0, timer: FIRST_ITEM, live: [], resume: st.kind === 'tutorial' ? 'tutorial' : 'explore', waiting: !ready, armed: false };
     setState({ kind: 'drill', id });
     banner(def.jp, def.title);
+    this.game.audio.play('drill.ready');
     this.refresh();
   }
 
@@ -109,7 +110,7 @@ export class Drills {
 
   private score(pts: number): void {
     this.current!.score += pts;
-    this.game.audio.play(pts > 0 ? 'confirmation_001' : 'error_004', 0.5);
+    this.game.audio.play(pts > 0 ? 'drill.hit' : 'drill.miss');
     this.refresh();
   }
 
@@ -120,13 +121,14 @@ export class Drills {
     c.def.hold?.(this.game);
     if (c.waiting) {
       // The E that opened the drill is still down this frame; wait for the next press.
-      if (c.armed && this.game.input.hit('interact')) c.waiting = false;
+      if (c.armed && this.game.input.hit('interact')) { c.waiting = false; this.game.audio.play('drill.start'); }
       c.armed = true;
       this.refresh();
       return;
     }
     c.timer -= dt;
     if (c.spawned < t.count && c.timer <= 0) {
+      this.game.audio.play('drill.cue');
       c.live.push(c.def.spawn(this.game, t, c.spawned));
       c.spawned++;
       c.timer = t.interval;
@@ -162,10 +164,10 @@ export class Drills {
       g.mastery.addStrain(0.12);
       if (c.tier === (this.progress[c.def.id] ?? 0) && c.tier < c.def.tiers.length - 1) this.progress[c.def.id] = c.tier + 1;
       banner('合格', `${t.name} cleared. Mastery grows.`);
-      g.audio.play('powerUp9', 0.6);
+      g.audio.play('drill.tier');
     } else {
       banner('未熟', `${c.score} of ${t.pass}. Again.`);
-      g.audio.play('lowDown', 0.5);
+      g.audio.play('drill.fail');
     }
     try { localStorage.setItem(KEY, JSON.stringify(this.progress)); } catch { /* */ }
     this.current = null;

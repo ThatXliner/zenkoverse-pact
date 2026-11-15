@@ -24,9 +24,9 @@ const catalogue: Pact[] = [
 const cutscene: CutsceneDef = {
   id: 'max-blink', title: { jp: '閉眼', en: 'Eyes Shut' }, color: COLOR, pull: 4.5, reach: 12, word: 'キィィン',
   shots: [
-    { duration: 1.05, timeScale: 0.03, from: { pos: [0.42, 1.55, 1.05], look: [0, 1.5, 0], fov: 34 }, to: { pos: [0.28, 1.53, 0.78], fov: 26, roll: -0.03 }, events: opening('powerUp9', 0.6) },
-    { duration: 0.5, timeScale: 0.03, from: { pos: [0.55, 1.8, -1.1], look: [0, 1.35, 0], lookRel: 'target', fov: 50 }, to: { pos: [0.45, 1.75, -0.8], fov: 42 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'phaserUp3', pitch: 0.6 }] },
-    { duration: 0.95, timeScale: 0.3, from: { rel: 'target', pos: [-1.3, 1.45, 2.6], look: [0, 1.45, 0], lookRel: 'mid', fov: 64 }, to: { pos: [-1.8, 1.6, 3.8], fov: 84, roll: 0.06 }, events: [...blow(0, 'impactBell_heavy_002', 0.5)] , page: { look: 'negative' } },
+    { duration: 1.05, timeScale: 0.03, from: { pos: [0.42, 1.55, 1.05], look: [0, 1.5, 0], fov: 34 }, to: { pos: [0.28, 1.53, 0.78], fov: 26, roll: -0.03 }, events: opening('blink.max.charge') },
+    { duration: 0.5, timeScale: 0.03, from: { pos: [0.55, 1.8, -1.1], look: [0, 1.35, 0], lookRel: 'target', fov: 50 }, to: { pos: [0.45, 1.75, -0.8], fov: 42 }, ease: 'in', events: [{ at: 0.05, kind: 'sfx', id: 'blink.max.inhale' }] },
+    { duration: 0.95, timeScale: 0.3, from: { rel: 'target', pos: [-1.3, 1.45, 2.6], look: [0, 1.45, 0], lookRel: 'mid', fov: 64 }, to: { pos: [-1.8, 1.6, 3.8], fov: 84, roll: 0.06 }, events: [...blow(0, 'blink.max.blow')] , page: { look: 'negative' } },
     { duration: 0.75, timeScale: 0.5, from: { rel: 'mid', pos: [6, 1.8, -0.5], look: [0, 1.0, 0.5], fov: 56 }, to: { pos: [6.6, 2.3, -1], fov: 52 }, ease: 'inOut' },
   ],
 };
@@ -75,7 +75,7 @@ export const blink: TechniqueKit = {
         g.vfx.ring(ctx.origin.clone().addScaledVector(ctx.dir, 0.4), COLOR, 0.1, 1.2 + stareBonus, 0.25, ctx.dir);
         g.vfx.ring(ctx.origin.clone().addScaledVector(ctx.dir, range * 0.5), COLOR, 0.3, 2.5, 0.35, ctx.dir);
         g.vfx.flash(ctx.origin.clone().addScaledVector(ctx.dir, 1), COLOR, 20 + 30 * stareBonus, 0.25, 10);
-        g.audio.play('impactSoft_heavy_000', 0.6, 1.4 - stareBonus * 0.4);
+        g.audio.play('blink.flinch', { pitch: 1.1 - stareBonus * 0.3, weight: 0.5 + stareBonus });
         return { hits: hits.length + n, hitStop: hits.length ? 0.04 + stareBonus * 0.05 : 0, cameraKick: { fov: 8 + stareBonus * 6, pitch: -0.015 }, impactFrame: stareBonus > 0.7 && hits.length ? 1 : 0 };
       }
       if (ctx.shape === 'doubletake') {
@@ -85,7 +85,7 @@ export const blink: TechniqueKit = {
         const ground = g.player.position.clone().add(new THREE.Vector3(0, 0.05, 0));
         g.vfx.ring(ground, COLOR, 0.2, 2.2, 0.35);
         g.vfx.burst(ground, 6, 'spark', 4, COLOR);
-        g.audio.play('phaserDown1', 0.5, 1.2);
+        g.audio.play('blink.doubletake');
         for (const e of g.techniques.enemiesInSphere(g.player.position, 2.2)) g.combat.hitEnemy(e, 8 * ctx.potency, { knock: 4, kind: 'pulse' });
         return { hits: 0, cameraKick: { fov: 10, pitch: 0.06 } };
       }
@@ -96,7 +96,7 @@ export const blink: TechniqueKit = {
         g.vfx.ring(ctx.origin.clone().addScaledVector(ctx.dir, 0.5), 0xffffff, 0.2, 6, 0.5, ctx.dir);
         g.vfx.ring(ctx.origin.clone().addScaledVector(ctx.dir, 5), COLOR, 0.5, 12, 0.7, ctx.dir);
         g.vfx.flash(ctx.origin.clone().addScaledVector(ctx.dir, 2), COLOR, 160, 0.6, 30);
-        g.audio.play('impactBell_heavy_002', 1, 0.5);
+        g.audio.play('blink.max.tail');
         blinkUi.blind.value = 2.6;
         return { hits: hits.length, hitStop: 0.14, impactFrame: 3, cameraKick: { fov: 20, pitch: -0.05 } };
       }
@@ -111,5 +111,5 @@ export const blink: TechniqueKit = {
     // selected, so a Technique change mid-blind must lift it here.
     reset() { stare = 0; blinkUi.stare.value = 0; blinkUi.blind.value = 0; },
   },
-  audio: { primary: { cast: 'lowRandom', volume: 0.35, pitch: 1.2 }, secondary: { cast: 'lowRandom', volume: 0.3, pitch: 0.9 }, max: { cast: 'powerUp3', volume: 0.6, pitch: 0.6 } },
+  audio: { primary: 'blink.cast', secondary: 'blink.cast', max: 'blink.max.cast' },
 };

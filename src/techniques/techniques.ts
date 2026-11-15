@@ -218,11 +218,11 @@ export class Techniques {
     if (!kind) return false;
     if (kind === 'max' && this.charge < (g.combat.flags.overextension ? 0.5 : 1) && !force) { toast('Maximum Output is not ready', 'bad'); return false; }
     const met = this.triggerMet(pact);
-    if (!met.ok && !force) { toast(`The Pact is not met: ${met.why}`, 'bad'); g.audio.play('error_004', 0.3); return false; }
+    if (!met.ok && !force) { toast(`The Pact is not met: ${met.why}`, 'bad'); return false; }
     const cost = this.costFor(kind, pact);
     if (cost.resource > this.resource + 1e-3 && kind !== 'max') {
       if (g.combat.flags.bloodDraw) cost.health += 5;
-      else { toast(`Not enough ${this.def.resource.name}`, 'bad'); g.audio.play('error_004', 0.3); return false; }
+      else { toast(`Not enough ${this.def.resource.name}`, 'bad'); return false; }
     }
     // A primed cast skips its wind-up and carries the sign's boost. Maximum
     // Output always plays its full sign in the cutscene, boosted or not.
@@ -251,8 +251,7 @@ export class Techniques {
     const cut = kind === 'max' && g.cutscenes.active;
     if (!cut) this.perform(gesture, speed);
     this.cast_ = { slot, ctx, t: 0, impactAt: gesture.impactAt / speed, duration: gesture.duration / speed, fired: false, held };
-    const a = this.def.audio[kind];
-    if (!cut) g.audio.play(a.cast, a.volume ?? 0.6, (a.pitch ?? 1) * (variant === 'none' ? 1.15 : 1));
+    if (!cut) g.audio.play(this.def.audio[kind], { pitch: variant === 'none' ? 1.15 : 1 });
     g.net?.cast(kind, kind === 'max' ? this.def.cutscene.title.en : pact?.name ?? `Raw ${this.def.primitive.name}`, variant, speed);
     this.cooldown[slot] = KIND_DEFS[kind].cooldown;
     if (kind === 'max') this.charge = 0;
@@ -352,7 +351,7 @@ export class Techniques {
     g.player.rooted = Math.max(g.player.rooted, gesture.duration);
     this.perform(gesture, 1, (e) => this.onSignBeat(e));
     if (!g.cam.isFirst) this.signShot(gesture.impactAt + 0.1);
-    g.audio.play('minimize_006', 0.3, 0.8);
+    g.audio.play('sign.begin');
     return true;
   }
 
@@ -373,13 +372,13 @@ export class Techniques {
     const g = this.game;
     if (beat === 'seal') {
       g.hands.pulse(0.7);
-      g.audio.play('impactSoft_heavy_001', 0.5, 1.25);
+      g.audio.play('sign.seal');
     } else if (beat === 'release') {
       g.hands.pulse(0.8);
       g.renderer.impactFrame(1, new THREE.Color(this.def.color));
       const aim = g.cam.aimDirection();
       g.vfx.ring(g.player.eye().add(new THREE.Vector3(0, -0.35, 0)).addScaledVector(aim, 1.3), this.def.color, 0.1, 0.5, 0.25, aim);
-      g.audio.play('phaserUp3', 0.45, 0.9);
+      g.audio.play('sign.release');
     }
   }
 
@@ -387,7 +386,7 @@ export class Techniques {
     const s = this.sign, g = this.game;
     if (s.kind === 'signing') {
       s.t += dt;
-      if (s.t >= s.duration) { this.sign = { kind: 'primed', left: MASTERY_CONFIG.sign.window }; g.audio.play('tick_001', 0.35, 1.1); }
+      if (s.t >= s.duration) { this.sign = { kind: 'primed', left: MASTERY_CONFIG.sign.window }; g.audio.play('sign.primed'); }
     } else if (s.kind === 'primed') {
       s.left -= dt;
       if (s.left <= 0) { this.sign = SIGN_IDLE; this.stopGesture(); }

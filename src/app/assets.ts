@@ -7,12 +7,11 @@ interface Manifest { files: ManifestFile[]; total: number }
 
 export type ProgressFn = (fraction: number, label: string) => void;
 
-// Loads every asset through fetch so progress is measured in real bytes,
+// Loads every boot asset through fetch so progress is measured in real bytes,
 // then hands the bytes to the three.js parsers.
 export class Assets {
   readonly gltf = new Map<string, GLTF>();
   readonly textures = new Map<string, THREE.Texture>();
-  readonly audio = new Map<string, ArrayBuffer>();
   private loaded = 0;
   private manifest: Manifest = { files: [], total: 1 };
   private gltfLoader = new GLTFLoader();
@@ -56,8 +55,6 @@ export class Assets {
       tex.anisotropy = 8;
       if (name.endsWith('color.webp')) tex.colorSpace = THREE.SRGBColorSpace;
       this.textures.set(name.replace(/\.webp$/, ''), tex);
-    } else if (name.endsWith('.ogg')) {
-      this.audio.set(name.replace(/^audio\//, '').replace(/\.ogg$/, ''), buf);
     }
     this.loaded += f.bytes;
     this.onProgress(Math.min(0.999, this.loaded / this.manifest.total), label(name));
@@ -75,6 +72,5 @@ export class Assets {
 function label(name: string): string {
   if (name.startsWith('characters/')) return 'Waking the fighters';
   if (name.startsWith('props/')) return 'Sweeping the yard';
-  if (name.startsWith('audio/')) return 'Tuning the wind';
   return 'Loading';
 }

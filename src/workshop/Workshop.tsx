@@ -77,7 +77,7 @@ export function Workshop({ game }: { game: Game }) {
     if (!pact) return;
     const r = book.inscribe(pact, kit.shapes);
     if (!r.ok) { toast(r.errors[0] ?? 'Invalid Pact', 'bad'); return; }
-    game.audio.play('confirmation_002', 0.7);
+    game.audio.play('ui.inscribe');
     toast(`${pact.name} is inscribed and bound to ${slotWords(pact.slot)}.`, 'good');
     setConfirm(false);
   };

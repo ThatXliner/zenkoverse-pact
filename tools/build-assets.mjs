@@ -1,23 +1,59 @@
 #!/usr/bin/env node
 // Builds public/assets from raw CC0 downloads and writes CREDITS.md and the
-// asset manifest. Usage: node tools/build-assets.mjs <raw-download-dir> [--only human,props]
+// asset manifest. Usage: node tools/build-assets.mjs <raw-download-dir> [--only human,props,audio]
 // The raw dir holds: kaykit-city/, kenney/<pack>/, quaternius/.
 // With --only, just those sections rebuild and the rest of public/assets stays;
 // the manifest is always regenerated from what is on disk.
+//
+// public/assets is never touched until the build has succeeded: the script
+// refuses a raw dir that lacks what the chosen sections read, builds into a
+// staging folder beside it (a copy of the current assets under --only), and
+// swaps that in only at the end. A failed or mistyped run leaves it as it was.
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, copyFileSync, writeFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, writeFileSync, rmSync, readFileSync, mkdtempSync, existsSync, statSync, cpSync, renameSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { buildHuman } from './human.mjs';
 import { writeManifest } from './manifest.mjs';
 
-const [raw, ...flags] = process.argv.slice(2);
-if (!raw) throw new Error('usage: build-assets.mjs <raw-download-dir> [--only a,b]');
-const onlyFlag = flags.indexOf('--only');
-const only = onlyFlag >= 0 ? new Set(flags[onlyFlag + 1].split(',')) : null;
+const USAGE = 'usage: node tools/build-assets.mjs <raw-download-dir> [--only human,props,audio]';
+const SECTIONS = ['human', 'props', 'audio'];
+// What each section reads from the raw dir.
+const NEEDS = {
+  human: ['quaternius/Universal Base Characters[Standard]', 'quaternius/Universal Animation Library[Standard]'],
+  props: ['kenney/city-kit-suburban', 'kenney/food-kit', 'kenney/furniture-kit', 'kaykit-city'],
+  audio: ['kenney/impact-sounds/Audio', 'kenney/interface-sounds/Audio', 'kenney/digital-audio/Audio', 'kenney/rpg-audio/Audio'],
+};
+const fail = (msg) => { console.error(`build-assets: ${msg}\n${USAGE}`); process.exit(1); };
+
+const argv = process.argv.slice(2);
+if (argv.includes('--help') || argv.includes('-h')) { console.log(USAGE); process.exit(0); }
+let rawArg = null, only = null;
+for (let i = 0; i < argv.length; i++) {
+  const a = argv[i];
+  if (a === '--only') {
+    const v = argv[++i];
+    if (!v || v.startsWith('-')) fail('--only needs a list of sections');
+    only = new Set(v.split(','));
+    for (const n of only) if (!SECTIONS.includes(n)) fail(`unknown section "${n}" (sections: ${SECTIONS.join(', ')})`);
+  } else if (a.startsWith('-')) fail(`unknown option ${a}`);
+  else if (rawArg) fail(`unexpected argument ${a}`);
+  else rawArg = a;
+}
+if (!rawArg) fail('no raw download directory given');
+const raw = resolve(rawArg);
+if (!existsSync(raw) || !statSync(raw).isDirectory()) fail(`raw download directory ${raw} does not exist`);
+const missing = SECTIONS.filter((n) => !only || only.has(n)).flatMap((n) => NEEDS[n]).filter((d) => !existsSync(join(raw, d)));
+if (missing.length) fail(`${raw} is missing ${missing.join(', ')}`);
+
 const root = new URL('..', import.meta.url).pathname;
-const out = join(root, 'public/assets');
-if (!only) rmSync(out, { recursive: true, force: true });
+const live = join(root, 'public/assets');
+// Built here, beside public/ on the same disk, so the final swap is a rename.
+const out = join(root, `.assets-staging-${process.pid}`);
+rmSync(out, { recursive: true, force: true });
+if (only && existsSync(live)) cpSync(live, out, { recursive: true });
 for (const d of ['characters', 'props', 'audio']) mkdirSync(join(out, d), { recursive: true });
+process.on('exit', (code) => { if (code !== 0) rmSync(out, { recursive: true, force: true }); });
 
 const gltf = (...args) => execFileSync('npx', ['gltf-transform', ...args], { cwd: root, stdio: ['ignore', 'ignore', 'inherit'] });
 
@@ -39,10 +75,19 @@ const kenney = {
 };
 const furniture = ['bench', 'chair', 'bookcaseOpen', 'lampSquareFloor', 'rugRectangle', 'cardboardBoxClosed', 'cardboardBoxOpen', 'pottedPlant', 'radio', 'coatRackStanding', 'desk', 'stoolBar'];
 const cityBits = ['box_A', 'box_B'];
+// Sound: Kenney's CC0 packs, each file transcoded to mono Opus. The game
+// loads them after the first click (src/audio/library.ts), not at boot.
+const range = (stem, n, from = 0) => Array.from({ length: n }, (_, i) => `${stem}${String(from + i).padStart(3, '0')}`);
 const audio = {
-  'impact-sounds': ['footstep_concrete_000', 'footstep_concrete_001', 'footstep_concrete_002', 'footstep_concrete_003', 'footstep_wood_000', 'footstep_wood_001', 'footstep_wood_002', 'footstep_snow_000', 'footstep_snow_001', 'impactPunch_heavy_000', 'impactPunch_heavy_001', 'impactPunch_medium_000', 'impactPunch_medium_001', 'impactMetal_heavy_000', 'impactMetal_heavy_001', 'impactMetal_medium_000', 'impactGlass_heavy_000', 'impactGlass_heavy_001', 'impactGlass_light_000', 'impactGlass_medium_000', 'impactWood_heavy_000', 'impactWood_heavy_001', 'impactPlank_medium_000', 'impactSoft_heavy_000', 'impactSoft_heavy_001', 'impactBell_heavy_000', 'impactBell_heavy_002', 'impactTin_medium_000', 'impactMining_000', 'impactPlate_heavy_000'],
-  'interface-sounds': ['click_001', 'click_003', 'select_001', 'select_003', 'confirmation_001', 'confirmation_002', 'error_004', 'open_001', 'close_001', 'toggle_001', 'tick_001', 'question_002', 'maximize_006', 'minimize_006', 'glass_002', 'pluck_001', 'bong_001', 'glitch_001'],
-  'digital-audio': ['phaseJump1', 'phaseJump3', 'phaserUp3', 'phaserDown1', 'powerUp3', 'powerUp9', 'zap1', 'zapTwoTone', 'lowDown', 'highUp', 'threeTone1', 'spaceTrash1'],
+  'impact-sounds': [
+    ...range('footstep_concrete_', 5), ...range('footstep_wood_', 5), ...range('footstep_grass_', 5), ...range('footstep_snow_', 3),
+    ...range('impactPunch_heavy_', 3), ...range('impactPunch_medium_', 3), ...range('impactSoft_heavy_', 3), ...range('impactSoft_medium_', 3), ...range('impactGeneric_light_', 3),
+    ...range('impactMetal_heavy_', 2), ...range('impactMetal_medium_', 1), ...range('impactMetal_light_', 2), ...range('impactGlass_heavy_', 3), ...range('impactGlass_medium_', 2), ...range('impactGlass_light_', 3),
+    ...range('impactWood_heavy_', 2), ...range('impactWood_medium_', 2), ...range('impactWood_light_', 2), ...range('impactPlank_medium_', 2), ...range('impactBell_heavy_', 3), ...range('impactPlate_heavy_', 2), ...range('impactMining_', 3),
+  ],
+  'rpg-audio': ['footstep00', 'footstep01', 'footstep02', 'footstep03', 'footstep04', 'footstep05', 'cloth1', 'cloth2', 'cloth3', 'cloth4', 'knifeSlice', 'knifeSlice2', 'creak1', 'creak2', 'creak3', 'bookFlip1', 'bookFlip2', 'bookPlace1', 'beltHandle1', 'drawKnife1'],
+  'interface-sounds': ['click_002', 'click_003', 'select_001', 'select_002', 'select_003', 'confirmation_001', 'confirmation_002', 'error_004', 'error_006', 'open_001', 'close_001', 'tick_001', 'tick_002', 'question_002', 'glass_002', 'pluck_001', 'bong_001', 'glitch_001', 'switch_002'],
+  'digital-audio': ['phaseJump3', 'powerUp9', 'zapTwoTone', 'lowDown', 'spaceTrash1'],
 };
 
 // Each section names its credits and the build that fills public/assets.
@@ -77,12 +122,32 @@ const sections = {
   },
   audio: {
     credits: [
-      { title: 'Impact Sounds', author: 'Kenney', url: 'https://kenney.nl/assets/impact-sounds', license: 'CC0 1.0', use: 'Footsteps and impact layers.' },
-      { title: 'Interface Sounds', author: 'Kenney', url: 'https://kenney.nl/assets/interface-sounds', license: 'CC0 1.0', use: 'UI feedback.' },
+      { title: 'Impact Sounds', author: 'Kenney', url: 'https://kenney.nl/assets/impact-sounds', license: 'CC0 1.0', use: 'Footsteps on stone, wood and grass, and the physical layer of every hit, catch and landing.' },
+      { title: 'Interface Sounds', author: 'Kenney', url: 'https://kenney.nl/assets/interface-sounds', license: 'CC0 1.0', use: 'Menu, Workshop, toast and drill feedback.' },
       { title: 'Digital Audio', author: 'Kenney', url: 'https://kenney.nl/assets/digital-audio', license: 'CC0 1.0', use: 'Technique layers.' },
+      { title: 'RPG Audio', author: 'Kenney', url: 'https://kenney.nl/assets/rpg-audio', license: 'CC0 1.0', use: 'Gravel and sand footsteps, cloth swishes under the hand signs and swings, the hall\'s creaking boards, the Workshop\'s pages, Shift\'s cut.' },
     ],
     build() {
-      for (const [pack, names] of Object.entries(audio)) for (const n of names) copyFileSync(join(raw, 'kenney', pack, 'Audio', `${n}.ogg`), join(out, 'audio', `${n}.ogg`));
+      rmSync(join(out, 'audio'), { recursive: true, force: true });
+      mkdirSync(join(out, 'audio'), { recursive: true });
+      const tmp = mkdtempSync(join(tmpdir(), 'zenko-audio-'));
+      // Mono (the game places every sound itself), Opus at 40 kb/s, any
+      // leading silence trimmed so a hit lands on its frame.
+      const files = [];
+      for (const [pack, names] of Object.entries(audio)) for (const n of names) {
+        const f = join(tmp, `${n}.ogg`);
+        execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', join(raw, 'kenney', pack, 'Audio', `${n}.ogg`), '-ac', '1', '-af', 'silenceremove=start_periods=1:start_threshold=-60dB', '-c:a', 'libopus', '-b:a', '40k', '-vbr', 'on', f]);
+        files.push({ name: n, bytes: readFileSync(f) });
+      }
+      // One file, one request: a little-endian header length, a JSON index
+      // of [name, offset, length], then the Ogg files back to back.
+      let offset = 0;
+      const index = files.map((f) => { const e = [f.name, offset, f.bytes.length]; offset += f.bytes.length; return e; });
+      const head = Buffer.from(JSON.stringify(index));
+      const len = Buffer.alloc(4);
+      len.writeUInt32LE(head.length);
+      writeFileSync(join(out, 'audio', 'sounds.pack'), Buffer.concat([len, head, ...files.map((f) => f.bytes)]));
+      rmSync(tmp, { recursive: true, force: true });
     },
   },
 };
@@ -93,11 +158,19 @@ for (const [name, s] of Object.entries(sections)) {
   await s.build();
 }
 
-const manifest = writeManifest(root);
+// Everything built: the staging folder becomes public/assets.
+const manifest = writeManifest(root, out);
+const old = join(root, `.assets-old-${process.pid}`);
+if (existsSync(live)) renameSync(live, old);
+renameSync(out, live);
+rmSync(old, { recursive: true, force: true });
 
-export const CREDITS_FOOT = ['Typography is loaded from Google Fonts under the SIL Open Font License: Shippori Mincho B1, Zen Kaku Gothic New, and Inter.', '', 'The compound itself (walls, hall, roofs, stair, bridge, ring, pond, lanterns, trees and hills), the cel-shading materials, the ink line effect, the sky, the ice, aura and shock-ring effects, the generated clothing shells, the hand poses and gestures, the wind bed, and all UI are original to this repository.'];
+export const CREDITS_FOOT = ['Typography is loaded from Google Fonts under the SIL Open Font License: Shippori Mincho B1, Zen Kaku Gothic New, Inter, and Yuji Syuku (the brush lettering).', '', 'The compound itself (walls, hall, roofs, stair, bridge, ring, pond, lanterns, trees and hills), the cel-shading materials, the ink line effect, the sky, the ice, aura and shock-ring effects, the generated clothing shells, the hand poses and gestures, all UI, and every synthesized sound (the ambience beds, the music, and the whooshes, risers, booms and shimmers layered into the Techniques, src/audio) are original to this repository.'];
 const lines = ['# Credits', '', 'Every third-party asset in `public/assets/` is listed here with its source and license. `tools/build-assets.mjs` compresses them from the raw downloads (meshopt for geometry) and writes this file.', '', '| Asset | Author | License | Source | Used for |', '| --- | --- | --- | --- | --- |'];
 for (const s of Object.values(sections)) for (const c of s.credits) lines.push(`| ${c.title} | ${c.author} | ${c.license} | ${c.url} | ${c.use} |`);
+const packTitle = { 'impact-sounds': 'Impact Sounds', 'interface-sounds': 'Interface Sounds', 'digital-audio': 'Digital Audio', 'rpg-audio': 'RPG Audio' };
+lines.push('', 'Every recording in `public/assets/audio/sounds.pack`, by the Kenney pack (CC0 1.0) it comes from. Each is transcoded to mono Opus and kept under its original name:', '');
+for (const [pack, names] of Object.entries(audio)) lines.push(`- ${packTitle[pack]} (https://kenney.nl/assets/${pack}): ${names.join(', ')}.`);
 lines.push('', ...CREDITS_FOOT, '');
 writeFileSync(join(root, 'CREDITS.md'), lines.join('\n'));
-console.log(`assets: ${manifest.files.length} files, ${(manifest.total / 1e6).toFixed(1)} MB`);
+console.log(`assets: ${manifest.files.length} files, ${(manifest.total / 1e6).toFixed(1)} MB at boot; ${(manifest.audioTotal / 1e6).toFixed(2)} MB of sound after the first click`);

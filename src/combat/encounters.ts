@@ -65,7 +65,7 @@ export class Encounters {
     if (appState.value.kind !== 'tutorial') setState({ kind: 'encounter', id });
     banner(d.jp, d.title);
     if (d.intro) toast(d.intro);
-    g.audio.play('bong_001', 0.7, 0.8);
+    g.audio.play('encounter.start');
     const boss = this.enemies.find((e) => e.isBoss);
     if (boss) combatUi.boss.value = { name: boss.def.title ?? boss.def.name, frac: 1, color: boss.def.emissive ?? 0xff6a1a };
     g.tutorial.notify('encounter');
@@ -139,7 +139,7 @@ export class Encounters {
     if (victory && d.id !== 'dummy-room') {
       this.done.add(d.id);
       banner('勝利', `${d.title} cleared.`);
-      g.audio.play('confirmation_002', 0.8);
+      g.audio.play('encounter.clear');
       g.mastery.gain(g.techniqueId, 'tolerance', 0.05);
       g.mastery.gain(g.techniqueId, 'control', 0.04);
       if (d.id === 'kuroda') toast('The Kuroda "fire" was fuel all along. The codex remembers.', 'good');

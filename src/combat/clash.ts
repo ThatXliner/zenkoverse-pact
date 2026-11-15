@@ -162,8 +162,7 @@ export class Clash {
     };
     g.techniques.interrupt();
     g.input.clear();
-    g.audio.play('impactBell_heavy_002', 0.7, 0.55);
-    g.audio.play('phaserUp3', 0.5, 0.6);
+    g.audio.play('clash.begin');
     g.renderer.impactFrame(1, new THREE.Color(0xffffff));
     g.cam.play(this.shot());
     this.seam.burst();
@@ -212,7 +211,7 @@ export class Clash {
     else g.net?.clashPick(r.id!, r.round, pick);
     r.mine = pick;
     g.avatar.stance = pick;
-    g.audio.play('click_003', 0.5, pick === 'push' ? 0.8 : pick === 'hold' ? 0.6 : 1.1);
+    g.audio.play('clash.pick', { pitch: pick === 'push' ? 0.8 : pick === 'hold' ? 0.6 : 1.1 });
     this.publish();
   }
 
@@ -229,7 +228,7 @@ export class Clash {
       r.window = ev.ms;
       r.closes = performance.now() + ev.ms;
       r.tellAt = r.opp.kind === 'master' ? r.t + (TELL_AFTER[ev.round - 1] ?? 0.4) : Infinity;
-      g.audio.play('tick_001', 0.45, 0.9 + ev.round * 0.08);
+      g.audio.play('clash.round', { pitch: 0.9 + ev.round * 0.08 });
     } else if (ev.kind === 'reveal') {
       const them: Side = r.me === 0 ? 1 : 0;
       r.stage = 'reveal';
@@ -242,7 +241,7 @@ export class Clash {
       this.seam.burst();
       g.cam.shake(r.took === 'none' ? 0.15 : 0.35);
       g.cam.kick({ fov: r.took === 'me' ? -5 : 4 });
-      g.audio.play(r.took === 'none' ? 'impactGlass_light_000' : 'impactBell_heavy_000', 0.6, r.took === 'me' ? 1.15 : 0.75);
+      g.audio.play(r.took === 'none' ? 'clash.even.round' : r.took === 'me' ? 'clash.won.round' : 'clash.lost.round');
       g.avatar.stance = r.mine;
       this.opponentAvatar(r.opp).stance = r.theirs;
       this.showTell(null);
@@ -268,7 +267,7 @@ export class Clash {
       if (winner === 'me') e.guardBroken = AURA.guardBreak.seconds + OUTRO;
     }
     if (winner === 'me') {
-      g.audio.play('impactGlass_heavy_001', 0.8, 0.9);
+      g.audio.play('clash.won');
       banner('崩壊', reason === 'forfeit' ? 'They left the clash. Their field broke.' : `${name} field collapsed. The opening is yours.`);
     } else if (winner === 'them') banner('乱れ', 'Your field collapsed. Guard broken: recover.');
     else banner('相殺', 'Both fields break.');
@@ -355,7 +354,7 @@ export class Clash {
       r.referee!.pick(r.me === 0 ? 1 : 0, pick, r.ms);
       r.opp.enemy.avatar.stance = pick;
       this.showTell(pick);
-      g.audio.play(pick === 'push' ? 'phaserUp3' : pick === 'hold' ? 'impactSoft_heavy_001' : 'glitch_001', 0.35, pick === 'feint' ? 1.4 : 0.7);
+      g.audio.play(pick === 'push' ? 'clash.tell.push' : pick === 'hold' ? 'clash.tell.hold' : 'clash.tell.feint', { at: r.opp.enemy.center() });
       this.publish();
     }
     if (r.referee && r.stage !== 'over') for (const ev of r.referee.step(r.ms)) this.apply(ev);

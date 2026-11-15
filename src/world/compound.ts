@@ -8,6 +8,9 @@ import { mangaShading } from '../render/tone';
 import { flagstones, planks, kawara, ashlar, boxUV } from './textures';
 import { bakeStatic, mergeMeshes } from './batch';
 import { dressCompound } from './dressing';
+import { buildValley } from './valley';
+import { heightAt, openness, FIELD, GROUNDS, GINKGO, FALLS, SHRINE, BRIDGE, TERRACES, tierY } from './valleyPlan';
+import { waterMaterial } from './water';
 
 // One walled dojo compound, 48 by 40 metres inside the walls, every surface
 // hand placed. North is -z. The training hall fills the north side and its
@@ -16,14 +19,18 @@ import { dressCompound } from './dressing';
 // east; from there a wall walk runs south along the east wall and west along
 // the south wall to the gatehouse roof, and a stair comes down beside the
 // gate. The courtyard holds the sparring ring, the koi pond and the crane.
+// The gate stands open onto the valley around the walls (src/world/valley.ts).
 
-export type ZoneId = 'hall' | 'courtyard' | 'ring' | 'storehouse' | 'gate' | 'roof';
+export type ZoneId = 'hall' | 'courtyard' | 'ring' | 'storehouse' | 'gate' | 'roof'
+  | 'valley' | 'field' | 'bridge' | 'grounds' | 'ginkgo' | 'falls' | 'terraces' | 'meadow' | 'shrine';
 export interface Zone { id: ZoneId; min: THREE.Vector3; max: THREE.Vector3; indoors?: boolean; label: string }
 export interface Footprint { x: number; z: number; w: number; d: number; y: number }
 export interface Plaque { id: string; title: string; body: string; position: THREE.Vector3; mesh: THREE.Object3D; found: boolean }
 
 // Where the player can be put down. Every entry is a place the navigation
-// registry and the debug teleport know by name.
+// registry and the debug teleport know by name. Out in the valley a place
+// stands on the ground there.
+const onGround = (x: number, z: number, y = heightAt(x, z)): THREE.Vector3 => new THREE.Vector3(x, y + 0.04, z);
 export const SPAWN = {
   courtyard: new THREE.Vector3(-3, 0, 6),
   hall: new THREE.Vector3(-6, 0.3, -9),
@@ -33,6 +40,15 @@ export const SPAWN = {
   store: new THREE.Vector3(20.6, 4.1, -5),
   gate: new THREE.Vector3(0, 0, 14),
   stairs: new THREE.Vector3(-17.0, 0, -2.6),
+  // The valley. `field` is the clear, level ground beside the road where the Striking Posts stand.
+  road: onGround(0, 28),
+  field: onGround(FIELD.x, FIELD.z),
+  bridge: onGround(BRIDGE.x, (BRIDGE.z0 + BRIDGE.z1) / 2, BRIDGE.rise - 0.02),
+  grounds: onGround(GROUNDS.x, GROUNDS.z),
+  ginkgo: onGround(GINKGO.x - 6, GINKGO.z + 2),
+  falls: onGround(FALLS.x + 8, FALLS.z + 5),
+  terraces: onGround(TERRACES.x1 - 4.5, TERRACES.cuts[1], tierY(0) + 0.14),
+  shrine: onGround(SHRINE.x, SHRINE.toriiZ + 2.5),
 };
 
 // Palette. Flat fills; the ink and the light ramp do the rest.
@@ -60,6 +76,10 @@ export interface World {
   onRoof(mesh: THREE.Mesh, roof: string, ghost?: boolean): void;
   zoneAt(p: THREE.Vector3): Zone | null;
   indoorsAt(p: THREE.Vector3): number;
+  // 0 inside the walls, 1 a few metres out of them.
+  openAt(p: THREE.Vector3): number;
+  // The valley's ground height (src/world/valleyPlan.ts).
+  groundAt(x: number, z: number): number;
   update(time: number): void;
 }
 
@@ -72,16 +92,6 @@ export const STORE = { x0: 17.4, x1: 24, z0: -9, z1: -1, wallTop: 3.8, deckY: 4.
 export const WALK_Y = 2.6;
 export const GATE = { x0: -4.2, x1: 4.2, z0: 17.8, z1: 20.8, roofY: 3.9 };
 export const POND = { center: new THREE.Vector3(11, 0, 11), radius: 2.75, surfaceY: -0.15, floorY: -0.9, hole: 2.6 };
-
-const waterVert = /* glsl */ `varying vec2 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }`;
-const waterFrag = /* glsl */ `uniform float time; uniform vec3 deep; uniform vec3 light; varying vec2 vW;
-  float h21(vec2 p){ p = fract(p*vec2(123.34,456.21)); p += dot(p,p+45.32); return fract(p.x*p.y); }
-  float n2(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(h21(i),h21(i+vec2(1,0)),f.x),mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x),f.y); }
-  void main(){
-    float n = n2(vW * 1.6 + vec2(time * 0.12, time * 0.07)) * 0.6 + n2(vW * 3.3 - vec2(time * 0.09, 0.0)) * 0.4;
-    float band = step(0.58, n) * 0.55 + step(0.68, n) * 0.45;
-    gl_FragColor = vec4(mix(deep, light, band), 0.9);
-  }`;
 
 export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Scene, props: PropSystem, lights: LightPool): World {
   const g = new THREE.Group();
@@ -178,37 +188,27 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
 
   // ---------------------------------------------------------------- ground
   // The courtyard paving leaves a square hole for the pond. Outside the walls
-  // the ground is grass, with a dirt path from the gate.
+  // the valley's own ground takes over (src/world/valley.ts); far beyond its
+  // ridges a plain runs out to the painted hills.
   const P = POND, ph = P.hole;
   span(paving, -HX - 1, HX + 1, -0.3, 0, -HZ - 1, P.center.z - ph, { shadow: false });
   span(paving, -HX - 1, HX + 1, -0.3, 0, P.center.z + ph, HZ + 1, { shadow: false });
   span(paving, -HX - 1, P.center.x - ph, -0.3, 0, P.center.z - ph, P.center.z + ph, { shadow: false });
   span(paving, P.center.x + ph, HX + 1, -0.3, 0, P.center.z - ph, P.center.z + ph, { shadow: false });
   const far = 260;
-  span(grass, -far, far, -0.3, -0.02, -far, -HZ - 1, { shadow: false, receive: true });
-  span(grass, -far, far, -0.3, -0.02, HZ + 1, far, { shadow: false });
-  span(grass, -far, -HX - 1, -0.3, -0.02, -HZ - 1, HZ + 1, { shadow: false });
-  span(grass, HX + 1, far, -0.3, -0.02, -HZ - 1, HZ + 1, { shadow: false });
-  span(path, -2.4, 2.4, -0.3, 0.0, HZ + 1, 70, { shadow: false, collide: false });
+  span(grassFar, -far, far, -3.6, -3.2, -far, far, { shadow: false, collide: false });
   // Hills: low flat cones in two rings, bluer the farther they stand.
   const hillNear = toon(PALETTE.hill), hillFar = toon(PALETTE.hillFar);
   for (let i = 0; i < 26; i++) {
     const a = (i / 26) * Math.PI * 2 + (i % 2) * 0.1;
     const near = i % 3 !== 0;
-    const r = near ? 150 + Math.sin(i * 2.3) * 20 : 230 + Math.sin(i * 1.7) * 30;
-    const h = near ? 16 + Math.abs(Math.sin(i * 1.3)) * 14 : 34 + Math.abs(Math.cos(i * 2.1)) * 26;
-    const hill = new THREE.Mesh(faceted(new THREE.ConeGeometry(near ? 40 + (i % 4) * 8 : 70 + (i % 3) * 20, h, 7)), near ? hillNear : hillFar);
-    hill.position.set(Math.cos(a) * r, h / 2 - 1, Math.sin(a) * r);
+    const r = near ? 165 + Math.sin(i * 2.3) * 20 : 240 + Math.sin(i * 1.7) * 30;
+    const h = near ? 40 + Math.abs(Math.sin(i * 1.3)) * 18 : 56 + Math.abs(Math.cos(i * 2.1)) * 30;
+    const hill = new THREE.Mesh(faceted(new THREE.ConeGeometry(near ? 50 + (i % 4) * 8 : 80 + (i % 3) * 20, h, 7)), near ? hillNear : hillFar);
+    hill.position.set(Math.cos(a) * r, h / 2 - 3, Math.sin(a) * r);
     hill.rotation.y = i;
     g.add(hill);
   }
-  // A tree line beyond the walls, seen from the roofs.
-  for (let i = 0; i < 34; i++) {
-    const a = (i / 34) * Math.PI * 2;
-    const r = 44 + ((i * 7) % 5) * 6;
-    tree(Math.cos(a) * r * 1.15, Math.sin(a) * r, i % 4 === 0 ? 'maple' : i % 4 === 1 ? 'gold' : 'pine', 1.1 + (i % 3) * 0.25, i);
-  }
-  void grassFar;
 
   // ---------------------------------------------------------------- walls
   // Plaster walls on a dark plinth, capped with tile, with a band of dark
@@ -245,10 +245,10 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
     }
   };
   const wx0 = -HX - WALL_T, wx1 = HX + WALL_T, wz0 = -HZ - WALL_T, wz1 = HZ + WALL_T;
-  // North: behind the hall, seen only from outside. West: the whole inner
+  // North: behind the hall, boarded on its outer face. West: the whole inner
   // face. East: inside only north of the storehouse (the wall walk covers
   // the rest). South: inside only west of the gate (the walk covers the east).
-  wallRun(wx0, wx1, wz0, -HZ, null, [[-1, wx0, wx1]]);
+  wallRun(wx0, wx1, wz0, -HZ, 'wall-n', [[-1, wx0, wx1]]);
   wallRun(wx0, -HX, -HZ, HZ, 'wall-w', [[-1, -HZ, HZ], [1, -HZ, HZ]]);
   wallRun(HX, wx1, -HZ, HZ, 'wall-e', [[1, -HZ, HZ], [-1, -HZ, STORE.z0]]);
   wallRun(wx0, GATE.x0, HZ, wz1, 'wall-sw', [[1, wx0, GATE.x0], [-1, -HX, GATE.x0]]);
@@ -260,16 +260,21 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   }
 
   // ---------------------------------------------------------------- gate
-  // Two pillars, a lintel, closed double doors and a tiled roof over them.
+  // Two pillars, a lintel, double doors swung open into the yard and a tiled
+  // roof over them. The road runs out through the gateway to the valley.
   const G = GATE;
   // The gateway fades with its roof (as a ghost) when the player is in or just inside it.
   const gg = { occluder: 'gate', ghost: true };
   for (const px of [G.x0 + 0.4, G.x1 - 0.4]) slab(woodDark, px, (G.roofY - 0.3) / 2, HZ + 0.3, 0.7, G.roofY - 0.3, 0.9, gg);
   slab(woodDark, 0, 3.55, HZ + 0.3, G.x1 - G.x0, 0.35, 1.0, { collide: false, ...gg });
+  // Each door hangs from the inner face of its pillar and lies back along
+  // the gateway's side, its studded face toward whoever walks through.
+  const doorW = (G.x1 - 0.8) - 0.05, hinge = G.x1 - 0.75;
   for (const side of [-1, 1]) {
-    const door = slab(gateWood, side * (G.x1 - 0.8) / 2, 1.65, HZ + 0.3, (G.x1 - 0.8) - 0.05, 3.3, 0.22, { surface: 'wood', ...gg });
+    const dx = side * (hinge - 0.11), dz = HZ + 0.4 - doorW / 2;
+    const door = slab(gateWood, dx, 1.65, dz, 0.22, 3.3, doorW, { surface: 'wood', ...gg });
     door.castShadow = true;
-    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) slab(iron, side * (G.x1 - 0.8) / 2 - 1.2 + c * 1.2, 0.6 + r * 1.0, HZ + 0.17, 0.14, 0.14, 0.06, { collide: false, shadow: false, ...gg });
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) slab(iron, dx - side * 0.13, 0.6 + r * 1.0, dz - 1.2 + c * 1.2, 0.06, 0.14, 0.14, { collide: false, shadow: false, ...gg });
   }
   // The gate roof: a walkable tiled top (the channels run north and south,
   // down from the ridge), tile eaves hanging over the yard and the road, a
@@ -319,7 +324,7 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   span(woodLight, H.x0 - 0.3, H.x1 + 0.3, 0, H.floorY / 2, H.z1, H.z1 + 0.6, { surface: 'wood' });
   span(stoneDark, H.x0 - 0.3, H.x1 + 0.3, 0, 0.08, H.z1 + 0.6, H.z1 + 1.4, { shadow: false });
   // Back and side walls, with timber framing on the inside.
-  span(plaster, H.x0, H.x1, H.floorY, H.wallTop, H.z0, H.z0 + 0.3);
+  span(plaster, H.x0, H.x1, H.floorY, H.wallTop, H.z0, H.z0 + 0.3, { occluder: 'hall-back', ghost: true });
   span(plaster, H.x0, H.x0 + 0.3, H.floorY, H.wallTop, H.z0, H.z1, { occluder: true });
   span(plaster, H.x1 - 0.3, H.x1, H.floorY, H.wallTop, H.z0, H.z1, { occluder: true });
   const frame = (x0: number, x1: number, y: number, z0: number, z1: number): void => { span(woodDark, x0, x1, y - 0.06, y + 0.06, z0, z1, { collide: false, shadow: false }); };
@@ -429,7 +434,7 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   span(stoneDark, P.center.x - ph, P.center.x + ph, P.floorY - 0.3, P.floorY, P.center.z - ph, P.center.z + ph, { shadow: false });
   for (const [x0, x1, z0, z1] of [[P.center.x - ph - 0.3, P.center.x - ph, P.center.z - ph - 0.3, P.center.z + ph + 0.3], [P.center.x + ph, P.center.x + ph + 0.3, P.center.z - ph - 0.3, P.center.z + ph + 0.3], [P.center.x - ph, P.center.x + ph, P.center.z - ph - 0.3, P.center.z - ph], [P.center.x - ph, P.center.x + ph, P.center.z + ph, P.center.z + ph + 0.3]] as const) span(stoneDark, x0, x1, P.floorY, 0.25, z0, z1, { shadow: false });
   for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; slab(stone, P.center.x + Math.cos(a) * 3.3, 0.125, P.center.z + Math.sin(a) * 3.3, 1.5, 0.25, 1.4, { rotY: -a }); }
-  const waterMat = new THREE.ShaderMaterial({ vertexShader: waterVert, fragmentShader: waterFrag, uniforms: { time: { value: 0 }, deep: { value: new THREE.Color(PALETTE.water) }, light: { value: new THREE.Color(PALETTE.waterLight) } }, transparent: true });
+  const waterMat = waterMaterial(PALETTE.water, PALETTE.waterLight);
   const water = new THREE.Mesh(new THREE.CircleGeometry(P.radius + 0.5, 48), waterMat);
   water.rotation.x = -Math.PI / 2;
   water.position.set(P.center.x, P.surfaceY, P.center.z);
@@ -622,6 +627,10 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   }
 
   dressCompound({ g, physics, lights, onRoof, mats: { wood, woodDark, woodLight, stone, stoneDark, plaster, iron, tile, tileEdge, lantern: lanternMat } });
+  const valley = buildValley({ g, physics, lights, onRoof, tag, mats: { woodDark, woodLight, stone, stoneDark, iron, tile, tileEdge, lantern: lanternMat } });
+  zones.push(...valley.zones);
+  footprints.push(...valley.footprints);
+  animated.push(valley);
 
   // Bake: each named roof (and named wall) into one mesh per material, then
   // everything else that never moves into one mesh per material.
@@ -639,15 +648,19 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
 
   const roofZone: Zone = { id: 'roof', min: new THREE.Vector3(-HX - 2, 2.3, -HZ - 2), max: new THREE.Vector3(HX + 2, 40, HZ + 2), label: 'Rooftops' };
   zones.push(roofZone);
+  const general = new Set<ZoneId>(['courtyard', 'roof', 'valley']);
   return {
     group: g, zones, footprints, plaques, craneHook: hook, occluders, onRoof,
     pond: { center: P.center, radius: P.radius, surfaceY: P.surfaceY },
     zoneAt(p) {
-      // Specific places first, the courtyard as the ground floor's default, the roofs by height.
-      for (const z of zones) if (z.id !== 'courtyard' && z.id !== 'roof' && inside(z, p)) return z;
-      if (p.y >= roofZone.min.y) return roofZone;
+      // Specific places first, the roofs by height, the courtyard as the
+      // ground floor's default inside the walls, the valley outside them.
+      for (const z of zones) if (!general.has(z.id) && inside(z, p)) return z;
+      if (inside(roofZone, p)) return roofZone;
       const yard = zones.find((z) => z.id === 'courtyard')!;
-      return inside(yard, p) ? yard : null;
+      if (inside(yard, p)) return yard;
+      const open = zones.find((z) => z.id === 'valley')!;
+      return inside(open, p) ? open : null;
     },
     indoorsAt(p) {
       for (const z of zones) if (z.indoors && inside(z, p)) {
@@ -656,6 +669,8 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
       }
       return 0;
     },
+    openAt(p) { return openness(p.x, p.z); },
+    groundAt: heightAt,
     update(time) { for (const a of animated) a.update(time); },
   };
 }

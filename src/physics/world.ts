@@ -69,6 +69,18 @@ export class Physics {
     return this.world.createCollider(RAPIER.ColliderDesc.trimesh(verts, idx).setCollisionGroups(groups(GROUP_WORLD, 0xffff)), body);
   }
 
+  // Ground from a square height grid: `heights[i * (n + 1) + j]` is the
+  // height at row i (along z) and column j (along x), the grid starting at
+  // (x0, z0) in steps of `cell`. Each cell splits on its (j, i)-(j+1, i+1)
+  // diagonal, as the drawn terrain does.
+  staticHeightfield(x0: number, z0: number, cell: number, n: number, heights: Float32Array): RAPIER.Collider {
+    const cols = new Float32Array((n + 1) * (n + 1));
+    for (let i = 0; i <= n; i++) for (let j = 0; j <= n; j++) cols[i + j * (n + 1)] = heights[i * (n + 1) + j]!;
+    const size = n * cell;
+    const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x0 + size / 2, 0, z0 + size / 2));
+    return this.world.createCollider(RAPIER.ColliderDesc.heightfield(n, n, cols, { x: size, y: 1, z: size }).setCollisionGroups(groups(GROUP_WORLD, 0xffff)), body);
+  }
+
   dynamicBox(mesh: THREE.Object3D, half: THREE.Vector3, mass: number, group = GROUP_PROP): RAPIER.RigidBody {
     const desc = RAPIER.RigidBodyDesc.dynamic().setTranslation(mesh.position.x, mesh.position.y, mesh.position.z)
       .setRotation({ x: mesh.quaternion.x, y: mesh.quaternion.y, z: mesh.quaternion.z, w: mesh.quaternion.w })

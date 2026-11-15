@@ -4,6 +4,7 @@ import type { Game } from '../app/game';
 import { appState } from '../app/state';
 import { settings } from '../app/settings';
 import { HALL, STORE } from '../world/compound';
+import { STREAM, WATER_Y, nearest } from '../world/valleyPlan';
 import { blinkUi } from '../techniques/kits/blink';
 import { CUES, isCue, type Cue, type CueName, type Layer } from './cues';
 import { SYNTHS, makeNoise, type Noise, type Voice } from './synth';
@@ -53,6 +54,8 @@ export interface AudioView {
   volumes: { master: number; music: number; effects: number };
   muffle: number;
   ambience: AmbienceView | null;
+  // The stream and the falls as heard where the listener stands.
+  heard: { stream: number; falls: number } | null;
   log: SoundEvent[];
 }
 
@@ -80,6 +83,8 @@ export class Audio {
   private heartAt = 0;
   private muffle = 0;
   private room = 0;
+  private field = 0;
+  private readonly streamAt = { x: 0, z: 0 };
   private gestureAt: number | null = null;
   private hum: { gain: GainNode; tone: ConstantSourceNode; filter: BiquadFilterNode; level: number; stop: () => void } | null = null;
   // A cue a kit plays is offered here first; online, the room's wire sends it on.
@@ -238,14 +243,18 @@ export class Audio {
     } else { L.setPosition(pos.x, pos.y, pos.z); L.setOrientation(fwd.x, fwd.y, fwd.z, 0, 1, 0); }
 
     const indoors = inWorld ? g.world.indoorsAt(g.player.position) : 0;
+    const outdoors = inWorld ? g.world.openAt(g.player.position) : 0;
     this.room += (indoors - this.room) * Math.min(1, raw * 3);
+    this.field += (outdoors - this.field) * Math.min(1, raw * 1.5);
     put(this.hallVerb.gain, this.room * 0.9);
-    put(this.yardVerb.gain, (1 - this.room) * 0.35);
+    // The walls' slap thins out as you leave them behind.
+    put(this.yardVerb.gain, (1 - this.room) * 0.35 * (1 - this.field * 0.8));
+    nearest(pos.x, pos.z, STREAM, this.streamAt);
 
     const enemies = g.encounters.enemies.some((e) => e.alive && e.def.ai !== 'dummy');
     const clash = g.aura.clash.active;
     const mode: MusicMode = !inWorld ? 'title' : clash ? 'clash' : enemies || st === 'rooftop' ? 'fight' : 'calm';
-    this.ambience.update(raw, indoors, mode, mode === 'clash' ? 1 : mode === 'fight' ? 0.75 : 0, g.cutscenes.active ? 1 : 0);
+    this.ambience.update(raw, indoors, mode, mode === 'clash' ? 1 : mode === 'fight' ? 0.75 : 0, g.cutscenes.active ? 1 : 0, outdoors, { x: this.streamAt.x, y: WATER_Y, z: this.streamAt.z });
 
     // The aura field hums while it is open; the voice exists only then.
     const f = g.aura.field;
@@ -286,6 +295,7 @@ export class Audio {
       library: { loaded: this.library.loaded, total: this.library.total, failed: this.library.failed },
       volumes: { master: s.volume, music: s.music, effects: s.effects }, muffle: this.muffle,
       ambience: this.ambience?.view() ?? null, log: this.log.map((e) => ({ ...e })),
+      heard: this.ambience && this.ctx ? this.ambience.heard({ x: this.ctx.listener.positionX?.value ?? 0, y: this.ctx.listener.positionY?.value ?? 0, z: this.ctx.listener.positionZ?.value ?? 0 }) : null,
     };
   }
 

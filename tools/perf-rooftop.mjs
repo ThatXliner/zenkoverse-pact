@@ -4,7 +4,7 @@
 // open and pushed out wide) and measures 180 frames
 // in all three camera views at 1440x900, device pixel ratio 2. A second pass
 // runs with the frame limiter off, so the number shows the headroom and not
-// only the 60 fps cap. The courtyard and the hall are measured the same way, and an Aura Clash
+// only the 60 fps cap. The courtyard, the hall and the valley are measured the same way, and an Aura Clash
 // against the Master in the hall.
 // --size 1920x1080 --dpr 1 --quality medium measure another window, density
 // or preset (a mid laptop at 1080p is --size 1920x1080 --dpr 1).
@@ -46,6 +46,11 @@ for (const uncapped of [false, true]) {
   console.log(await measure(page, 'hall, top         '));
   await page.evaluate(() => { const g = window.game; g.teleport('courtyard'); g.camera('third'); g.look(0, -0.2); });
   console.log(await measure(page, 'courtyard, 3P     '));
+  // Out in the valley: the road past the bridge, and the view back over the meadow to the walls.
+  await page.evaluate(() => { const g = window.game; g.teleport('bridge'); g.camera('top'); });
+  console.log(await measure(page, 'valley, top       '));
+  await page.evaluate(() => { const g = window.game; g.teleport([20, 0, 70]); g.camera('third'); g.look(0.5, -0.1); });
+  console.log(await measure(page, 'valley, 3P        '));
   // An Aura Clash in the hall: both fields, the seam and the side shot.
   await page.evaluate(() => { const g = window.game; g.camera('top'); g.auraReady(); g.encounter('ancient'); });
   await page.waitForTimeout(1500);

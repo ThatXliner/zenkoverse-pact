@@ -387,8 +387,8 @@ export function dressCompound(k: DressKit): void {
   // Banners just inside the gate.
   nobori(-7.0, GATE.z0 - 3.4, 0, '武道');
   nobori(7.0, GATE.z0 - 3.4, 0, '精進');
-  pottedPine(-6.6, GATE.z0 - 0.4, 1.2, 2);
-  pottedPine(8.6, GATE.z0 - 0.2, 1.1, 4);
+  pottedPine(-6.6, 0, GATE.z0 - 0.4, 1.2, 2);
+  pottedPine(8.6, 0, GATE.z0 - 0.2, 1.1, 4);
   // Bamboo along the south wall, west of the gate.
   bambooBed(-18.5, -11.8, 19.25, 1.3);
   // Weapon racks on the west wall, by the yard's training corner.
@@ -412,7 +412,7 @@ export function dressCompound(k: DressKit): void {
   woodpile(23.2, -15.4, -Math.PI / 2, 3.2);
   tub(16.4, -12.6);
   tub(17.2, -12.0, 0.36);
-  pottedPine(15.6, -18.6, 1.0, 3);
+  pottedPine(15.6, 0, -18.6, 1.0, 3);
 
   // ------------------------------------------------------------ the storehouse
   // The lower walls in namako tile (dark squares, white raised joints), a

@@ -58,6 +58,20 @@ const WEIGHT = {
 // The phase rate never runs a gait faster than this many cycles a second
 // (the walk clip's own cadence is 0.75).
 const MAX_CADENCE = 1.6;
+// On a stair the stride shortens and the cadence quickens: at a grade of g
+// (rise over run) a stride is 1 / (1 + STAIR_STRIDE * |g|) of its length on
+// the flat, so the feet fall on the treads and the trailing knee folds rather
+// than reaching back down the flight.
+const STAIR_STRIDE = 1.1;
+// Up a stair a foot that has pushed off is drawn up behind the hips, heel
+// toward them, by this many metres per unit of grade.
+const STAIR_FOLD = 0.2;
+// How far ahead of and behind the root, for a body 1.78 m tall, the floor is
+// read for the grade, and how fast, per second, the grade follows it.
+const GRADE_REACH = 0.45;
+const GRADE_FOLLOW = 8;
+// The least a floor rises or falls over that reach, either side of the root, to read as a slope.
+const GRADE_STEP = 0.05;
 // The fastest a body turns, in radians a second: a half turn takes about a quarter second.
 const TURN_SPEED = 13;
 // Seconds off the ground before a body counts as airborne.
@@ -134,6 +148,8 @@ export class Avatar {
   private yawRate = 0;
   private speed = 0;
   private reachDown = 0;
+  // Rise over run of the floor along the body's travel, smoothed: positive up a stair.
+  private grade = 0;
   private hipDrop = 0;
   // Where the floor is under a point, as the height the root of a body
   // standing there would have, searched near `nearY`; null where there is
@@ -315,7 +331,8 @@ export class Avatar {
     }
     const walk = this.actions.get(LOCO_CLIP.walk)?.getClip();
     const minStride = walk ? 0.3 * (this.clipSpeed[walk.name] ?? 1) * walk.duration : 0.3;
-    this.phaseRate = footed ? Math.min(MAX_CADENCE, speed / Math.max(stride, minStride)) * (backing ? -1 : 1) : 0;
+    this.trackGrade(velocity, commanded, footed, dt);
+    this.phaseRate = footed ? Math.min(MAX_CADENCE, speed / Math.max(stride * this.strideScale, minStride)) * (backing ? -1 : 1) : 0;
     // Off-axis travel turns the hips so the legs run along it, forward or
     // backward, while the spine twists back so the chest keeps the facing.
     const legs = backing ? Math.atan2(-Math.sin(travel), -Math.cos(travel)) : travel;
@@ -334,6 +351,27 @@ export class Avatar {
     if (grounded && this.airT > GROUND_GRACE && !stepDown) this.land(this.fallSpeed);
     if (grounded) { this.airT = 0; this.airHeight = 0; }
     this.grounded = footed;
+  }
+
+  // How much of its flat length a stride covers on the floor the body is crossing.
+  private get strideScale(): number { return 1 / (1 + STAIR_STRIDE * Math.abs(this.grade)); }
+
+  // Reads the slope of the floor along the travel, from the floor a stride's
+  // reach ahead of the root, under it and behind it. Only a floor that goes
+  // the same way on both sides is a slope: a single kerb or a ledge, or a
+  // missing floor (a wall, a drop), reads level.
+  private trackGrade(velocity: THREE.Vector3, commanded: number, footed: boolean, dt: number): void {
+    let g = 0;
+    if (footed && commanded > 0.3 && this.floorAt) {
+      const at = this.root.position, k = this.height / 1.78, r = GRADE_REACH * k;
+      const ux = velocity.x / commanded, uz = velocity.z / commanded;
+      const ahead = this.floorAt(at.x + ux * r, at.z + uz * r, at.y), here = this.floorAt(at.x, at.z, at.y), behind = this.floorAt(at.x - ux * r, at.z - uz * r, at.y);
+      if (ahead !== null && here !== null && behind !== null) {
+        const up = ahead - here, down = here - behind, min = GRADE_STEP * k;
+        if (Math.sign(up) === Math.sign(down) && Math.abs(up) > min && Math.abs(down) > min) g = THREE.MathUtils.clamp((ahead - behind) / (2 * r), -1.5, 1.5);
+      }
+    }
+    this.grade += (g - this.grade) * (1 - Math.exp(-GRADE_FOLLOW * dt));
   }
 
   // Adds up how far the root has gone along the commanded travel since the
@@ -530,11 +568,15 @@ export class Avatar {
     const base = Math.max(ground, floorAt?.(this.root.position.x, this.root.position.z) ?? ground);
     const travel = new THREE.Vector3(this.lastVel.x, 0, this.lastVel.z);
     if (travel.lengthSq() > 1e-4) travel.normalize(); else travel.set(0, 0, 0);
-    if (a && b) { a.sample(ground, base, canPlant, b.stepping, dt, floorAt, travel); b.sample(ground, base, canPlant, a.stepping, dt, floorAt, travel); }
-    // A planted foot on a floor lower than the root's (the step below on a
-    // stair) would hang short of it on a straight leg, so the hips come down
-    // for it; between footfalls they hold where the last one put them.
-    const planted = this.legs.filter((l) => l.planted);
+    const stride = canPlant ? this.strideScale : 1;
+    const fold = canPlant ? STAIR_FOLD * Math.max(0, this.grade) * this.height / 1.78 : 0;
+    if (a && b) { a.sample(ground, base, canPlant, b.stepping, dt, floorAt, travel, stride, fold); b.sample(ground, base, canPlant, a.stepping, dt, floorAt, travel, stride, fold); }
+    // A planted foot ahead of the hips on a floor lower than the root's (the
+    // step below, going down a stair) would hang short of it on a straight
+    // leg, so the hips come down for it; between footfalls they hold where
+    // the last one put them. One behind the hips is pushing off: going up a
+    // stair the root rises away from it, and the hips stay up and leave it.
+    const planted = this.legs.filter((l) => l.planted && l.ahead >= 0);
     if (!canPlant) this.reachDown = 0;
     else if (planted.length) this.reachDown = THREE.MathUtils.clamp(Math.max(...planted.map((l) => -l.rise)), 0, WEIGHT.reachDownMax * this.height / 1.78);
     this.hipDrop += (this.reachDown - this.hipDrop) * (1 - Math.exp(-12 * dt));

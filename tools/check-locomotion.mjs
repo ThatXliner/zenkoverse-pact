@@ -17,7 +17,12 @@
 // body stands on, as it does on the flat. The climb once read as a backward
 // shuffle: the foot that had just pushed off was drawn down to the step
 // below it and trailed straight-legged down the stair, its toe dragging up
-// the treads after the body.
+// the treads after the body. Then it read as a lunge: the stride was the
+// flat run's, so the trailing leg reached far back nearly straight. On a
+// stair the stride shortens, and the trailing foot comes up under the hips
+// on a folded knee. Going down, the body left the ground at every step's
+// edge and fell to the next tread, and the trailing leg stuck straight back
+// up the flight while it fell; it now stays on its feet all the way down.
 // Usage: npm run check:locomotion -- [url] [--url http://localhost:4173/] [--port 4173]
 // Without a URL it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
@@ -33,6 +38,14 @@ const SLIDE_LIMIT = 0.3;
 // stands on, may not drop below this. On the flat it is about 0.19; the
 // shuffling climb hung its trailing foot at -0.23.
 const AIR_CLEARANCE = 0.05;
+// On the stair a foot in the air behind the hips, at the 90th percentile, is
+// no further back than this in metres, and its knee folds at least this many
+// degrees at the median. The climb once reached 0.73 m back on a knee bent
+// 58°, a lunge with the leg dragged after it; the descent reached 0.75 m
+// back up the flight, and was off the ground 28 frames in 80. On the flat a
+// run reaches about 0.7 m back.
+const TRAIL_REACH = 0.55;
+const TRAIL_KNEE = 75;
 const browser = await chromium.launch({ channel: 'chrome', args: ['--use-angle=metal', '--enable-gpu'] });
 const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
 const pageErrors = [];
@@ -221,25 +234,36 @@ const airborne = [];
 for (const [name, at, key] of [['on the flat', [-4, 0, 9], 'KeyW'], ['up the stair', [-17, 0, -1.2], 'KeyW'], ['down the stair', [-17, 4.95, -12.4], 'KeyS']]) {
   await page.evaluate((at) => { window.game.teleport(at); window.game.step(60); }, at);
   await page.keyboard.down(key);
-  const low = await page.evaluate(() => {
+  const run = await page.evaluate(() => {
     const g = window.game, game = g.game, av = game.avatar, V = game.player.position.constructor;
     g.step(30);
-    const lows = [];
+    const lows = [], bends = [], reaches = [];
+    let frames = 0, off = 0;
     for (let f = 0; f < 80; f++) {
       g.step(1);
-      const pos = game.player.position, root = pos.y;
+      const pos = game.player.position, root = pos.y, vel = game.player.velocity;
       const base = Math.max(root, game.physics.standingY(pos.x, pos.z, root) ?? root);
+      // On the flight itself, between its foot and its head.
+      const onStair = pos.z < -3.5 && pos.z > -11;
+      if (onStair) { frames++; if (!game.player.grounded) off++; }
+      const speed = Math.hypot(vel.x, vel.z) || 1;
       av.legs.forEach((leg, i) => {
         if (leg.planted) return;
         const s = i ? 'r' : 'l';
         lows.push(Math.min(av.boneWorld(`foot_${s}`, new V()).y, av.boneWorld(`ball_${s}`, new V()).y) - base);
+        // A foot in the air behind the hips: how far behind, and how far its knee folds.
+        const hip = av.boneWorld(`thigh_${s}`, new V()), knee = av.boneWorld(`calf_${s}`, new V()), ankle = av.boneWorld(`foot_${s}`, new V());
+        const behind = -((ankle.x - hip.x) * vel.x + (ankle.z - hip.z) * vel.z) / speed;
+        if (!onStair || behind < 0.15) return;
+        reaches.push(behind);
+        bends.push((knee.clone().sub(hip).angleTo(ankle.clone().sub(knee)) * 180) / Math.PI);
       });
     }
-    lows.sort((a, b) => a - b);
-    return lows[Math.floor(lows.length * 0.1)];
+    const at = (xs, q) => { xs.sort((a, b) => a - b); return xs.length ? xs[Math.min(xs.length - 1, Math.floor(xs.length * q))] : NaN; };
+    return { low: at(lows, 0.1), bend: at(bends, 0.5), reach: at(reaches, 0.9), frames, off };
   });
   await page.keyboard.up(key);
-  airborne.push({ name, low });
+  airborne.push({ name, ...run });
 }
 const debugErrors = await page.evaluate(() => window.game.errors);
 await browser.close();
@@ -263,6 +287,11 @@ for (const s of weight.slides) report(s.n >= 5 && s.mean <= SLIDE_LIMIT, `${s.na
 report(weight.after <= weight.before, `a sprint leaves nothing on the ground (${weight.before} meshes near the ground before, ${weight.after} after)`);
 report(weight.sink >= 0.05, `a landing sinks the hips (${(weight.sink * 100).toFixed(1)} cm)`);
 for (const a of airborne) report(a.low >= AIR_CLEARANCE, `${a.name} (held keys, top-down): a foot in the air keeps clear of the body's floor (lowest tenth ${(a.low * 100).toFixed(0)} cm, at least ${AIR_CLEARANCE * 100})`);
+for (const a of airborne.filter((r) => r.name !== 'on the flat')) {
+  report(a.frames >= 30 && a.reach <= TRAIL_REACH, `${a.name} (held keys, top-down): the trailing foot comes through under the body (90th percentile ${(a.reach * 100).toFixed(0)} cm behind the hips over ${a.frames} frames on the flight, at most ${Math.round(TRAIL_REACH * 100)})`);
+  report(a.bend >= TRAIL_KNEE, `${a.name} (held keys, top-down): the trailing knee folds (median ${a.bend.toFixed(0)}°, at least ${TRAIL_KNEE})`);
+  report(a.off === 0, `${a.name} (held keys, top-down): the body stays on its feet the length of the flight (${a.off} of ${a.frames} frames off the ground)`);
+}
 report(weight.rock >= 0.09, `a blow rocks the struck chest away from it, measured at the neck (${(weight.rock * 100).toFixed(1)} cm)`);
 report(pageErrors.length === 0 && debugErrors.length === 0, `no page errors (${[...pageErrors, ...debugErrors].join('; ') || 'none'})`);
 if (failed) { console.error(`${failed} locomotion checks failed`); process.exit(1); }

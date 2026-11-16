@@ -14,6 +14,11 @@ export const PLAYER_HEIGHT = 1.78;
 export const EYE_HEIGHT = 1.64;
 // How fast a shove dies away, per second.
 const PUSH_DECAY = 6;
+// The deepest drop a body on its feet steps down rather than falls: a stair's
+// riser and then some. Rapier's own snap gives up on a stair going down: the
+// capsule rolls over each step's edge, the contact there tilts past the
+// steepest floor it stands on, and it falls to the next tread.
+const STEP_DOWN = 0.36;
 
 export class PlayerController {
   readonly position = new THREE.Vector3();
@@ -21,6 +26,7 @@ export class PlayerController {
   readonly body: RAPIER.RigidBody;
   readonly collider: RAPIER.Collider;
   private ctrl: RAPIER.KinematicCharacterController;
+  private shape = new RAPIER.Capsule(PLAYER_HEIGHT / 2 - PLAYER_RADIUS, PLAYER_RADIUS);
   grounded = true;
   wasGrounded = true;
   // Where the body faces. `moveYaw` is the heading the movement keys are
@@ -132,12 +138,24 @@ export class PlayerController {
 
     const move = this.velocity.clone().add(this.push).multiplyScalar(dt);
     this.push.multiplyScalar(Math.exp(-PUSH_DECAY * dt));
+    const stepping = this.grounded && this.velocity.y <= 0 && this.dashTimer <= 0;
     this.ctrl.computeColliderMovement(this.collider, move, undefined, groups(GROUP_PLAYER, GROUP_WORLD | GROUP_PROP));
     const out = this.ctrl.computedMovement();
     this.wasGrounded = this.grounded;
     this.grounded = this.ctrl.computedGrounded();
     const blockedH = Math.hypot(out.x - move.x, out.z - move.z) > Math.hypot(move.x, move.z) * 0.6 && Math.hypot(move.x, move.z) > 0.015;
     this.position.x += out.x; this.position.y += out.y; this.position.z += out.z;
+    // On its feet and not rising, a body that has walked out over a lower
+    // floor within a step's height goes down onto it, as a foot steps down,
+    // and stays on its feet. Over a step's edge the capsule comes down as far
+    // as the edge lets it and rolls over it on the frames that follow.
+    if (!this.grounded && stepping) {
+      const drop = this.dropAt(this.position.x, this.position.z);
+      if (drop !== null) {
+        this.position.y -= this.clearBelow(drop);
+        this.grounded = true;
+      }
+    }
     if (this.grounded && this.velocity.y < 0) {
       if (!this.wasGrounded) this.events.onLand(-this.velocity.y);
       this.velocity.y = 0;
@@ -159,6 +177,22 @@ export class PlayerController {
   }
 
   get stepCycle(): number { return this.stepPhase; }
+
+  // How far the body can move straight down, up to `max`, before it touches something.
+  private clearBelow(max: number): number {
+    const at = { x: this.position.x, y: this.position.y + PLAYER_HEIGHT / 2, z: this.position.z };
+    const hit = this.physics.world.castShape(at, { x: 0, y: 0, z: 0, w: 1 }, { x: 0, y: -1, z: 0 }, this.shape, SKIN, max, true, undefined, groups(GROUP_PLAYER, GROUP_WORLD | GROUP_PROP), this.collider, this.body);
+    return hit ? Math.max(0, hit.time_of_impact) : max;
+  }
+
+  // How far below the root the floor at (x, z) lies, when it is a step down
+  // and not a drop.
+  private dropAt(x: number, z: number): number | null {
+    const floor = this.physics.standingY(x, z, this.position.y, STEP_DOWN);
+    if (floor === null) return null;
+    const drop = this.position.y - floor;
+    return drop > 1e-3 && drop <= STEP_DOWN ? drop : null;
+  }
 
   private updateSurface(): void {
     const hit = this.physics.castRay(this.position.clone().add(new THREE.Vector3(0, 0.3, 0)), new THREE.Vector3(0, -1, 0), 0.8, GROUP_WORLD | GROUP_PROP, this.body);

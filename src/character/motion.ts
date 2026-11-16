@@ -76,6 +76,12 @@ const PLANT = {
   soft: 0.2, hard: 0.42,
   // A catch-up step: its length in seconds and the lift at its middle.
   step: 0.13, lift: 0.07,
+  // How far past its toe a foot swinging forward looks for a step up.
+  toeReach: 0.12,
+  // How high the clip lifts a foot before it clears that step in full.
+  clear: 0.12,
+  // How far behind the hips a foot in the air is before a climb's fold lifts it in full.
+  foldIn: 0.2,
 };
 
 // A contact point carried further than this in one frame was teleported.
@@ -106,6 +112,8 @@ export class Leg {
   private floor: number | null = null;
   // How far the floor under the foot is above the one the clip walks on.
   rise = 0;
+  // How far the foot is ahead of the hip along the travel; negative behind it.
+  ahead = 0;
 
   constructor(readonly hip: THREE.Bone, readonly knee: THREE.Bone, readonly ankle: THREE.Bone, private ball: THREE.Bone, private heelY: number, private ballY: number, private k: number) {}
 
@@ -117,11 +125,22 @@ export class Leg {
   // at `groundY`, the root's height, and stand on `base`, the floor the body
   // stands on; `floorAt` gives the floor under a point, measured the same
   // way, or null where there is none. `travel` is the flat direction the
-  // body is going, zero when it stands.
-  sample(groundY: number, base: number, canPlant: boolean, otherStepping: boolean, dt: number, floorAt: ((x: number, z: number) => number | null) | null, travel: THREE.Vector3): void {
+  // body is going, zero when it stands. `stride` shortens the clip's stride
+  // to that part of itself, as on a stair: the foot is drawn toward the hips
+  // along the travel, so a foot behind them comes up under them on a folded
+  // knee instead of reaching back down the flight. `fold` lifts a foot in
+  // the air behind the hips by up to that many metres, heel toward them, as
+  // a climb draws it up toward the next step.
+  sample(groundY: number, base: number, canPlant: boolean, otherStepping: boolean, dt: number, floorAt: ((x: number, z: number) => number | null) | null, travel: THREE.Vector3, stride = 1, fold = 0): void {
     this.ankle.getWorldPosition(this.anim);
     this.ankle.getWorldQuaternion(this.animQ);
     this.ball.getWorldPosition(this.ballAnim);
+    const hip = this.hip.getWorldPosition(new THREE.Vector3());
+    if (stride < 1) {
+      const along = ((this.anim.x - hip.x) * travel.x + (this.anim.z - hip.z) * travel.z) * (stride - 1);
+      this.anim.addScaledVector(travel, along);
+      this.ballAnim.addScaledVector(travel, along);
+    }
     // A step in flight moves on first, so the frame it lands is the frame it plants.
     if (this.stepping) {
       this.stepT += dt;
@@ -157,23 +176,37 @@ export class Leg {
     // A foot stands on the floor under it, not on the root's: on a lower step
     // it reaches down to it, over a higher one it lifts onto it, and across
     // a step's edge it rests on the higher of the two. A planted foot keeps
-    // its floor however the root moves over it. A foot in the air behind the
-    // hips has just pushed off, so it is lifted over a higher floor but never
-    // drawn down to a lower one. Otherwise, on a climb, it would trail down
-    // the stair straight-legged and drag up the treads after the body: a
-    // backward shuffle. A foot in the air eases from floor to floor rather
-    // than jumping an edge.
+    // its floor however the root moves over it. A foot in the air ahead of
+    // the hips looks a little past its toe for a step up, so it rises over
+    // the step's nose before it gets there. A foot in the air behind the hips
+    // has pushed off and is coming through with the body, so it is carried
+    // on the body's floor, up a climb or down a descent, and only kept out
+    // of the floor under it. Drawn down to the step below on a climb it
+    // trailed straight-legged down the flight; held up on the step above on
+    // a descent it stuck straight back up it. A foot in the air eases from
+    // floor to floor rather than jumping an edge.
     const probe = canPlant ? floorAt : null;
-    const underHeel = probe?.(this.target.x, this.target.z) ?? null;
-    const underBall = probe?.(this.ballAnim.x + this.offset.x, this.ballAnim.z + this.offset.z) ?? null;
-    const under = underHeel === null && underBall === null ? base : Math.max(underHeel ?? -Infinity, underBall ?? -Infinity);
-    const hip = this.hip.getWorldPosition(new THREE.Vector3());
-    const trailing = !this.contact && (this.target.x - hip.x) * travel.x + (this.target.z - hip.z) * travel.z < 0;
-    const floor = trailing ? Math.max(under, base) : under;
+    const bx = this.ballAnim.x + this.offset.x, bz = this.ballAnim.z + this.offset.z;
+    this.ahead = (this.target.x - hip.x) * travel.x + (this.target.z - hip.z) * travel.z;
+    const trailing = !this.contact && this.ahead < 0;
+    const floors = probe ? [probe(this.target.x, this.target.z), probe(bx, bz)].filter((f): f is number => f !== null) : [];
+    let under = floors.length ? Math.max(...floors) : base;
+    if (probe && !this.contact && !trailing) {
+      const reach = PLANT.toeReach * this.k;
+      const step = probe(bx + travel.x * reach, bz + travel.z * reach);
+      // Only while the clip has the foot up: coming down to land, it lands on the floor under it.
+      const up = THREE.MathUtils.smoothstep(Math.min(hHeel, hBall), PLANT.enter * this.k, PLANT.clear * this.k);
+      if (step !== null && step > base && step > under) under += (step - under) * up;
+    }
+    const floor = trailing ? base : under;
     if (this.floor === null || !canPlant || Math.abs(floor - this.floor) > TELEPORT * this.k) this.floor = floor;
     else this.floor += (floor - this.floor) * (1 - Math.exp(-FLOOR_FOLLOW * dt));
     this.rise = this.floor - base;
     this.target.y += this.lift + this.rise;
+    if (trailing) {
+      this.target.y += fold * THREE.MathUtils.smoothstep(-this.ahead, 0, PLANT.foldIn * this.k);
+      this.target.y = Math.max(this.target.y, groundY + this.heelY + under - base);
+    }
     this.weight += ((canPlant ? 1 : 0) - this.weight) * (1 - Math.exp(-20 * dt));
   }
 

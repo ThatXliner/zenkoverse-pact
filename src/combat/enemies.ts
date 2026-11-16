@@ -48,6 +48,11 @@ const INK = 0x17110c;
 // A boss shrugs off blows until enough land close together (Sekiro's
 // posture): only then does it stagger, so its wind-ups are not chipped away.
 const POISE: Partial<Record<EnemyAi, number>> = { kuroda: 70, ancient: 130 };
+// Freezes in a row: the fourth (a boss's third) doesn't take, until
+// CHILL_FADES seconds pass without one. THAW is the opening after each.
+const FREEZE_CHAIN = 3;
+const CHILL_FADES = 6;
+const THAW = 1;
 const POISE_DECAY = 14;
 // How far the Enforcer wants to stand from the player when he pours.
 const POUR_RANGE = 5;
@@ -97,6 +102,11 @@ export class Enemy {
   resonance = 0;
   frozen = 0;
   slow = 1;
+  // Freezes landed in a row each hold half as long, a boss's from the start,
+  // and a body that has just thawed can't be frozen again for a moment.
+  private chill = 0;
+  private sinceChill = 0;
+  private thaw = 0;
   readonly def: EnemyDef;
   // The Master's aura field (issue #4), null for everyone without one.
   field: AuraField | null = null;
@@ -259,6 +269,25 @@ export class Enemy {
     this.yaw += diff * (1 - Math.exp(-rate * dt));
   }
 
+  // Holds this body in ice for up to `seconds`. A freeze doesn't stack on
+  // one still holding, and a chain of them runs out: see `chill`.
+  freeze(seconds: number): void {
+    if (this.frozen > 0 || this.thaw > 0) return;
+    const n = this.chill + (this.def.boss ? 1 : 0);
+    if (n >= FREEZE_CHAIN) return;
+    this.frozen = seconds * 0.5 ** n;
+    this.chill++;
+    this.sinceChill = 0;
+  }
+
+  protected tickFrost(dt: number): void {
+    if (this.frozen > 0 && this.frozen <= dt) this.thaw = THAW;
+    else this.thaw = Math.max(0, this.thaw - dt);
+    this.frozen = Math.max(0, this.frozen - dt);
+    this.sinceChill += dt;
+    if (this.sinceChill > CHILL_FADES) this.chill = 0;
+  }
+
   update(dt: number): void {
     if (this.disposed) return;
     if (!this.alive && (this.deadT += dt) > CORPSE_SECONDS) { this.dispose(); return; }
@@ -272,7 +301,7 @@ export class Enemy {
     // An open field runs its owner's Technique cooldowns faster, as it does
     // the player's: the Master casts sooner while her field is up.
     this.castCd -= dt * (this.field?.open ? 1 + AURA.recover * this.field.density : 1);
-    this.frozen = Math.max(0, this.frozen - dt);
+    this.tickFrost(dt);
     this.locked = Math.max(0, this.locked - dt);
     this.guardBroken = Math.max(0, this.guardBroken - dt);
     this.resonance = Math.max(0, this.resonance - dt * 0.5);

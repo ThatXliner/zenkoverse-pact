@@ -317,6 +317,8 @@ export class Game {
       else if (st.kind === 'workshop') this.closeWorkshop();
       else if (worldRuns.value) { pause(); this.input.releaseLock(); }
     }
+    // The key that opens the Workshop closes it too.
+    else if (st.kind === 'workshop' && this.input.hitAny('workshop')) this.closeWorkshop();
     if (worldRuns.value && !this.cam.isTop && !this.input.locked && !this.cam.inShot && this.input.canvasPressed) this.input.requestLock();
 
     if (st.kind === 'title' || st.kind === 'boot') {

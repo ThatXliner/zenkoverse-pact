@@ -12,6 +12,12 @@
 // sprint leaves nothing drawn on the ground behind it (third-person runs
 // once left a trail of white discs); a landing sinks the hips; and a blow
 // rocks the struck body away from it.
+// Last, the stair as it is played: real held keys in the top-down view, up
+// and down the hall stair. A foot in the air keeps clear of the floor the
+// body stands on, as it does on the flat. The climb once read as a backward
+// shuffle: the foot that had just pushed off was drawn down to the step
+// below it and trailed straight-legged down the stair, its toe dragging up
+// the treads after the body.
 // Usage: npm run check:locomotion -- [url] [--url http://localhost:4173/] [--port 4173]
 // Without a URL it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
@@ -23,6 +29,10 @@ const FEET_LIMIT = 35;
 // How fast, in m/s, a planted foot may cross the ground. Before the legs
 // planted their feet a start slid at 3.3 and a stop at 0.8.
 const SLIDE_LIMIT = 0.3;
+// The lowest tenth of a foot in the air, in metres above the floor the body
+// stands on, may not drop below this. On the flat it is about 0.19; the
+// shuffling climb hung its trailing foot at -0.23.
+const AIR_CLEARANCE = 0.05;
 const browser = await chromium.launch({ channel: 'chrome', args: ['--use-angle=metal', '--enable-gpu'] });
 const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
 const pageErrors = [];
@@ -205,6 +215,32 @@ const weight = await page.evaluate((SLIDE_MOVES) => {
   game.encounters.reset(); g.god(false);
   return { slides, before, after, sink: standing - lowest, rock };
 }, ['walk', 'sprint', 'start', 'stop', 'reverse', 'quarter turn', 'top-down diagonal', 'top-down backing', 'up the stair', 'down the stair']);
+// The stair as played: the top-down view, W and S held on the keyboard.
+await page.evaluate(() => { const g = window.game; g.god(true); g.game.encounters.reset(); for (const k of ['forward', 'back', 'left', 'right', 'sprint']) g.hold(k, false); g.camera('top'); });
+const airborne = [];
+for (const [name, at, key] of [['on the flat', [-4, 0, 9], 'KeyW'], ['up the stair', [-17, 0, -1.2], 'KeyW'], ['down the stair', [-17, 4.95, -12.4], 'KeyS']]) {
+  await page.evaluate((at) => { window.game.teleport(at); window.game.step(60); }, at);
+  await page.keyboard.down(key);
+  const low = await page.evaluate(() => {
+    const g = window.game, game = g.game, av = game.avatar, V = game.player.position.constructor;
+    g.step(30);
+    const lows = [];
+    for (let f = 0; f < 80; f++) {
+      g.step(1);
+      const pos = game.player.position, root = pos.y;
+      const base = Math.max(root, game.physics.standingY(pos.x, pos.z, root) ?? root);
+      av.legs.forEach((leg, i) => {
+        if (leg.planted) return;
+        const s = i ? 'r' : 'l';
+        lows.push(Math.min(av.boneWorld(`foot_${s}`, new V()).y, av.boneWorld(`ball_${s}`, new V()).y) - base);
+      });
+    }
+    lows.sort((a, b) => a - b);
+    return lows[Math.floor(lows.length * 0.1)];
+  });
+  await page.keyboard.up(key);
+  airborne.push({ name, low });
+}
 const debugErrors = await page.evaluate(() => window.game.errors);
 await browser.close();
 stop();
@@ -226,6 +262,7 @@ report(walkers.some((w) => w.kind.startsWith('enemy')), 'sampled enemies while t
 for (const s of weight.slides) report(s.n >= 5 && s.mean <= SLIDE_LIMIT, `${s.name}: a planted foot stays put (slides ${s.mean.toFixed(2)} m/s over ${s.n} planted frames, limit ${SLIDE_LIMIT})`);
 report(weight.after <= weight.before, `a sprint leaves nothing on the ground (${weight.before} meshes near the ground before, ${weight.after} after)`);
 report(weight.sink >= 0.05, `a landing sinks the hips (${(weight.sink * 100).toFixed(1)} cm)`);
+for (const a of airborne) report(a.low >= AIR_CLEARANCE, `${a.name} (held keys, top-down): a foot in the air keeps clear of the body's floor (lowest tenth ${(a.low * 100).toFixed(0)} cm, at least ${AIR_CLEARANCE * 100})`);
 report(weight.rock >= 0.09, `a blow rocks the struck chest away from it, measured at the neck (${(weight.rock * 100).toFixed(1)} cm)`);
 report(pageErrors.length === 0 && debugErrors.length === 0, `no page errors (${[...pageErrors, ...debugErrors].join('; ') || 'none'})`);
 if (failed) { console.error(`${failed} locomotion checks failed`); process.exit(1); }

@@ -116,8 +116,9 @@ export class Leg {
   // anything that moves the body over its feet. The clip's feet touch down
   // at `groundY`, the root's height, and stand on `base`, the floor the body
   // stands on; `floorAt` gives the floor under a point, measured the same
-  // way, or null where there is none.
-  sample(groundY: number, base: number, canPlant: boolean, otherStepping: boolean, dt: number, floorAt: ((x: number, z: number) => number | null) | null): void {
+  // way, or null where there is none. `travel` is the flat direction the
+  // body is going, zero when it stands.
+  sample(groundY: number, base: number, canPlant: boolean, otherStepping: boolean, dt: number, floorAt: ((x: number, z: number) => number | null) | null, travel: THREE.Vector3): void {
     this.ankle.getWorldPosition(this.anim);
     this.ankle.getWorldQuaternion(this.animQ);
     this.ball.getWorldPosition(this.ballAnim);
@@ -153,15 +154,22 @@ export class Leg {
     this.prevBall.copy(this.ballAnim);
     if (!canPlant) { this.offset.set(0, 0, 0); this.contact = null; this.stepT = -1; this.lift = 0; }
     this.target.copy(this.anim).add(this.offset);
-    // The foot stands on the floor under it, not on the root's: over a
-    // lower step it reaches down to it, over a higher one it lifts onto it,
-    // and across a step's edge it rests on the higher of the two. A planted
-    // foot keeps its floor however the root moves over it; one in the air
-    // eases from floor to floor rather than jumping an edge.
+    // A foot stands on the floor under it, not on the root's: on a lower step
+    // it reaches down to it, over a higher one it lifts onto it, and across
+    // a step's edge it rests on the higher of the two. A planted foot keeps
+    // its floor however the root moves over it. A foot in the air behind the
+    // hips has just pushed off, so it is lifted over a higher floor but never
+    // drawn down to a lower one. Otherwise, on a climb, it would trail down
+    // the stair straight-legged and drag up the treads after the body: a
+    // backward shuffle. A foot in the air eases from floor to floor rather
+    // than jumping an edge.
     const probe = canPlant ? floorAt : null;
     const underHeel = probe?.(this.target.x, this.target.z) ?? null;
     const underBall = probe?.(this.ballAnim.x + this.offset.x, this.ballAnim.z + this.offset.z) ?? null;
-    const floor = underHeel === null && underBall === null ? base : Math.max(underHeel ?? -Infinity, underBall ?? -Infinity);
+    const under = underHeel === null && underBall === null ? base : Math.max(underHeel ?? -Infinity, underBall ?? -Infinity);
+    const hip = this.hip.getWorldPosition(new THREE.Vector3());
+    const trailing = !this.contact && (this.target.x - hip.x) * travel.x + (this.target.z - hip.z) * travel.z < 0;
+    const floor = trailing ? Math.max(under, base) : under;
     if (this.floor === null || !canPlant || Math.abs(floor - this.floor) > TELEPORT * this.k) this.floor = floor;
     else this.floor += (floor - this.floor) * (1 - Math.exp(-FLOOR_FOLLOW * dt));
     this.rise = this.floor - base;

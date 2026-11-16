@@ -72,7 +72,7 @@ const STEPS: Step[] = [
   },
   {
     id: 'aura', title: 'Aura', jp: '気',
-    line: () => `${keyLabel('aura')} opens your aura; hold it to push the aura wider and thinner. Inside it you are quicker, harder to hurt, and others are slower.`,
+    line: () => `${keyLabel('aura')} wraps you in your aura: blows land softer, Techniques return sooner. Hold it to push the aura out, wider and thinner; others in it are slower.`,
     done: (_g, ev) => ev.has('aura'),
   },
   {

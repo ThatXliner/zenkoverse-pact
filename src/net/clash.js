@@ -18,6 +18,17 @@ export const isPick = (p) => PICKS.includes(p);
 // The pick that beats `p`.
 export const counterTo = (p) => PICKS.find((q) => BEATS[q] === p);
 
+// Whether two fields `dist` metres apart contest each other: both are open,
+// their edges touch (with `slack` for the network), and at least one has
+// area. A tap's body layer has none: it wraps its owner and claims no ground,
+// so a field that reaches a body layer contests it, but two body layers that
+// meet in melee only meet as blows. The browser asks this of the Master's
+// field and of other players'; the server asks it again before it starts one.
+export function fieldsContest(dist, ra, rb, rules, slack = 0) {
+  if (Math.min(ra, rb) < rules.open || Math.max(ra, rb) <= rules.area) return false;
+  return dist < ra + rb + slack;
+}
+
 // One exchange: 0 or 1 for the side that took it, null for neither.
 export function roundWinner(a, b, densityA, densityB, rules) {
   if (BEATS[a] === b) return 0;

@@ -330,7 +330,7 @@ export class Techniques {
   update(dt: number, raw: number): void {
     const g = this.game;
     const inp = g.input;
-    for (const k of KEY_SLOTS) this.cooldown[k] = Math.max(0, this.cooldown[k] - raw);
+    for (const k of KEY_SLOTS) this.cooldown[k] = Math.max(0, this.cooldown[k] - raw * g.aura.recovery);
     this.sealed = Math.max(0, this.sealed - raw);
     this.struckRecently = Math.max(0, this.struckRecently - dt);
     const regen = this.def.resource.regen * (1 + g.mastery.get(this.def.id, 'efficiency') * 0.5);

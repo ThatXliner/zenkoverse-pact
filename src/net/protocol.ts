@@ -3,7 +3,7 @@
 // the reference for both sides; the numbers both sides share live in
 // rules.json, which the server imports too.
 import rulesJson from './rules.json';
-import type { ClashEvent, ClashRules, Pick } from './clash';
+import type { ClashEvent, ClashRules, FieldRules, Pick } from './clash';
 import type { GestureVariant } from '../mastery/mastery';
 
 export const RULES = rulesJson as {
@@ -14,7 +14,10 @@ export const RULES = rulesJson as {
   // or taken (and, offline, no enemy standing within `clearRadius` m), at up
   // to `perSecond` health a second, reached over `rampSeconds`.
   regen: { quietSeconds: number; perSecond: number; rampSeconds: number; clearRadius: number };
-  field: { maxRadius: number; clashSlack: number; clashCooldownMs: number };
+  // An aura field on the wire is its radius and density. A tap's body layer
+  // stands `layer` m from its owner's centre; a field counts as open past
+  // `open` m and has area (presses, senses, clashes) past `area` m.
+  field: FieldRules & { maxRadius: number; clashSlack: number; clashCooldownMs: number };
   // A Maximum Output cutscene's lock (issue #27): how long it may hold its
   // two people, how often one player may start one, how far the target may
   // stand, and how many blows the caster may land on each body during it.

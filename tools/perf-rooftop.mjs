@@ -68,7 +68,7 @@ for (const uncapped of [false, true]) {
     }
     for (let i = 0; i < 800 && g.rooftop.status().alive < 12; i++) g.step(2);
     // The player's field open over the whole wave, pushed all the way out: the most ground it paints.
-    g.auraReady(); g.hold('aura', true); g.step(90); g.hold('aura', false); g.step(20);
+    g.auraReady(); g.hold('aura', true); g.step(100); g.hold('aura', false); g.step(20);
     g.loop(true);
   });
   await page.evaluate(() => window.game.camera('top'));

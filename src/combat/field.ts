@@ -8,7 +8,10 @@
 // early retract brings the next expansion sooner; a collapsed field keeps a
 // little by its density, and a spent one leaves the pool empty. The pool must
 // be full before the next expansion. While it is open its shape can change
-// (pushed wider and thinner), so `reach` and `density` are the current shape.
+// (pushed off the body, wider and thinner), so `reach` and `density` are
+// the current shape.
+
+import { RULES } from '../net/protocol';
 
 // Every number aura uses, in one place. `untrained` is refinement 0 and
 // `refined` is refinement 1; the field interpolates between them.
@@ -17,28 +20,39 @@ export const AURA = {
   holds: { untrained: 9, refined: 14 },
   // Seconds an empty pool takes to refill.
   recovers: { untrained: 14, refined: 9 },
-  // The compact field a tap of F opens: its radius in metres, and how dense
-  // it is, 0..1. Density settles tied exchanges in a clash and scales
-  // everything below. Refinement raises both, which is the whole budget.
-  reach: { untrained: 4, refined: 6 },
-  density: { untrained: 0.4, refined: 1 },
-  // Holding F pushes the field out: after `tap` seconds held it widens for
-  // `seconds`, up to `wide` times the compact reach, and commits on release
-  // (or when it is fully out). The budget is fixed, so reach x density stays
-  // the same: twice as wide is half as dense. While it is pushed out the
-  // player moves at `slow` and cannot cast.
-  push: { tap: 0.18, seconds: 1.1, wide: 2, slow: 0.35 },
-  // Inside your own field your Techniques are sharper: their wind-ups play
-  // `speed` x density faster, and their hits on bodies in the field land
-  // `damage` x density harder. A compact refined field: +25% and +35%.
-  sharper: { speed: 0.25, damage: 0.35 },
+  // A tap of F wraps the body in a thin layer that follows its outline: it
+  // stands RULES.field.layer m from the body's centre and is the densest
+  // shape, `layer`. Held, F pushes it off the body into a field, out to
+  // `reach` at density `wide`. Density is 0..1: it settles tied exchanges in
+  // a clash and scales everything below. Refinement raises both ends.
+  density: { layer: { untrained: 0.5, refined: 1 }, wide: { untrained: 0.2, refined: 0.5 } },
+  reach: { untrained: 8, refined: 12 },
+  // Holding F: after `tap` seconds held the layer peels off and grows for up
+  // to `seconds`, at a steady pace, to the full reach, and commits on release
+  // (or when it is fully out). Every metre out costs the same density, so
+  // there is no best shape, only the one the moment wants. While it grows
+  // the player moves at `slow` and cannot cast.
+  push: { tap: 0.18, seconds: 1.4, slow: 0.35 },
+  // Inside your own field your Techniques are sharper: your hits on bodies in
+  // it land `damage` x density harder, and your wind-ups play `speed` x
+  // density x spread faster (spread is 0 at the body layer, 1 fully out). The
+  // body layer has no area and no spread, so it sharpens nothing: it is all
+  // defence.
+  sharper: { speed: 0.3, damage: 0.35 },
+  // Recovery: while your field is settled, your Techniques' cooldowns run
+  // `recover` x density faster. It follows density, like reinforcement, so
+  // the body layer recovers fastest: getting your Techniques back sooner is
+  // how a layer holds its ground. Not while the field is being pushed out.
+  recover: 0.4,
   // Reinforcement: a blow on someone standing in their own settled field
   // lands (1 - reinforce x density) as hard. Not while it is being pushed out.
+  // The body layer is the densest shape, so it takes the most off.
   reinforce: 0.3,
   // Pressure: a body inside someone else's field, without a field of its own
   // open, moves (1 - base - perDensity x density) as fast, and enemies wind
   // up that much slower. A thin field still presses, so a wide one carries
-  // pressure across all of its area.
+  // pressure across all of its area. A body layer has no area, so it presses
+  // nobody.
   hinder: { base: 0.15, perDensity: 0.3 },
   // Sensing: inside your field an enemy's blow shows its mark `lead` seconds
   // before its wind-up begins, and its marks are lit (`glow`, the mark's fill).
@@ -53,27 +67,40 @@ export const AURA = {
   potential: { perBreadth: 0.1, perPact: 0.05, floor: 0.2 },
   // The Ancient Echo Master: a wide field of high density, always open when
   // her pool is full. She knows little of aurabending; she simply has had a
-  // very long time. Denser than any field below refinement 2/3, so only a
-  // trained compact field takes tied picks from her.
+  // very long time. Denser than any body layer below refinement 0.6, so only
+  // a trained layer, or a field pushed only a little way, takes tied picks
+  // from her.
   master: { density: 0.7, recovers: 16, reach: { outdoors: 13, indoors: 7.5 } },
 } as const;
 
 const mix = (r: { untrained: number; refined: number }, t: number) => r.untrained + (r.refined - r.untrained) * t;
 
 export interface FieldShape { reach: number; density: number }
+// The two ends of what a refinement buys: the body layer and the full push.
+export interface FieldBudget { layer: FieldShape; wide: FieldShape }
 
-// The field a refinement buys, compact.
-export function fieldFor(refinement: number): FieldShape & { holds: number; recovers: number } {
+// The field a refinement buys: its two ends, how long it holds and how long
+// an empty pool takes to refill.
+export function fieldFor(refinement: number): FieldBudget & { holds: number; recovers: number } {
   const t = Math.max(0, Math.min(1, refinement));
-  return { reach: mix(AURA.reach, t), density: mix(AURA.density, t), holds: mix(AURA.holds, t), recovers: mix(AURA.recovers, t) };
+  return {
+    layer: { reach: RULES.field.layer, density: mix(AURA.density.layer, t) },
+    wide: { reach: mix(AURA.reach, t), density: mix(AURA.density.wide, t) },
+    holds: mix(AURA.holds, t), recovers: mix(AURA.recovers, t),
+  };
 }
 
-// The compact field pushed out by `spread`, 0 (a tap) to 1 (held all the
-// way): wider is always thinner, and reach x density never changes.
-export function shapeOf(compact: FieldShape, spread: number): FieldShape {
-  const reach = compact.reach * (1 + (AURA.push.wide - 1) * Math.max(0, Math.min(1, spread)));
-  return { reach, density: compact.density * compact.reach / reach };
+// The layer pushed out by `spread`, 0 (a tap: the body layer) to 1 (held all
+// the way): reach and density move together in a straight line, so every
+// metre out costs the same density.
+export function shapeOf(b: FieldBudget, spread: number): FieldShape {
+  const s = Math.max(0, Math.min(1, spread));
+  return { reach: b.layer.reach + (b.wide.reach - b.layer.reach) * s, density: b.layer.density + (b.wide.density - b.layer.density) * s };
 }
+
+// Whether a field of this radius has left the body: a body layer has no
+// area, so nothing stands inside it to be pressed, sensed or struck harder.
+export const hasArea = (radius: number): boolean => radius > RULES.field.area;
 
 // What a field's pressure leaves of a body's speed.
 export const pressure = (density: number): number => 1 - AURA.hinder.base - AURA.hinder.perDensity * density;

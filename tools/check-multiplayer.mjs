@@ -403,22 +403,44 @@ await A.api((g) => g.camera('top'));
 await until(B, (v) => !v.downed, 7000 * slack);
 
 console.log('\nan Aura Clash between A and B, while C walks past');
-// C joins for this part only. A and B open their fields with F six metres
-// apart, so the fields touch and the server starts a clash. A pushes and B
-// holds every exchange: A should take it two to none on every screen.
+// C joins for this part only. First A and B tap F at arm's length: two body
+// layers that touch never clash. Then, six metres apart, B taps a body layer
+// and A holds F to push a field out until it reaches B's layer, and the
+// server starts a clash. A pushes and B holds every exchange: A should take
+// it two to none on every screen.
 const C = await player('Chiyo', 'echo');
 const idC = (await C.net()).id;
 await until(A, (v) => remoteOf(v, idC)?.drawn);
 await A.api((g) => { g.camera('top'); g.teleport([-3, 0, 6]); });
 await B.api((g) => { g.camera('top'); g.teleport([3, 0, 6]); });
 await C.api((g) => { g.camera('top'); g.teleport([-1, 0, 11.5]); });
-await wait(1200 * slack);
 const auraOf = (p) => p.api((g) => g.aura());
-const hpA0 = (await A.net()).hp, hpB0 = (await B.net()).hp;
+const inClash = async (p, ms = 4000) => { const t0 = Date.now(); while (Date.now() - t0 < ms * slack) { if ((await auraOf(p)).clash.stage !== null) return true; await wait(40); } return false; };
+// Arm's length first.
+await A.api((g) => g.teleport([-0.5, 0, 6]));
+await B.api((g) => g.teleport([0.5, 0, 6]));
+await wait(1200 * slack);
 await A.page.keyboard.press('KeyF');
 await B.page.keyboard.press('KeyF');
-const inClash = async (p) => { const t0 = Date.now(); while (Date.now() - t0 < 4000 * slack) { if ((await auraOf(p)).clash.stage !== null) return true; await wait(40); } return false; };
-check(await inClash(A) && await inClash(B), 'two open fields that touch start a clash on both screens');
+await wait(600 * slack);
+const [la, lb0] = await Promise.all([auraOf(A), auraOf(B)]);
+check(la.state === 'open' && lb0.state === 'open' && la.radius < 0.7 && lb0.radius < 0.7, `both wear a body layer (${la.radius.toFixed(2)} m and ${lb0.radius.toFixed(2)} m)`);
+const seenLayer = await A.api((g, id) => g.game.net.remotes.get(id)?.fieldRadius ?? 0, idB);
+check(seenLayer > 0.4 && seenLayer < 0.7, `A sees B's body layer (${seenLayer.toFixed(2)} m)`);
+check(!(await inClash(A, 1500)) && (await auraOf(B)).clash.stage === null, 'two body layers touching at arm\'s length do not clash');
+await shot(A, 'layers');
+await A.api((g) => { g.game.aura.retract(); g.auraReady(); g.teleport([-3, 0, 6]); });
+await B.api((g) => { g.game.aura.retract(); g.auraReady(); g.teleport([3, 0, 6]); });
+await wait(1200 * slack);
+const hpA0 = (await A.net()).hp, hpB0 = (await B.net()).hp;
+await B.page.keyboard.press('KeyF');
+await wait(300 * slack);
+await A.page.keyboard.down('KeyF');
+const grew = [];
+for (let i = 0; i < 6 && (await auraOf(A)).clash.stage === null; i++) { await wait(150); grew.push(await B.api((g, id) => g.game.net.remotes.get(id)?.fieldRadius ?? 0, idA)); }
+check(await inClash(A) && await inClash(B), "A's field, pushed out until it reaches B's body layer, starts a clash on both screens");
+await A.page.keyboard.up('KeyF');
+check(grew.length >= 2 && grew.every((r, i) => i === 0 || r >= grew[i - 1]) && grew.at(-1) > 1, `B sees A's field grow out of the body (${grew.map((r) => r.toFixed(1)).join(', ')} m)`);
 check((await auraOf(C)).clash.stage === null, 'C is not in it');
 // C walks east for as long as the two are locked.
 const c0 = (await C.net()).pos;
@@ -461,9 +483,12 @@ await A.api((g) => { if (g.game.aura.field.open) g.game.aura.retract(); g.auraRe
 await C.api((g) => { g.auraReady(); g.teleport([2, 0, 6]); });
 await B.api((g) => g.teleport([-3, 0, 14]));
 await wait(1000 * slack);
-await A.page.keyboard.press('KeyF');
 await C.page.keyboard.press('KeyF');
-check(await inClash(A), 'A and C clash');
+await wait(300 * slack);
+await A.page.keyboard.down('KeyF');
+const acClash = await inClash(A);
+await A.page.keyboard.up('KeyF');
+check(acClash, 'A and C clash');
 await C.ctx.close();
 const forfeit = async () => { const t1 = Date.now(); while (Date.now() - t1 < 4000 * slack) { const l = (await auraOf(A)).clash.log; const e = l.filter((x) => x.ev.kind === 'end' && (x.a === idC || x.b === idC)).at(-1); if (e) return e; await wait(50); } return null; };
 const left = await forfeit();

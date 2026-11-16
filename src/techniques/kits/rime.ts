@@ -78,7 +78,7 @@ function freezeArea(g: import('../../app/game').Game, center: THREE.Vector3, rad
   }
   for (const e of g.techniques.enemiesInSphere(center, radius)) {
     g.combat.hitEnemy(e, 16 * potency, { from: center, kind: 'cold', stagger: true });
-    if (pin) { e.frozen = seconds * 0.6; e.slow = 0.3; }
+    if (pin) { e.freeze(seconds * 0.6); e.slow = 0.3; }
     hits++;
   }
   for (const p of g.props.instances) if (p.mesh.position.distanceTo(center) < radius) freezeProp({ game: g }, p, seconds);
@@ -134,7 +134,7 @@ export const rime: TechniqueKit = {
       if (ctx.shape === 'icebreak') {
         const range = rangeFor(ctx, 9);
         const hits = hitCone(ctx, range, 0.22, 22 * ctx.potency, { knock: 3, lift: 4, kind: 'cold' });
-        for (const e of hits) if (ctx.behaviors.includes('pin')) { e.frozen = 1.6; e.slow = 0.4; }
+        for (const e of hits) if (ctx.behaviors.includes('pin')) { e.freeze(1.6); e.slow = 0.4; }
         const start = g.player.position.clone();
         for (let i = 1; i <= 7; i++) {
           const at = start.clone().addScaledVector(flat, i * range / 7);

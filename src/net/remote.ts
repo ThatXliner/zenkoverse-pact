@@ -173,7 +173,7 @@ export class RemotePlayer extends Enemy {
     // Effects from Techniques on this body: freezes travel to its owner, the
     // stacks a Technique counts stay with the attacker.
     if (this.frozen > this.lastFrozen + 0.01) this.onStatus(this, this.frozen, this.slow);
-    this.frozen = Math.max(0, this.frozen - dt);
+    this.tickFrost(dt);
     this.lastFrozen = this.frozen;
     this.slow = THREE.MathUtils.lerp(this.slow, 1, 1 - Math.exp(-1.5 * dt));
     this.resonance = Math.max(0, this.resonance - dt * 0.5);

@@ -1,14 +1,20 @@
 import * as THREE from 'three';
 import { INK } from '../render/materials';
 import type { Pick } from '../net/clash';
+import { RULES } from '../net/protocol';
 
-// How an aura field is drawn: a painted boundary on the ground and a dome
-// over it, both in flat bands like the rest of the frame. The ground ring is
+// How an aura field is drawn. A tap's body layer is an inked rim that
+// follows the owner's silhouette (`BodyLayer`, below): a band of the field's
+// colour a few pixels wide round the body with a thin ink line outside it,
+// the way a manga panel draws aura. As the layer is pushed off the body it
+// thickens and fades, and the field grows out of it: a painted boundary on
+// the ground and a dome over it, both in flat bands like the rest of the
+// frame. The ground ring is
 // what reads from the top-down camera: a solid band in the field's colour,
 // an ink line just inside it, a dashed edge outside it, and pressure rings
 // that drift in toward the owner, faster the denser the field. The band is
-// as thick as the field is dense, so a compact field is a heavy ring and a
-// wide one a thin line. While a field is pushed out (`push`) its rings run
+// as thick as the field is dense, so a field just off the body is a heavy
+// ring and a wide one a thin line. While a field is pushed out (`push`) its rings run
 // outward instead, its band pulses, and a dashed line on the ground shows
 // how far it can go (`limit`). The dome's
 // rim is a hard band, so from above it adds a second outline, and from
@@ -93,6 +99,119 @@ void main(){
   gl_FragColor = vec4(c, clamp(a + crack * 0.4 * step(d, r), 0.0, 1.0) * strength);
 }`;
 
+
+// The body layer: the owner's own meshes drawn again from behind, each
+// vertex pushed out along its normal on screen and sunk a little behind the
+// body, so only a rim of even width shows round the outer silhouette, from
+// any camera and at any distance. Two
+// passes: an ink rim `ink` pixels wider, then the colour over it, which
+// leaves a hard ink line on the outside of the band. Widths are in 1080p
+// pixels; the band wavers along the body like a brushed line.
+const layerVert = /* glsl */ `
+#include <common>
+#include <skinning_pars_vertex>
+uniform float width; uniform vec2 res; uniform float time;
+void main(){
+  #include <beginnormal_vertex>
+  #include <skinbase_vertex>
+  #include <skinnormal_vertex>
+  #include <begin_vertex>
+  #include <skinning_vertex>
+  #include <project_vertex>
+  // Sunk a hand's depth behind the body along the line of sight, so where
+  // one limb crosses another the body in front hides the rim: only the
+  // outer silhouette keeps it.
+  mvPosition.xyz += normalize(mvPosition.xyz) * 0.35;
+  gl_Position = projectionMatrix * mvPosition;
+  vec3 wp = (modelMatrix * vec4(transformed, 1.0)).xyz;
+  vec4 cn = projectionMatrix * vec4(normalize(normalMatrix * objectNormal), 0.0);
+  vec2 d = cn.xy * res;
+  d = length(d) > 1e-5 ? normalize(d) : vec2(0.0);
+  // Tongues that rise up the body: wider where a slow wave running upward
+  // crests, so the rim licks upward like a brushed flame, never a glow.
+  float rise = sin(wp.y * 7.0 - time * 4.2 + sin(wp.x * 3.1 + wp.z * 2.3) * 2.5);
+  float waver = 0.78 + 0.34 * max(0.0, rise) * (0.6 + 0.4 * sin(wp.x * 5.0 - wp.z * 4.0 + time * 1.7));
+  gl_Position.xy += d * width * waver * (res.y / 1080.0) * 2.0 / res * gl_Position.w;
+}`;
+const layerFrag = /* glsl */ `
+uniform vec3 color; uniform float strength; uniform float flash;
+void main(){ gl_FragColor = vec4(mix(color, vec3(1.0), flash), strength); }`;
+
+const WHITE = new THREE.Color(1, 1, 1);
+
+export class BodyLayer {
+  private hulls: THREE.Mesh[] = [];
+  private ink: THREE.ShaderMaterial;
+  private paint: THREE.ShaderMaterial;
+  private res = new THREE.Vector2(1920, 1080);
+  private built = false;
+
+  constructor(private body: THREE.Object3D, color: number) {
+    const make = (c: number, order: number) => new THREE.ShaderMaterial({
+      uniforms: { color: { value: new THREE.Color(c) }, strength: { value: 1 }, flash: { value: 0 }, width: { value: 4 }, res: { value: this.res }, time: { value: 0 } },
+      vertexShader: layerVert, fragmentShader: layerFrag, side: THREE.BackSide, transparent: true, depthWrite: false,
+      userData: { order },
+    });
+    this.ink = make(INK, 4);
+    this.paint = make(color, 5);
+    this.color = color;
+  }
+
+  // The band is the field's colour lifted a little toward white, so it
+  // stands off the ground behind it; the ink line outside it is the contrast.
+  set color(c: number) { this.paint.uniforms.color!.value.set(c).lerp(WHITE, 0.15); }
+
+  // The owner's meshes, wrapped once they are first drawn. The eyes and
+  // brows sit inside the head and add nothing to the outline.
+  private build(): void {
+    this.built = true;
+    const meshes: THREE.Mesh[] = [];
+    this.body.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && !m.userData.auraField && o.name !== 'Eyes' && o.name !== 'Eyebrows') meshes.push(m);
+    });
+    for (const m of meshes) for (const mat of [this.ink, this.paint]) {
+      const skinned = m as THREE.SkinnedMesh;
+      let hull: THREE.Mesh;
+      if (skinned.isSkinnedMesh) {
+        const h = new THREE.SkinnedMesh(m.geometry, mat);
+        h.bindMode = skinned.bindMode;
+        h.bind(skinned.skeleton, skinned.bindMatrix);
+        hull = h;
+      } else hull = new THREE.Mesh(m.geometry, mat);
+      hull.frustumCulled = false;
+      hull.castShadow = hull.receiveShadow = false;
+      hull.renderOrder = mat.userData.order as number;
+      hull.userData.auraField = true;
+      if (mat === this.paint) hull.onBeforeRender = (r) => { r.getDrawingBufferSize(this.res); };
+      m.add(hull);
+      this.hulls.push(hull);
+    }
+  }
+
+  // `strength` 0..1 fades it; `width` is the colour band in 1080p pixels;
+  // `flash` 0..1 whitens the colour (the release, a crack).
+  draw(time: number, strength: number, width: number, flash: number): void {
+    const show = strength > 0.01;
+    if (show && !this.built) this.build();
+    for (const h of this.hulls) h.visible = show;
+    if (!show) return;
+    this.ink.uniforms.strength!.value = Math.min(1, strength * 1.15);
+    this.paint.uniforms.strength!.value = strength;
+    this.ink.uniforms.width!.value = width + 2.2;
+    this.paint.uniforms.width!.value = width;
+    this.ink.uniforms.time!.value = this.paint.uniforms.time!.value = time;
+    this.paint.uniforms.flash!.value = flash;
+  }
+
+  dispose(): void {
+    for (const h of this.hulls) h.removeFromParent();
+    this.hulls = [];
+    this.ink.dispose();
+    this.paint.dispose();
+  }
+}
+
 const OUTER = 0.35;
 
 export class FieldView {
@@ -104,8 +223,13 @@ export class FieldView {
   private tellAmt = { push: 0, hold: 0, feint: 0 };
   private crackT = 0;
   private toward = new THREE.Vector3(0, 0, -1);
+  // The owner's body layer, for a field that belongs to a body (the player's
+  // and other players'); the Master never wears one.
+  private layer: BodyLayer | null;
 
-  constructor(scene: THREE.Object3D, color: number) {
+  // `body` is the owner's model, to draw a body layer round.
+  constructor(scene: THREE.Object3D, color: number, body?: THREE.Object3D) {
+    this.layer = body ? new BodyLayer(body, color) : null;
     const shared = () => ({ color: { value: new THREE.Color(color) }, time: { value: 0 }, strength: { value: 1 }, density: { value: 0.5 }, crack: { value: 0 }, bulge: { value: 0 }, squeeze: { value: 0 }, flicker: { value: 0 }, push: { value: 0 } });
     this.domeMat = new THREE.ShaderMaterial({ uniforms: { ...shared(), toward: { value: new THREE.Vector3(0, 0, -1) } }, vertexShader: domeVert, fragmentShader: domeFrag, transparent: true, depthWrite: false, side: THREE.FrontSide });
     this.ringMat = new THREE.ShaderMaterial({
@@ -126,7 +250,7 @@ export class FieldView {
   // The far wall tints the frame only for someone standing inside the field.
   get side(): THREE.Side { return this.domeMat.side; }
 
-  set color(c: number) { this.domeMat.uniforms.color!.value.set(c); this.ringMat.uniforms.color!.value.set(c); }
+  set color(c: number) { this.domeMat.uniforms.color!.value.set(c); this.ringMat.uniforms.color!.value.set(c); if (this.layer) this.layer.color = c; }
 
   // A clash tell, held until cleared. `toward` is where the opponent stands.
   tell(kind: Pick | null, toward?: THREE.Vector3): void {
@@ -137,7 +261,7 @@ export class FieldView {
   // The field breaks: a white flash through the band as it is crushed in.
   crack(): void { this.crackT = 1; }
 
-  hide(): void { this.dome.visible = this.ring.visible = false; this.tellKind = null; }
+  hide(): void { this.dome.visible = this.ring.visible = false; this.layer?.draw(0, 0, 0, 0); this.tellKind = null; }
 
   // `feet` is the owner's ground point. `ceiling` is how far the dome may
   // rise (indoors it stops at the room's ceiling). `inside` is whether the
@@ -145,11 +269,20 @@ export class FieldView {
   // ring, whose edge always draws at full strength: the ring is the
   // boundary. `fill` scales the paint and pressure rings inside the edge.
   // `push` (0..1) is how far into being pushed out it is, and `limit` the
-  // radius it can be pushed to.
+  // radius it can be pushed to. A field the size of the body layer is drawn
+  // as the layer; pushed out past it, the layer thickens and fades as the
+  // ring and the dome come up out of it, so the growth reads as one shape.
   draw(dt: number, time: number, feet: THREE.Vector3, radius: number, density: number, opts: { ceiling?: number; inside: boolean; dome?: number; fill?: number; lean?: number; push?: number; limit?: number }): void {
     this.crackT = Math.max(0, this.crackT - dt * 3);
     for (const k of ['push', 'hold', 'feint'] as const) this.tellAmt[k] += ((this.tellKind === k ? 1 : 0) - this.tellAmt[k]) * (1 - Math.exp(-12 * dt));
-    const show = radius > 0.05;
+    const layer = RULES.field.layer;
+    const worn = this.layer ? THREE.MathUtils.smoothstep(radius, 0.1, layer * 0.9) * (1 - THREE.MathUtils.smoothstep(radius, layer * 1.05, layer + 1.6)) : 0;
+    const peel = THREE.MathUtils.clamp((radius - layer) / 1.6, 0, 1);
+    this.layer?.draw(time, worn, (5 + 4 * density) * (1 + 1.5 * peel) * (1 + 0.5 * this.tellAmt.hold), Math.max(this.crackT * this.crackT, 0.35 * (opts.push ?? 0)));
+    // The ground ring and the dome grow out of the layer: a body owner's
+    // field shows them only once it has left the body.
+    const grown = this.layer ? THREE.MathUtils.smoothstep(radius, layer, layer + 1) : 1;
+    const show = radius > 0.05 && grown > 0.01;
     this.dome.visible = this.ring.visible = show;
     if (!show) return;
     // A field leans toward an opponent it is pressing on, more on a push.
@@ -158,7 +291,7 @@ export class FieldView {
       const u = m.uniforms;
       u.time!.value = time;
       u.density!.value = density;
-      u.strength!.value = m === this.domeMat ? opts.dome ?? 1 : 1;
+      u.strength!.value = (m === this.domeMat ? (opts.dome ?? 1) * THREE.MathUtils.smoothstep(radius, 1.2, 3) : 1) * grown;
       u.crack!.value = this.crackT * this.crackT;
       u.bulge!.value = bulge;
       u.squeeze!.value = this.tellAmt.hold;
@@ -175,7 +308,9 @@ export class FieldView {
     this.ringMat.uniforms.outer!.value = outer;
     this.ring.position.set(feet.x, feet.y + 0.035, feet.z);
     this.ring.scale.setScalar(outer);
-    const tall = Math.max(0.4, Math.min(radius, opts.ceiling ?? radius));
+    // A small field rises round the whole body as it leaves it, then settles
+    // into a dome as wide as it is tall.
+    const tall = Math.max(0.4, Math.min(Math.max(radius, 2.2), opts.ceiling ?? Infinity));
     this.dome.position.copy(feet);
     this.dome.scale.set(radius, tall, radius);
     const side = opts.inside ? THREE.DoubleSide : THREE.FrontSide;
@@ -183,6 +318,7 @@ export class FieldView {
   }
 
   dispose(): void {
+    this.layer?.dispose();
     this.dome.removeFromParent();
     this.ring.removeFromParent();
     this.dome.geometry.dispose();

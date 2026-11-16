@@ -18,7 +18,7 @@
 // where props came to rest for whoever joins later.
 import { WebSocketServer } from 'ws';
 import rules from '../src/net/rules.json' with { type: 'json' };
-import { ClashReferee, isPick } from '../src/net/clash.js';
+import { ClashReferee, fieldsContest, isPick } from '../src/net/clash.js';
 
 const TICK_MS = 1000 / rules.tickHz;
 // The gesture a cast plays: the full sign, the shortened one, or the flick.
@@ -205,16 +205,16 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
   }
 
   // A request is taken when both players stand in the room, neither is in a
-  // clash, the asker is not asking faster than the cooldown, and both report
-  // an open field whose edges touch, with some slack for the network.
+  // clash, the asker is not asking faster than the cooldown, and the two
+  // reported fields contest by the rule the browsers use (two body layers
+  // never do), with some slack for the network.
   function startClash(room, p, target, now) {
     if (now - p.clashAt < rules.field.clashCooldownMs) return;
     p.clashAt = now;
     if (target && (locked(p, now) || locked(target, now))) return;
     if (!target?.ws || target === p || p.down || target.down || p.clash !== null || target.clash !== null) return;
     const fa = p.state?.f, fb = target.state?.f;
-    if (!fa || !fb || fa[0] < 0.5 || fb[0] < 0.5) return;
-    if (dist(p.state.p, target.state.p) > fa[0] + fb[0] + rules.field.clashSlack) return;
+    if (!fa || !fb || !fieldsContest(dist(p.state.p, target.state.p), fa[0], fb[0], rules.field, rules.field.clashSlack)) return;
     const id = nextClash++;
     // Picks may arrive a little after the window the screens show.
     const timing = { ...rules.clash, windowMs: rules.clash.windowMs + rules.clash.graceMs };

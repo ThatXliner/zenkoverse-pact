@@ -269,7 +269,9 @@ export class Enemy {
     const def = this.def;
     this.t += dt;
     this.attackCd -= dt;
-    this.castCd -= dt;
+    // An open field runs its owner's Technique cooldowns faster, as it does
+    // the player's: the Master casts sooner while her field is up.
+    this.castCd -= dt * (this.field?.open ? 1 + AURA.recover * this.field.density : 1);
     this.frozen = Math.max(0, this.frozen - dt);
     this.locked = Math.max(0, this.locked - dt);
     this.guardBroken = Math.max(0, this.guardBroken - dt);

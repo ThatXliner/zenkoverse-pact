@@ -2,6 +2,7 @@
 export type Pick = 'push' | 'hold' | 'feint';
 export type Side = 0 | 1;
 export interface ClashRules { introMs: number; windowMs: number; revealMs: number; rounds: number; winAt: number; tieMargin: number; closeMargin: number }
+export interface FieldRules { layer: number; open: number; area: number }
 export type EndReason = 'rounds' | 'density' | 'even' | 'forfeit';
 export type ClashEvent =
   | { kind: 'round'; round: number; ms: number }
@@ -11,6 +12,7 @@ export type ClashEvent =
 export const PICKS: readonly Pick[];
 export function isPick(p: unknown): p is Pick;
 export function counterTo(p: Pick): Pick;
+export function fieldsContest(dist: number, radiusA: number, radiusB: number, rules: FieldRules, slack?: number): boolean;
 export function roundWinner(a: Pick, b: Pick, densityA: number, densityB: number, rules: ClashRules): Side | null;
 
 export class ClashReferee {

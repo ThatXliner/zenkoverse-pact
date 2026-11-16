@@ -421,6 +421,8 @@ export class Game {
     const hit = this.raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -planeY), new THREE.Vector3());
     if (!hit) return;
     this.cam.aimPoint = hit;
+    const floorY = this.player.position.y;
+    this.cam.floorPoint = this.raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -floorY), new THREE.Vector3());
     if (this.input.enabled) this.cam.aimAt(this.player.eye(), hit);
   }
 

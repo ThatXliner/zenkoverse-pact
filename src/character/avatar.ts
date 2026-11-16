@@ -528,7 +528,9 @@ export class Avatar {
     // The floor the clip's feet stand on is the root's level, or the floor
     // under it where the root has settled a hair below where it would stand.
     const base = Math.max(ground, floorAt?.(this.root.position.x, this.root.position.z) ?? ground);
-    if (a && b) { a.sample(ground, base, canPlant, b.stepping, dt, floorAt); b.sample(ground, base, canPlant, a.stepping, dt, floorAt); }
+    const travel = new THREE.Vector3(this.lastVel.x, 0, this.lastVel.z);
+    if (travel.lengthSq() > 1e-4) travel.normalize(); else travel.set(0, 0, 0);
+    if (a && b) { a.sample(ground, base, canPlant, b.stepping, dt, floorAt, travel); b.sample(ground, base, canPlant, a.stepping, dt, floorAt, travel); }
     // A planted foot on a floor lower than the root's (the step below on a
     // stair) would hang short of it on a straight leg, so the hips come down
     // for it; between footfalls they hold where the last one put them.

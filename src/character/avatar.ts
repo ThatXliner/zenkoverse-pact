@@ -52,6 +52,8 @@ const WEIGHT = {
   bank: 0.022, bankMax: 0.15,
   // A landing sinks the hips by this many metres per m/s of fall, at most `landMax`.
   land: 0.024, landMax: 0.2,
+  // The most the hips come down so a foot reaches a floor below the root's, for a body 1.78 m tall.
+  reachDownMax: 0.3,
 };
 // The phase rate never runs a gait faster than this many cycles a second
 // (the walk clip's own cadence is 0.75).
@@ -60,6 +62,10 @@ const MAX_CADENCE = 1.6;
 const TURN_SPEED = 13;
 // Seconds off the ground before a body counts as airborne.
 const GROUND_GRACE = 0.1;
+// Off the ground but never higher than this over the floor under it, a body
+// is stepping down (a stair taken at a run), not jumping or falling: it stays
+// on its feet. For a body 1.78 m tall.
+const STEP_DOWN = 0.45;
 // The gait phase a start from standing begins at: the jog has the right foot
 // planted and the left passing under the hips there.
 const START_PHASE = 0.6;
@@ -67,6 +73,10 @@ const START_PHASE = 0.6;
 const ROCK_KICK = 8.5;
 // Beyond this angle from the facing, travel plays the cycle backward.
 const BACKING = THREE.MathUtils.degToRad(100);
+// A root carried further than this between two frames was teleported, not walked.
+const TELEPORT_STEP = 1;
+// How fast, per second, the ground speed follows the root's frame-to-frame travel.
+const GROUND_FOLLOW = 20;
 const MAX_HIP_YAW = 1.2;
 // The player's suit. Enemy suits are chosen in src/combat/enemies.ts to stay apart from it.
 export const PLAYER_SUIT = 0x2a4a9e;
@@ -105,14 +115,31 @@ export class Avatar {
   // single footfall; it advances at the rate that matches the ground speed.
   private phase = 0;
   private phaseRate = 0;
+  // The gait reads the speed the body really covers the ground at, from
+  // where its root has been put each frame. A commanded velocity overstates
+  // it wherever something takes part of the move (a stair's risers, a wall,
+  // a crowd), and a stride run faster than the body travels leaves the
+  // planted feet behind, so they keep stepping back to catch up.
+  private lastAt: THREE.Vector3 | null = null;
+  private moved: number | null = null;
+  private groundSpeed = 0;
   private grounded = true;
   private airT = 0;
+  // The most the body has been above the floor under it since it left the ground.
+  private airHeight = 0;
   private fallSpeed = 0;
   private lastVel = new THREE.Vector3();
   private accel = new THREE.Vector3();
   private lastYaw: number | null = null;
   private yawRate = 0;
   private speed = 0;
+  private reachDown = 0;
+  private hipDrop = 0;
+  // Where the floor is under a point, as the height the root of a body
+  // standing there would have, searched near `nearY`; null where there is
+  // none. Set by whatever moves the body; without it the feet take the
+  // floor to be level with the root.
+  floorAt: ((x: number, z: number, nearY: number) => number | null) | null = null;
   private lean = new Spring(11, 0.6);
   private bank = new Spring(15, 0.8);
   private sink = new Spring(13, 0.55);
@@ -233,12 +260,15 @@ export class Avatar {
   // phase, which advances at the rate their blended stride covers the ground
   // speed, so the feet plant instead of sliding, and the legs pin each foot
   // where it lands. `velocity` is in world space; the avatar reads it
-  // against its own facing. It also carries the body's weight: acceleration
-  // leans it, turning banks it, a landing sinks it.
+  // against its own facing, and paces the stride by how far the root really
+  // went along it. It also carries the body's weight: acceleration leans it,
+  // turning banks it, a landing sinks it. Place the root before calling.
   setLocomotion(velocity: THREE.Vector3, grounded: boolean, dt: number): void {
     // A body that has fallen keeps the death clip alone.
     if (this.current === 'dead') return;
-    const speed = Math.hypot(velocity.x, velocity.z);
+    const commanded = Math.hypot(velocity.x, velocity.z);
+    this.trackGround(velocity, commanded);
+    const speed = Math.min(commanded, this.groundSpeed);
     const facing = this.root.getWorldQuaternion(new THREE.Quaternion());
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(facing);
     // Direction of travel as a yaw from the facing, positive to the left.
@@ -248,8 +278,13 @@ export class Avatar {
     // that is not rising counts as on its feet until it has been off them
     // for a moment, so a blip neither lifts the planted feet nor blends
     // toward the jump.
-    if (!grounded) { this.airT += dt; this.fallSpeed = Math.max(0, -velocity.y); }
-    const footed = grounded || (this.airT < GROUND_GRACE && velocity.y < 1);
+    if (!grounded) {
+      this.airT += dt; this.fallSpeed = Math.max(0, -velocity.y);
+      const at = this.root.position, floor = this.floorAt?.(at.x, at.z, at.y) ?? null;
+      this.airHeight = Math.max(this.airHeight, floor === null ? Infinity : at.y - floor);
+    }
+    const stepDown = this.airHeight <= STEP_DOWN * this.height / 1.78;
+    const footed = grounded || (stepDown && velocity.y <= 0) || (this.airT < GROUND_GRACE && velocity.y < 1);
     const targets: Partial<Record<Locomotion, number>> = {};
     if (!footed) targets.air = 1;
     else if (speed < 0.12) targets.idle = 1;
@@ -296,9 +331,24 @@ export class Avatar {
     this.lastVel.copy(velocity);
     this.speed = speed;
     // A landing: the hips sink by the speed of the fall and spring back.
-    if (grounded && this.airT > GROUND_GRACE) this.land(this.fallSpeed);
-    if (grounded) this.airT = 0;
+    if (grounded && this.airT > GROUND_GRACE && !stepDown) this.land(this.fallSpeed);
+    if (grounded) { this.airT = 0; this.airHeight = 0; }
     this.grounded = footed;
+  }
+
+  // Adds up how far the root has gone along the commanded travel since the
+  // last call; the next `update`, which knows how much world time that took,
+  // turns it into the ground speed.
+  private trackGround(velocity: THREE.Vector3, commanded: number): void {
+    const at = this.root.position;
+    if (this.lastAt) {
+      const dx = at.x - this.lastAt.x, dz = at.z - this.lastAt.z;
+      if (Math.hypot(dx, dz) <= TELEPORT_STEP) {
+        const along = commanded > 1e-3 ? Math.max(0, (dx * velocity.x + dz * velocity.z) / commanded) : 0;
+        this.moved = (this.moved ?? 0) + along;
+      }
+    }
+    (this.lastAt ??= new THREE.Vector3()).copy(at);
   }
 
   // Sinks the hips into a landing from a fall of `speed` m/s; the legs bend under it.
@@ -473,7 +523,19 @@ export class Avatar {
     const posing = this.stance !== null || STANCES.some((k) => this.stanceAmt[k] > 0.01);
     const canPlant = this.grounded && !posing;
     const [a, b] = this.legs;
-    if (a && b) { a.sample(ground, canPlant, b.stepping, dt); b.sample(ground, canPlant, a.stepping, dt); }
+    const probe = this.floorAt;
+    const floorAt = probe ? (x: number, z: number) => probe(x, z, ground) : null;
+    // The floor the clip's feet stand on is the root's level, or the floor
+    // under it where the root has settled a hair below where it would stand.
+    const base = Math.max(ground, floorAt?.(this.root.position.x, this.root.position.z) ?? ground);
+    if (a && b) { a.sample(ground, base, canPlant, b.stepping, dt, floorAt); b.sample(ground, base, canPlant, a.stepping, dt, floorAt); }
+    // A planted foot on a floor lower than the root's (the step below on a
+    // stair) would hang short of it on a straight leg, so the hips come down
+    // for it; between footfalls they hold where the last one put them.
+    const planted = this.legs.filter((l) => l.planted);
+    if (!canPlant) this.reachDown = 0;
+    else if (planted.length) this.reachDown = THREE.MathUtils.clamp(Math.max(...planted.map((l) => -l.rise)), 0, WEIGHT.reachDownMax * this.height / 1.78);
+    this.hipDrop += (this.reachDown - this.hipDrop) * (1 - Math.exp(-12 * dt));
 
     const W = WEIGHT;
     const leanTo = this.grounded ? THREE.MathUtils.clamp(this.accel.dot(fwd) * W.leanAccel + this.speed * W.leanSpeed, -W.leanBackMax, W.leanFwdMax) : this.speed * W.leanSpeed;
@@ -490,9 +552,9 @@ export class Avatar {
     const rock = right.clone().multiplyScalar(rx).addScaledVector(fwd, -rz);
     const amt = rock.length();
     const pelvis = this.bones.get('pelvis');
-    if (pelvis?.parent && (Math.abs(sink) > 1e-4 || amt > 1e-4)) {
+    if (pelvis?.parent && (Math.abs(sink) > 1e-4 || amt > 1e-4 || this.hipDrop > 1e-4)) {
       const at = pelvis.getWorldPosition(new THREE.Vector3()).addScaledVector(rock, 0.12 * this.height / 1.78);
-      at.y += sink - amt * 0.05;
+      at.y += sink - amt * 0.05 - this.hipDrop;
       pelvis.position.copy(pelvis.parent.worldToLocal(at));
       pelvis.updateMatrixWorld(true);
     }
@@ -515,6 +577,10 @@ export class Avatar {
     this.gesture.restore();
     for (const l of this.layered) { l.bone.quaternion.copy(l.clip); l.bone.position.copy(l.pos); }
     this.model.quaternion.copy(MODEL_BASE);
+    if (this.moved !== null && dt > 1e-4) {
+      this.groundSpeed += (this.moved / dt - this.groundSpeed) * (1 - Math.exp(-GROUND_FOLLOW * dt));
+      this.moved = null;
+    }
     this.phase = (((this.phase + this.phaseRate * dt) % 1) + 1) % 1;
     for (const l of GAIT) { const a = this.actions.get(LOCO_CLIP[l]); if (a) a.time = this.phase * a.getClip().duration; }
     this.mixer.update(dt);

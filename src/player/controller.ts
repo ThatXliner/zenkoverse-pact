@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Physics, RAPIER, GROUP_PLAYER, GROUP_WORLD, GROUP_PROP, groups } from '../physics/world';
+import { Physics, RAPIER, GROUP_PLAYER, GROUP_WORLD, GROUP_PROP, SKIN, groups } from '../physics/world';
 import type { Input } from '../app/input';
 
 export interface MoveEvents {
@@ -54,7 +54,7 @@ export class PlayerController {
       RAPIER.ColliderDesc.capsule(PLAYER_HEIGHT / 2 - PLAYER_RADIUS, PLAYER_RADIUS).setCollisionGroups(groups(GROUP_PLAYER, GROUP_WORLD | GROUP_PROP)),
       this.body,
     );
-    this.ctrl = physics.world.createCharacterController(0.03);
+    this.ctrl = physics.world.createCharacterController(SKIN);
     this.ctrl.enableAutostep(0.45, 0.25, true);
     this.ctrl.enableSnapToGround(0.3);
     this.ctrl.setMaxSlopeClimbAngle((50 * Math.PI) / 180);

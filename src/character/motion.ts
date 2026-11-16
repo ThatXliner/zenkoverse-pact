@@ -80,6 +80,8 @@ const PLANT = {
 
 // A contact point carried further than this in one frame was teleported.
 const TELEPORT = 0.5;
+// How fast, per second, a foot in the air eases onto the height of a new floor.
+const FLOOR_FOLLOW = 25;
 
 type Contact = 'heel' | 'ball';
 
@@ -101,14 +103,21 @@ export class Leg {
   private lift = 0;
   private weight = 0;
   private target = new THREE.Vector3();
+  private floor: number | null = null;
+  // How far the floor under the foot is above the one the clip walks on.
+  rise = 0;
 
   constructor(readonly hip: THREE.Bone, readonly knee: THREE.Bone, readonly ankle: THREE.Bone, private ball: THREE.Bone, private heelY: number, private ballY: number, private k: number) {}
 
   get stepping(): boolean { return this.stepT >= 0; }
+  get planted(): boolean { return this.contact !== null; }
 
   // Reads the clip's pose. Call after the clip and the hip turn, before
-  // anything that moves the body over its feet.
-  sample(groundY: number, canPlant: boolean, otherStepping: boolean, dt: number): void {
+  // anything that moves the body over its feet. The clip's feet touch down
+  // at `groundY`, the root's height, and stand on `base`, the floor the body
+  // stands on; `floorAt` gives the floor under a point, measured the same
+  // way, or null where there is none.
+  sample(groundY: number, base: number, canPlant: boolean, otherStepping: boolean, dt: number, floorAt: ((x: number, z: number) => number | null) | null): void {
     this.ankle.getWorldPosition(this.anim);
     this.ankle.getWorldQuaternion(this.animQ);
     this.ball.getWorldPosition(this.ballAnim);
@@ -144,7 +153,19 @@ export class Leg {
     this.prevBall.copy(this.ballAnim);
     if (!canPlant) { this.offset.set(0, 0, 0); this.contact = null; this.stepT = -1; this.lift = 0; }
     this.target.copy(this.anim).add(this.offset);
-    this.target.y += this.lift;
+    // The foot stands on the floor under it, not on the root's: over a
+    // lower step it reaches down to it, over a higher one it lifts onto it,
+    // and across a step's edge it rests on the higher of the two. A planted
+    // foot keeps its floor however the root moves over it; one in the air
+    // eases from floor to floor rather than jumping an edge.
+    const probe = canPlant ? floorAt : null;
+    const underHeel = probe?.(this.target.x, this.target.z) ?? null;
+    const underBall = probe?.(this.ballAnim.x + this.offset.x, this.ballAnim.z + this.offset.z) ?? null;
+    const floor = underHeel === null && underBall === null ? base : Math.max(underHeel ?? -Infinity, underBall ?? -Infinity);
+    if (this.floor === null || !canPlant || Math.abs(floor - this.floor) > TELEPORT * this.k) this.floor = floor;
+    else this.floor += (floor - this.floor) * (1 - Math.exp(-FLOOR_FOLLOW * dt));
+    this.rise = this.floor - base;
+    this.target.y += this.lift + this.rise;
     this.weight += ((canPlant ? 1 : 0) - this.weight) * (1 - Math.exp(-20 * dt));
   }
 

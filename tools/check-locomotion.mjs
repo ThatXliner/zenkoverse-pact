@@ -4,7 +4,11 @@
 // Facing is read from the model itself (authored facing +Z, which the idle
 // stance's toes confirm), not from any yaw the code stores.
 // Then weight: a planted foot does not slide across the ground in a walk,
-// a sprint, a start, a stop, a reversal, a turn or a top-down strafe; a
+// a sprint, a start, a stop, a reversal, a turn, a top-down strafe or a run
+// up and down a stair, where the foot on the ground is the one on a step
+// rather than one swinging through it (the climb once read as walking
+// backward: the feet kept to the root's level, so the planted one hung over
+// the step below while the swinging one scraped through the step above); a
 // sprint leaves nothing drawn on the ground behind it (third-person runs
 // once left a trail of white discs); a landing sinks the hips; and a blow
 // rocks the struck body away from it.
@@ -132,18 +136,23 @@ const weight = await page.evaluate((SLIDE_MOVES) => {
   const stand = {};
   for (const s of ['l', 'r']) stand[s] = { heel: av.boneWorld(`foot_${s}`, new V()).y - ground0, ball: av.boneWorld(`ball_${s}`, new V()).y - ground0 };
   // For each foot, the part on the ground (heel or ball, whichever is lower
-  // against its standing height, within 3 cm) and how fast it crosses the ground.
-  const slide = (mode, keysAt, frames, from) => {
-    keysOff(); g.teleport([-4, 0, 9]); g.camera(mode); g.look(-Math.PI / 2, -0.2); g.step(40);
+  // against its standing height over the floor under it, within 3 cm) and
+  // how fast it crosses the ground.
+  const slide = (mode, keysAt, frames, from, at = [-4, 0, 9], yaw = -Math.PI / 2) => {
+    keysOff(); g.teleport(at); g.camera(mode); g.look(yaw, -0.2); g.step(40);
     const prev = { l: null, r: null };
     let sum = 0, n = 0;
     for (let f = 0; f < frames; f++) {
       const keys = keysAt(f); for (const k of KEYS) g.hold(k, keys.includes(k));
       g.step(1);
-      const ground = game.player.position.y;
+      // The floor under a point, against the one under the body, read from
+      // the root: on level ground exactly the root's height.
+      const pos = game.player.position, root = pos.y;
+      const base = Math.max(root, game.physics.standingY(pos.x, pos.z, root) ?? root);
+      const floor = (p) => root + (game.physics.standingY(p.x, p.z, root) ?? base) - base;
       for (const s of ['l', 'r']) {
         const heel = av.boneWorld(`foot_${s}`, new V()), ball = av.boneWorld(`ball_${s}`, new V());
-        const hh = heel.y - ground - stand[s].heel, hb = ball.y - ground - stand[s].ball;
+        const hh = heel.y - floor(heel) - stand[s].heel, hb = ball.y - floor(ball) - stand[s].ball;
         const kind = hb < hh ? 'ball' : 'heel', p = kind === 'ball' ? ball : heel;
         const down = Math.min(hh, hb) < 0.03 && game.player.grounded;
         if (down && prev[s] && prev[s].kind === kind && f >= from) { sum += Math.hypot(p.x - prev[s].p.x, p.z - prev[s].p.z) * 60; n++; }
@@ -162,6 +171,9 @@ const weight = await page.evaluate((SLIDE_MOVES) => {
     'quarter turn': ['top', (f) => (f < 50 ? ['right'] : ['forward']), 130, 50],
     'top-down diagonal': ['top', () => ['forward', 'right'], 120, 50],
     'top-down backing': ['top', () => ['back'], 120, 50],
+    // The hall's stair, eighteen 0.28 m steps up its west side to the deck.
+    'up the stair': ['third', () => ['forward'], 100, 20, [-17, 0, -2.4], 0],
+    'down the stair': ['third', () => ['forward'], 100, 20, [-17, 4.95, -12.2], Math.PI],
   };
   const slides = SLIDE_MOVES.map((name) => ({ name, ...slide(...script[name]) }));
 
@@ -192,7 +204,7 @@ const weight = await page.evaluate((SLIDE_MOVES) => {
   for (let i = 0; i < 20; i++) { g.step(1); rock = Math.max(rock, rest.z - chest().z); }
   game.encounters.reset(); g.god(false);
   return { slides, before, after, sink: standing - lowest, rock };
-}, ['walk', 'sprint', 'start', 'stop', 'reverse', 'quarter turn', 'top-down diagonal', 'top-down backing']);
+}, ['walk', 'sprint', 'start', 'stop', 'reverse', 'quarter turn', 'top-down diagonal', 'top-down backing', 'up the stair', 'down the stair']);
 const debugErrors = await page.evaluate(() => window.game.errors);
 await browser.close();
 stop();

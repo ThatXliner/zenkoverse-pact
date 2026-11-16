@@ -212,7 +212,7 @@ export function Workshop({ game }: { game: Game }) {
           </div>
         </div>
         <footer>
-          <div class="kbd-hint"><button class="btn quiet" onClick={() => game.closeWorkshop()}>Close</button><span><kbd>{keyLabel('pause')}</kbd> closes</span></div>
+          <div class="kbd-hint"><button class="btn quiet" onClick={() => game.closeWorkshop()}>Close</button><span><kbd>{keyLabel('workshop')}</kbd> or <kbd>{keyLabel('pause')}</kbd> closes</span></div>
           {pact && isDraft && (
             <div class="actions">
               <button class="btn quiet" onClick={() => { book.deleteDraft(pact.id); selectedId.value = null; }}>Discard draft</button>

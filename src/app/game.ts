@@ -144,6 +144,7 @@ export class Game {
       onDash: () => { this.cam.kick({ fov: 9 }); this.audio.play('dash'); this.hands.dash(); },
     });
     this.avatar = new Avatar(this.assets, 'player', { targetHeight: 1.78 });
+    this.avatar.floorAt = (x, z, y) => this.physics.standingY(x, z, y);
     scene.add(this.avatar.root);
     this.mastery = new Mastery();
     this.book = new PactBook();

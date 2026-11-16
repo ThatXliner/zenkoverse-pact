@@ -6,6 +6,10 @@ export const GROUP_PLAYER = 0x0002;
 export const GROUP_PROP = 0x0004;
 export const GROUP_ENEMY = 0x0008;
 export const GROUP_SENSOR = 0x0010;
+// The gap every character controller keeps between its capsule and the
+// floor: a body's root stands this far above the ground under it.
+export const SKIN = 0.03;
+const DOWN = new THREE.Vector3(0, -1, 0);
 
 export interface BodyLink { body: RAPIER.RigidBody; mesh: THREE.Object3D; }
 
@@ -105,6 +109,14 @@ export class Physics {
     if (!hit) return null;
     const p = ray.pointAt(hit.timeOfImpact);
     return { point: new THREE.Vector3(p.x, p.y, p.z), normal: new THREE.Vector3(hit.normal.x, hit.normal.y, hit.normal.z), collider: hit.collider, toi: hit.timeOfImpact };
+  }
+
+  // Where the root of a body standing at (x, z) would be: on the floor of the
+  // world or a prop within `reach` of `nearY`, or null when there is none.
+  standingY(x: number, z: number, nearY: number, reach = 1): number | null {
+    const hit = this.castRay(new THREE.Vector3(x, nearY + reach, z), DOWN, reach * 2, GROUP_WORLD | GROUP_PROP);
+    // A ray that starts inside something is at a wall, not over a floor.
+    return hit && hit.toi > 0 ? hit.point.y + SKIN : null;
   }
 
   bodiesInSphere(center: THREE.Vector3, radius: number, filterGroups = 0xffff): RAPIER.RigidBody[] {

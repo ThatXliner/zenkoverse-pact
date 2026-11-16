@@ -55,6 +55,8 @@ export class CameraRig {
   baseFov = 80;
   // Where the cursor points on the ground in the top-down view.
   aimPoint: THREE.Vector3 | null = null;
+  // Top-down: the cursor on the floor the player stands on, where a cast lands.
+  floorPoint: THREE.Vector3 | null = null;
   private fovKick = 0;
   private fovKickTarget = 0;
   private rollKick = 0;

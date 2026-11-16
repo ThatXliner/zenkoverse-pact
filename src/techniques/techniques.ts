@@ -262,12 +262,26 @@ export class Techniques {
     const shape = pact?.grant.shape ?? this.baselineShape(kind);
     const behaviors = pact?.grant.behaviors ?? [];
     const dir = g.cam.aimDirection();
-    if (!pact) dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * 0.18 * (1 - g.mastery.get(this.def.id, 'precision')));
+    const up = new THREE.Vector3(0, 1, 0);
+    const wobble = pact ? 0 : (Math.random() - 0.5) * 0.18 * (1 - g.mastery.get(this.def.id, 'precision'));
+    dir.applyAxisAngle(up, wobble);
     const origin = g.player.eye();
-    const aimHit = g.physics.castRay(origin, dir, 60, GROUP_WORLD | GROUP_PROP | GROUP_ENEMY, g.player.body);
+    // Top-down, the aim is the floor under the cursor. A ray from the eye
+    // toward the cursor's chest-height point runs on past it to the ground,
+    // landing well beyond where the player pointed.
+    const cursor = g.cam.isTop ? g.cam.floorPoint : null;
+    let aim: THREE.Vector3;
+    if (cursor) {
+      const at = cursor.clone().sub(origin).applyAxisAngle(up, wobble).add(origin);
+      const floor = g.physics.castRay(new THREE.Vector3(at.x, g.player.position.y + 2.5, at.z), new THREE.Vector3(0, -1, 0), 8, GROUP_WORLD | GROUP_PROP, g.player.body);
+      aim = floor ? floor.point : at;
+    } else {
+      const aimHit = g.physics.castRay(origin, dir, 60, GROUP_WORLD | GROUP_PROP | GROUP_ENEMY, g.player.body);
+      aim = aimHit ? aimHit.point : origin.clone().addScaledVector(dir, 30);
+    }
     const ctx: AbilityContext = {
       game: g, pact, slot, kind, shape, behaviors, potency: this.potency(pact) * (primed ? 1 + g.mastery.signBoost(this.def.id) : 1),
-      variant, origin, dir, aim: aimHit ? aimHit.point : origin.clone().addScaledVector(dir, 30), targets: [], wagered: false,
+      variant, origin, dir, aim, targets: [], wagered: false,
     };
     if (primed) this.sign = SIGN_IDLE;
     this.lastCast = { kind, primed, at: g.clock.time };

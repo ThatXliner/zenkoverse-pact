@@ -17,6 +17,10 @@
 //   no fire holds a body, a body takes the fire a moment at a time, and
 //   nothing Fuel does gives Vapour back;
 //   Saturation floods the ground round its target and soaks it;
+//   the lighter she carries (T) lights a trail from a few metres off, cannot
+//   be struck again until its cooldown is done, hurts no one by itself, burns
+//   her when she lights the vapour she stands in, and stays in her pocket
+//   for Dōkasen;
 //   Dōkasen, its drill, is cleared with real keys and raises Control.
 // The ?debug hooks place the player and the bodies and read state; every
 // Ability is cast from its key or button.
@@ -212,6 +216,82 @@ const washed = await fuel();
 await api((g) => g.god(true));
 check(!washed.alight, `the pond's wet rim puts a burning body out and washes the residue off (${washed.residue.toFixed(2)})`);
 
+// ------------------------------------------------------------------ the lighter
+console.log('The lighter');
+tiles.length = 0;
+const hands = () => api((g) => g.fuel().hands);
+const hp = () => api((g) => g.game.combat.hp);
+const mortal = () => api((g) => { g.god(false); g.game.combat.invuln = 0; g.game.combat.hp = g.game.combat.maxHp; g.step(2); });
+// A trail laid ahead, real steps back off it, then the lighter flicked at it.
+await stage([2, 0, 10], 'top');
+await aimAt([2, 0, 3.5]);
+await click('left');
+await step(10); await tile([2, 0, 8]);
+await settle();
+await key('KeyS', true);
+for (let k = 0; k < 2; k++) { await step(14); await tile([2, 0, 8]); }
+await key('KeyS', false);
+await step(10);
+const backed = await pos();
+const trail = await fuel();
+const nearest = Math.min(...trail.puffs.map((p) => flat(p.at, backed)));
+await mortal();
+const hpBefore = await hp();
+await aimAt([2, 0, 8.4]);
+check(trail.tally.lit === 0 && nearest > 2, `a trail lies unlit and she has stepped ${nearest.toFixed(1)} m back off it with real keys`);
+await tap('KeyT');
+for (let k = 0; k < 6; k++) { await step(k < 2 ? 8 : 12); await tile([2, 0, 7.5]); }
+await step(60);
+await strip('lighter-top');
+const lit = await fuel();
+check((await hands()).flicks === 1 && lit.tally.lit >= 6, `T flicks the lighter and tosses the flame at the trail a few metres off: ${lit.tally.lit} puffs burned`);
+check((await hp()) === hpBefore, `standing back, the fire does not reach her (${Math.round(await hp())} of ${hpBefore})`);
+// Mashed, it strikes once until its cooldown is done; and it hurts no one by itself.
+await stage([0, 0, 8], 'top');
+const mark = await body('thug', [0, 0, 5]);
+const markHp = (await enemy(mark)).hp;
+await aimAt((await enemy(mark)).at);
+for (let k = 0; k < 8; k++) { await tap('KeyT'); await step(6); }
+await step(30);
+const mashed = (await hands()).flicks;
+check(mashed === 1, `mashed eight times in under a second, the lighter strikes ${mashed} time`);
+check((await enemy(mark)).hp === markHp, `the flame alone hurts no one (${markHp} to ${Math.round((await enemy(mark)).hp)})`);
+await step(90);
+await tap('KeyT');
+await step(30);
+check((await hands()).flicks === 2, 'once the cooldown is done it strikes again');
+// Lit while she stands in her own trail, it burns her.
+await stage([2, 0, 10], 'top');
+await aimAt([2, 0, 3.5]);
+await click('left');
+await settle();
+await mortal();
+const hpIn = await hp();
+await tap('KeyT');
+for (let f = 0; f < 90; f++) await step(1);
+await tile();
+await strip('lighter-in-own-vapour');
+const own = await fuel();
+check(own.tally.lit >= 1 && (await hp()) < hpIn, `struck while she stands in her own vapour, the fire burns her: ${hpIn} to ${Math.round(await hp())}`);
+await api((g) => g.god(true));
+// The lighter in the hand: first person, and the body seen from the front
+// right, as another player would see it.
+for (const camera of ['first', 'third']) {
+  await stage([0, 0, 8], camera, Math.PI * 0.85, -0.25);
+  await tap('KeyT');
+  // A camera shot takes the keys, so it starts once the flick has.
+  if (camera === 'third') await api((g) => {
+    const G = g.game, p = G.player.position.clone(), yaw = G.cam.yaw, V = p.constructor;
+    const fwd = new V(-Math.sin(yaw), 0, -Math.cos(yaw)), right = new V(-fwd.z, 0, fwd.x);
+    const at = p.clone().addScaledVector(fwd, 1.9).addScaledVector(right, 0.9).add(new V(0, 1.5, 0)), look = p.clone().add(new V(0, 1.25, 0));
+    G.cam.play({ duration: 3, position: (_t, out) => out.copy(at), lookAt: (_t, out) => out.copy(look), fov: () => 40, roll: () => 0 });
+  });
+  for (let k = 0; k < 5; k++) { await step(k ? 5 : 4); await full(); }
+  await strip(`lighter-hand-${camera}`);
+  await api((g) => { g.game.cam.shot = null; });
+  await step(60);
+}
+
 // ------------------------------------------------------------------ soaked bodies
 console.log('Delayed Ignition');
 await stage([5.3, 0, -0.9], 'top');
@@ -346,6 +426,10 @@ const control0 = await api((g) => g.game.mastery.get('fuel', 'control'));
 await api((g) => g.drill('fuel-dokasen'));
 await step(5);
 await api((g) => { const c = g.game.drills.current; if (c) c.waiting = false; });
+const flicks0 = (await hands()).flicks;
+await tap('KeyT');
+await step(30);
+check((await hands()).flicks === flicks0, 'in Dōkasen the lighter stays in her pocket: the lantern has to light it');
 const posts = () => api((g) => g.fuel().dokasen.posts);
 const score = () => api((g) => g.game.drills.current?.score ?? -1);
 const runs = [];

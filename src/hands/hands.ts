@@ -3,6 +3,7 @@ import { POSES, FINGERS, type Finger, type PoseName, type HandPose } from './pos
 import type { Gesture } from './gestures';
 import { GestureClock, handSpring, aimSpring, poseSpring, stepSpring, type HandSpring } from './performer';
 import { ArmRig, type Arm } from './rig';
+import { HeldThing } from './held';
 import type { PlayerController } from '../player/controller';
 import type { CameraRig } from '../player/camera';
 import type { Input } from '../app/input';
@@ -75,6 +76,7 @@ export class Hands {
   private hands: HandState[] = [];
   private clawMat: THREE.MeshStandardMaterial;
   private clock = new GestureClock();
+  private held: HeldThing;
   private onEvent: ((e: string) => void) | null = null;
   private onCamera: ((k: { fov: number; pitch?: number; roll?: number }) => void) | null = null;
   private idleT = 0;
@@ -123,6 +125,7 @@ export class Hands {
     this.rigRoot.add(this.rig.object);
     this.root.add(this.rigRoot);
     for (const [side, arm] of [[1, this.rig.arms.r], [-1, this.rig.arms.l]] as const) this.hands.push({ ...handSpring(side, POSES.rest), arm, claws: this.buildClaws(arm) });
+    this.held = new HeldThing(this.rig.arms.r);
 
     // The Technique's light on the hands, in front of the chest. No falloff:
     // with it, palms sealed a hand's width from the light took hundreds of
@@ -288,6 +291,7 @@ export class Hands {
       this.root.position.set(0, 0, -0.5).sub(pivot.applyQuaternion(this.root.quaternion));
     } else { this.root.quaternion.identity(); this.root.position.set(0, 0, 0); }
 
+    this.held.update(this.clock, dtc);
     this.drawStrings(dtc);
 
     const glowTarget = this.playing ? 1 : 0;

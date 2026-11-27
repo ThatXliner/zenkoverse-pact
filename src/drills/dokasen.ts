@@ -9,7 +9,8 @@ import { vapour } from '../techniques/kits/fuelVapour';
 // Dōkasen (導火線, the fuse), Fuel's drill, at the stone lantern on the east
 // side of the hall steps. Straw posts are set out in the yard; the student
 // lays vapour out to them and brings it to the lantern's flame, and the fire
-// runs back along it. The student cannot light anything: the lantern does,
+// runs back along it. The student lights nothing (the lighter stays in her
+// pocket here, src/techniques/kits/fuel.ts): the lantern does,
 // the moment dense enough vapour climbs to it. So the order is the skill.
 // Touch the flame before the trail reaches the posts and it burns out short;
 // leave a gap or let it thin and the fire stops there; outdoors the breeze
@@ -99,6 +100,7 @@ export const dokasen: DrillDef = {
     return [
       'Straw posts stand in the yard. Lay vapour out to them, then bring it to the lantern: the fire comes back along it.',
       `${cap(keyLabel('primary'))} lays a trail. Hold ${keyPhrase('secondary')} to draw it together: only dense vapour climbs to the flame, and thin vapour carries no fire.`,
+      'Your lighter stays in your pocket for this. The lantern lights it.',
       ...TIERS.slice(0, TIERS.findIndex((t) => t.rules === r) + 1).flatMap((t) => t.rules.lines),
     ];
   },

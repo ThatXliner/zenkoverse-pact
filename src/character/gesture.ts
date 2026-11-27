@@ -3,6 +3,7 @@ import { GestureClock, handSpring, aimSpring, poseSpring, stepSpring, type HandS
 import { calibrateArms, solveArm, type Arm } from '../hands/rig';
 import { FINGERS, POSES, type HandPose, type PoseName } from '../hands/poses';
 import type { Gesture } from '../hands/gestures';
+import { HeldThing } from '../hands/held';
 
 // The third-person half of a gesture (issue #46). A body plays the same
 // gesture data as the first-person hands: the same keys, springs and poses,
@@ -109,6 +110,9 @@ const STAGED: Partial<Record<PoseName, { pos: [number, number, number]; rot?: [n
   parting: { pos: [0.7, -0.22, -0.12] },
   stretch: { pos: [0.07, -0.26, -0.32] },
   stretchWide: { pos: [0.3, -0.26, -0.34] },
+  lighterUp: { pos: [0.24, -0.16, -0.36] },
+  lighterStrike: { pos: [0.23, -0.15, -0.42] },
+  lighterToss: { pos: [0.16, -0.1, -0.72] },
 };
 const BODY_POSES = Object.fromEntries(Object.entries(POSES).map(([name, pose]) => {
   const st = STAGED[name as PoseName];
@@ -128,6 +132,7 @@ type BodyHand = HandSpring & { arm: Arm };
 export class BodyGesture {
   private clock = new GestureClock();
   private hands: BodyHand[];
+  private held: HeldThing;
   private chain: { bone: THREE.Bone; clip: THREE.Quaternion }[] = [];
   private weight = 0;
   private want = 0;
@@ -149,6 +154,7 @@ export class BodyGesture {
     this.chestRest = this.chest.matrixWorld.clone();
     this.pivot = bones.get('spine_01')!.getWorldPosition(new THREE.Vector3());
     this.hands = [{ ...handSpring(1, BODY_POSES.rest), arm: arms.r }, { ...handSpring(-1, BODY_POSES.rest), arm: arms.l }];
+    this.held = new HeldThing(arms.r);
     for (const h of this.hands) {
       const a = h.arm;
       for (const b of [a.clavicle.bone, a.upper.bone, a.fore.bone, a.hand.bone, ...FINGERS.flatMap((f) => a.fingers[f].map((j) => j.bone))]) this.chain.push({ bone: b, clip: new THREE.Quaternion() });
@@ -187,6 +193,7 @@ export class BodyGesture {
   // `pitch` is the aim pitch the spine already bends by.
   apply(dt: number, root: THREE.Object3D, turn: (bone: string, axis: THREE.Vector3, angle: number) => void, right: THREE.Vector3, pitch: number): void {
     if (this.clock.advance(dt, (key) => { for (const h of this.hands) aimSpring(h, key, BODY_POSES); })) this.want = 0;
+    this.held.update(this.clock, dt);
     this.weight += (this.want - this.weight) * (1 - Math.exp(-(this.want > this.weight ? 16 : 7) * dt));
     if (!this.active) { this.weight = this.want; this.twist = this.lean = 0; return; }
     const w = this.weight;

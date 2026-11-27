@@ -36,6 +36,7 @@ Online, Esc and Tab do not stop the world: the room keeps going and you can be h
 | Q | Maximum Output when the ring is full |
 | 1 to 4 | The extra Ability slots. A Wager has no key of its own: casting the Pact that holds it declares it |
 | G | The Vault Eye's Technique, once one is installed |
+| T | Your carried tool, when your Technique has one: Fuel carries a lighter |
 | F | Aura Expansion: tap to wrap your body in a thin layer, hold to push it out into a wider, thinner field (spends all your aura), or retract (keeps the unused time). It cannot expand again until the aura has refilled |
 | W / S / A or D | In an Aura Clash: push / hold / feint. Push beats hold, hold beats feint, feint beats push |
 | E | Interact: plaques, the Architect, drills, challenges |

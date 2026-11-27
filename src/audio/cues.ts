@@ -225,6 +225,8 @@ export const CUES = {
   'fuel.clear': net([Y('whoosh', { dur: 0.45, f0: 900, f1: 260, peak: 0.25 }, { gain: 0.5 }), Y('vent', { dur: 0.4, f: 500 }, { gain: 0.2 })]),
   'fuel.take': net([Y('vent', { dur: 0.8, f: 300, glide: 1200, attack: 0.3 }, { gain: 0.45 }), Y('splash', { size: 0.8, bubbles: 3 }, { gain: 0.25 })]),
   'fuel.drum': net([S(v('impactMetal_light_', 2), 0.4, { pitch: 0.7 }), Y('vent', { dur: 1.2, f: 1400, flutter: 14 }, { gain: 0.45 })]),
+  // The lighter: the lid's click, the wheel's rasp on the flint, the flame's soft catch.
+  'fuel.lighter': net([Y('crack', { dur: 0.02, hp: 3500 }, { gain: 0.22 }), Y('sizzle', { dur: 0.1, hp: 2800, pops: 5 }, { gain: 0.25, at: 0.03 }), Y('vent', { dur: 0.3, f: 900, attack: 0.03 }, { gain: 0.16, at: 0.06 })]),
   'fuel.catch': net([Y('whump', { size: 0.5 }, { gain: 0.55 }), Y('sizzle', { dur: 0.4, hp: 900, pops: 8 }, { gain: 0.14 })], { every: 0.07 }),
   'fuel.flash': net([Y('whump', { size: 1.3 }, { gain: 0.95 }), Y('rumble', { dur: 1.3, lp: 600, attack: 0.03 }, { gain: 0.5 }), Y('sizzle', { dur: 1.0, hp: 1000, pops: 26 }, { gain: 0.25 })], { wet: 0.4, duck: 0.35, every: 0.2 }),
   'fuel.blast': net([S(MINING, 0.8, { pitch: 0.6 }), S(v('impactMetal_heavy_', 2), 0.5, { pitch: 0.55 }), Y('whump', { size: 2 }, { gain: 1.1 }), Y('crack', { dur: 0.1, hp: 900 }, { gain: 0.6 }), Y('rumble', { dur: 2, lp: 500 }, { gain: 0.8 })], { wet: 0.5, duck: 0.6 }),

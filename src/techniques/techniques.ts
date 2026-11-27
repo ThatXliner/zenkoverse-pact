@@ -32,6 +32,7 @@ import { playerActor, enemyActor } from '../cutscene/cutscene';
 import { RULES } from '../net/protocol';
 import { Wagers, darkUi } from './wagers';
 import { Declarations } from './declarations';
+import { CarriedTool } from './tool';
 
 export const KITS: Record<TechniqueId, TechniqueKit> = { recoil, shift, rime, blink, echo, heat, tension, electro, friction, dark, fuel };
 
@@ -97,8 +98,11 @@ export class Techniques {
   readonly wagers: Wagers;
   // Named Pacts called out over the caster as they are cast.
   readonly declarations: Declarations;
+  // The ordinary thing the Technique's user carries, on its own key.
+  readonly tool: CarriedTool;
 
   constructor(private game: Game) {
+    this.tool = new CarriedTool(game);
     this.wagers = new Wagers(game);
     this.declarations = new Declarations(game);
     for (const k of Object.values(KITS)) {
@@ -131,6 +135,7 @@ export class Techniques {
     for (const k of Object.values(KITS)) k.effects.reset?.(this.game);
     this.wagers.clear();
     this.declarations.clear();
+    this.tool.reset();
     this.stopGesture();
   }
 
@@ -257,7 +262,7 @@ export class Techniques {
   cast(slot: KeySlot, force = false): boolean {
     const g = this.game;
     if (this.signing) return false;
-    if (this.cast_ && !force) return false;
+    if ((this.cast_ || this.tool.busy) && !force) return false;
     if (this.sealed > 0) { toast('Your Technique is sealed', 'bad'); return false; }
     if (this.cooldown[slot] > 0 && !force) return false;
     const pact = this.pactFor(slot);
@@ -414,11 +419,13 @@ export class Techniques {
     this.def.effects.passive?.(g, dt);
     this.wagers.update(dt);
     this.declarations.update(raw);
+    this.tool.update(this.def, dt, live);
 
     if (!g.cutscenes.active && inp.enabled) {
       if (inp.hit('fullsign')) this.beginSign();
       if (!this.signing && !g.aura.pushing) {
         for (const s of KEY_SLOTS) if (inp.hit(s)) this.press(s);
+        if (inp.hit('tool') && !this.cast_) this.tool.use(this.def);
         this.runPrograms();
       }
     }

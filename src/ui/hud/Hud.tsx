@@ -18,6 +18,7 @@ import { NavHud } from '../nav/NavHud';
 import { OnlineHud } from '../Online';
 import { Captions } from './Captions';
 import { VaultSlot } from '../../eyes/EyeHud';
+import { toolUi } from '../../techniques/tool';
 import './hud.css';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
@@ -117,6 +118,7 @@ function Abilities({ game }: { game: Game }) {
       <SignRing sign={techUi.sign.value} />
       <div class="xs" role="group" aria-label="Extra Abilities">
         {EXTRA_SLOTS.map((s) => <Extra key={s} slot={s} label={slots[s]} glyph={glyphs[slots[s].kind ?? 'primary']} cd={cooldownOf(s, slots[s].kind, cd)} />)}
+        <ToolSlot />
         <VaultSlot />
       </div>
       <div class="mains">
@@ -217,6 +219,21 @@ function Extra({ slot, label, glyph, cd }: { slot: KeySlot; label: SlotLabel; gl
       <kbd>{keyLabel(slot)}</kbd>
       {!label.empty && <div class="box"><span class="glyph">{glyph}</span><div class="cool" style={{ height: `${Math.max(0, Math.min(1, cd.cd)) * 100}%` }} /><Bet label={label} /></div>}
       <span class="name">{label.empty ? label.dark ?? 'Empty' : label.name}</span>
+    </div>
+  );
+}
+
+// The carried tool's key (Fuel's lighter), in the row of extra slots: drawn
+// in plain ink, not the Technique's colour, since it is not the Technique.
+// Dim where it cannot be used.
+function ToolSlot() {
+  const t = toolUi.value;
+  if (!t) return null;
+  return (
+    <div class={`x tool ${t.cd <= 0 && !t.off ? 'ready' : ''} ${t.off ? 'dark' : ''}`} data-slot="tool" title={t.off ?? t.description}>
+      <kbd>{keyLabel('tool')}</kbd>
+      <div class="box"><span class="glyph">{t.glyph}</span><div class="cool" style={{ height: `${Math.max(0, Math.min(1, t.cd)) * 100}%` }} /></div>
+      <span class="name">{t.name}</span>
     </div>
   );
 }

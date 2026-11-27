@@ -9,6 +9,7 @@ import type { Pact, TriggerValue } from '../pacts/schema';
 import { KEY_SLOTS, KIND_DEFS, kindOn, slotDef, type AbilityKind, type AbilitySlot, type KeySlot } from '../pacts/slots';
 import { restriction, wagerOf } from '../pacts/schema';
 import { callWords } from '../pacts/wager';
+import { triggerWords } from '../pacts/readback';
 import { describe } from '../pacts/resolve';
 import { pick, type Gesture } from '../hands/gestures';
 import type { CameraKick } from '../player/camera';
@@ -74,6 +75,10 @@ export class Techniques {
   private cast_: Cast | null = null;
   private cooldown: Record<KeySlot, number> = perSlot(() => 0);
   private struckRecently = 0;
+  // A blow landed on the player this frame, for Pacts programmed to fire when struck.
+  private struckNow = false;
+  // Whether each programmed Pact's trigger held last frame: it fires as the trigger begins to hold.
+  private programWas = new Map<string, boolean>();
   sealed = 0;
   sign: SignState = SIGN_IDLE;
   // The latest cast, so what its blows land on can tell a signed blow from a
@@ -249,6 +254,8 @@ export class Techniques {
     const kind = kindOn(slot, pact ? this.def.shapes[pact.grant.shape]?.kinds : undefined);
     if (!kind) return false;
     if (kind === 'max' && this.charge < (g.combat.flags.overextension ? 0.5 : 1) && !force) { toast('Maximum Output is not ready', 'bad'); return false; }
+    const refusal = this.refuses(pact);
+    if (refusal && !force) { toast(refusal, 'bad'); return false; }
     const met = this.triggerMet(pact);
     if (!met.ok && !force) { toast(`The Pact is not met: ${met.why}`, 'bad'); return false; }
     const cost = this.costFor(kind, pact);
@@ -340,7 +347,44 @@ export class Techniques {
   }
 
   seal(seconds: number): void { this.sealed = seconds; this.cast_ = null; this.stopGesture(); }
-  struck(): void { this.struckRecently = 2.5; this.wagers.struck(); }
+  struck(): void { this.struckRecently = 2.5; this.struckNow = true; this.wagers.struck(); }
+
+  // A Pact programmed to refuse while its trigger holds says why; null when it may fire.
+  private refuses(pact: Pact | null): string | null {
+    const prog = pact?.clauses.find((c) => c.kind === 'program' && c.then === 'suppress');
+    return prog?.kind === 'program' && this.triggerHolds(prog.when) ? `"${pact!.name}" refuses to fire while ${triggerWords(prog.when)}` : null;
+  }
+
+  // A key press, or a program pressing it: a Maximum Output plays its
+  // cutscene when the ring is full; anything else is cast. A program never
+  // reaches for a Maximum Output that is not ready.
+  private press(s: KeySlot, auto = false): void {
+    const g = this.game;
+    if (this.kindOf(s) !== 'max') { this.cast(s); return; }
+    if (g.net && performance.now() - this.maxAt < RULES.max.cooldownMs) { if (!auto) toast('Maximum Output is not ready', 'bad'); return; }
+    const ready = this.charge >= (g.combat.flags.overextension ? 0.5 : 1) && this.sealed <= 0 && !this.cast_;
+    if (ready && this.refuses(this.pactFor(s))) { if (!auto) toast(this.refuses(this.pactFor(s))!, 'bad'); return; }
+    if (ready) {
+      if (g.combat.flags.overextension && this.charge < 1) g.combat.hurtPlayer(g.combat.maxHp * 0.25, { self: true });
+      this.beginMax();
+    } else if (!auto) this.cast(s);
+  }
+
+  // Pacts programmed to fire themselves do, as their trigger begins to hold
+  // (when struck: on each blow), through the same checks as their key: its
+  // cooldown, its cost, its own trigger, a full ring for a Maximum Output.
+  // Only the Pact that defines its key runs its program.
+  private runPrograms(): void {
+    for (const s of KEY_SLOTS) {
+      const p = this.pactFor(s);
+      const prog = p?.clauses.find((c) => c.kind === 'program' && c.then === 'activate');
+      if (!p || prog?.kind !== 'program') continue;
+      const holds = prog.when === 'struck' ? this.struckNow : this.triggerHolds(prog.when);
+      const was = this.programWas.get(p.id) ?? holds;
+      this.programWas.set(p.id, holds);
+      if (holds && (prog.when === 'struck' || !was)) this.press(s, true);
+    }
+  }
 
   update(dt: number, raw: number): void {
     const g = this.game;
@@ -362,19 +406,12 @@ export class Techniques {
     if (!g.cutscenes.active && inp.enabled) {
       if (inp.hit('fullsign')) this.beginSign();
       if (!this.signing && !g.aura.pushing) {
-        for (const s of KEY_SLOTS) {
-          if (!inp.hit(s)) continue;
-          if (this.kindOf(s) !== 'max') { this.cast(s); continue; }
-          if (g.net && performance.now() - this.maxAt < RULES.max.cooldownMs) { toast('Maximum Output is not ready', 'bad'); continue; }
-          if (this.charge >= (g.combat.flags.overextension ? 0.5 : 1) && this.sealed <= 0 && !this.cast_) {
-            if (g.combat.flags.overextension && this.charge < 1) g.combat.hurtPlayer(g.combat.maxHp * 0.25, { self: true });
-            this.beginMax();
-          } else this.cast(s);
-        }
+        for (const s of KEY_SLOTS) if (inp.hit(s)) this.press(s);
+        this.runPrograms();
       }
     }
+    this.struckNow = false;
     this.tickSign(dt);
-    for (const p of g.book.inscribed.value) for (const c of p.clauses) if (c.kind === 'program' && c.then === 'activate' && c.when === 'struck' && this.struckRecently > 2.4 && !this.cast_ && p.technique === this.def.id && p.slot !== 'passive') this.cast(p.slot, true);
 
     const c = this.cast_;
     if (c) {

@@ -320,7 +320,7 @@ await defeatRun('top', { width: 1280, height: 720 });
 
 console.log('\noffer rules over many rolls');
 await boot();
-for (const t of ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension']) {
+for (const t of ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension', 'electro']) {
   const bad = await page.evaluate((t) => window.game.rooftop.audit(t, 300), t);
   check(bad.length === 0, `${t}: 300 rolls, each three valid Pacts with no shared sacrifice${bad.length ? ` (${bad.slice(0, 2).join('; ')})` : ''}`);
 }

@@ -64,6 +64,7 @@ const WEIGHTS: Record<string, { base: number; usage: (t: Telemetry) => number; w
   'target:named': { base: 2.6, usage: () => 1, why: 'you must name the target first, out loud' },
   'target:resonant': { base: 1.6, usage: (t) => 0.5 + (1 - t.propUse), why: 'only things that ring' },
   'target:water': { base: 1.4, usage: (t) => 0.4 + (1 - t.waterNearby), why: 'only through water' },
+  'target:conductive': { base: 1.7, usage: (t) => 0.4 + (1 - t.waterNearby) * 0.6 + (1 - t.propUse) * 0.6, why: 'only where metal, water or a touch carries it' },
   'target:self': { base: 1.2, usage: () => 1, why: 'only your own body' },
   'target:props': { base: 1.5, usage: () => 1, why: 'never a person' },
   'target:people': { base: 1.1, usage: (t) => 0.5 + t.propUse, why: 'never an object' },
@@ -143,7 +144,7 @@ export function describe(r: Restriction): string {
   const map: Record<string, string> = {
     'direction:front': 'only from the front', 'direction:declared': 'only in a declared direction', 'direction:ground': 'only along the ground', 'direction:line': 'only along one line', 'direction:behind': 'only from behind', 'direction:loosen': 'only ever loosening',
     'range:touch': 'only on touch', 'range:short': 'within a few steps', 'range:medium': 'within the street', 'range:long': 'anywhere in sight',
-    'target:single': 'one target', 'target:named': 'a named target', 'target:resonant': 'only what resonates', 'target:water': 'only through water', 'target:self': 'only yourself', 'target:props': 'only objects', 'target:people': 'only people',
+    'target:single': 'one target', 'target:named': 'a named target', 'target:resonant': 'only what resonates', 'target:water': 'only through water', 'target:conductive': 'only along a conductor', 'target:self': 'only yourself', 'target:props': 'only objects', 'target:people': 'only people',
     'trigger:still': 'only while standing still', 'trigger:grounded': 'only with feet on the ground', 'trigger:airborne': 'only in the air', 'trigger:struck': 'only after being struck', 'trigger:eyesClosed': 'only with eyes shut', 'trigger:declared': 'only when declared aloud', 'trigger:lowHealth': 'only near defeat', 'trigger:fullSign': 'only with the full hand sign',
     'duration:instant': 'for an instant', 'duration:brief': 'for a breath', 'duration:held': 'while held', 'duration:sustained': 'for as long as it lasts',
     'resource:all': 'spending everything', 'resource:half': 'spending half', 'resource:health': 'paid in health', 'resource:strain': 'paid in strain',

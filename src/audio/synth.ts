@@ -298,6 +298,40 @@ export const SYNTHS = {
     s.start(v.t);
     return dur;
   },
+  // A current jumping a gap: a burst of hard white clicks at uneven
+  // intervals, each a few milliseconds, bright and dry, thinning out.
+  zap(v: Voice, p: SynthParams): number {
+    const dur = n(p, 'dur', 0.25), count = n(p, 'count', 14), hp = n(p, 'hp', 2400);
+    for (let i = 0; i < count; i++) {
+      // Bunched at the front, the way a spark's crackle is.
+      const t = v.t + dur * Math.pow(Math.random(), 1.8);
+      const src = v.ctx.createBufferSource();
+      src.buffer = v.noise('white');
+      const f = v.ctx.createBiquadFilter();
+      f.type = 'highpass'; f.frequency.value = hp * v.pitch * (0.7 + Math.random() * 0.8);
+      const g = v.ctx.createGain();
+      const peak = n(p, 'gain', 0.6) * v.gain * (0.3 + Math.random() * 0.7) * (1 - (t - v.t) / (dur * 1.4));
+      g.gain.setValueAtTime(EPS, t);
+      g.gain.linearRampToValueAtTime(Math.max(EPS * 2, peak), t + 0.0008);
+      g.gain.exponentialRampToValueAtTime(EPS, t + 0.004 + Math.random() * 0.012);
+      src.connect(f).connect(g).connect(v.out);
+      src.start(t, Math.random() * 1.5); src.stop(t + 0.03);
+    }
+    return dur + 0.03;
+  },
+  // A live current held: a buzzing square at a low hum, rasped through a
+  // narrow band that wanders, the sound a charged wire makes.
+  buzz(v: Voice, p: SynthParams): number {
+    const dur = n(p, 'dur', 0.6), f = n(p, 'f', 100);
+    const o = osc(v, 'square', f, dur);
+    const o2 = osc(v, 'sawtooth', f * 1.505, dur);
+    const bp = filter(v, 'bandpass', n(p, 'band', 1600) * v.pitch, 3);
+    bp.frequency.linearRampToValueAtTime(n(p, 'band', 1600) * v.pitch * (0.6 + Math.random() * 0.8), v.t + dur);
+    const out = hit(v, n(p, 'gain', 0.3), n(p, 'attack', 0.02), dur);
+    o.connect(bp); o2.connect(bp);
+    bp.connect(out);
+    return dur;
+  },
   // A heartbeat, under the mix when health runs low.
   heartbeat(v: Voice, p: SynthParams): number {
     SYNTHS.thud(v, { f: 62, dur: 0.14, gain: n(p, 'gain', 0.7) });

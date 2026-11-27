@@ -30,7 +30,7 @@ export const PARAM_COLOR: Record<Param | 'clause', string> = {
 
 const GLYPH: Record<string, string> = {
   'trigger:still': '静', 'trigger:grounded': '地', 'trigger:airborne': '空', 'trigger:struck': '被', 'trigger:eyesClosed': '閉', 'trigger:declared': '宣', 'trigger:lowHealth': '瀕', 'trigger:fullSign': '印',
-  'target:single': '一', 'target:named': '名', 'target:resonant': '響', 'target:water': '水', 'target:self': '己', 'target:props': '物', 'target:people': '人',
+  'target:single': '一', 'target:named': '名', 'target:resonant': '響', 'target:water': '水', 'target:conductive': '導', 'target:self': '己', 'target:props': '物', 'target:people': '人',
   'resource:all': '全', 'resource:half': '半', 'resource:health': '血', 'resource:strain': '疲',
 };
 

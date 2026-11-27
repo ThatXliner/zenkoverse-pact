@@ -6,6 +6,7 @@ import { toast, banner } from '../app/game';
 import { techUi } from '../techniques/techniques';
 import { keyLabel, keyPhrase, keysLabel } from '../app/keymap';
 import { KEY_SLOTS } from '../pacts/slots';
+import { restriction } from '../pacts/schema';
 import { STAND } from '../drills/fieldReading';
 import type { PropInstance } from '../world/props';
 import { Beacon } from './beacon';
@@ -38,6 +39,8 @@ const slot = (s: 'primary' | 'secondary') => techUi.slots.value[s];
 const wagerSlot = () => KEY_SLOTS.find((k) => !!techUi.slots.value[k].wager) ?? null;
 // The Technique stores what it absorbs instead of spending what it holds (Recoil).
 const stores = (g: Game) => !g.techniques.def.resource.startsFull;
+// The secondary is held (Recoil's brace), or met at the moment it lands (Electro's conversion).
+const held = (g: Game) => { const p = g.techniques.pactFor('secondary'); return p ? restriction(p, 'duration') === 'held' : !!g.techniques.def.effects.hold; };
 
 const STEPS: Step[] = [
   {
@@ -58,7 +61,7 @@ const STEPS: Step[] = [
   {
     id: 'reserve', title: 'Reserve', jp: '蓄',
     line: (g) => stores(g)
-      ? `Hold ${keyPhrase('secondary')} as the crate falls. ${slot('secondary').name} stores the blow in your ${g.techniques.def.resource.name}.`
+      ? `${held(g) ? `Hold ${keyPhrase('secondary')} as the crate falls` : `${cap(keyLabel('secondary'))} as the crate reaches you`}. ${slot('secondary').name} stores the blow in your ${g.techniques.def.resource.name}.`
       : `${cap(keyLabel('secondary'))} fires ${slot('secondary').name}. It spends your ${g.techniques.def.resource.name}, the bar under your health.`,
     done: (g, ev) => (stores(g) ? ev.has('absorbed') : ev.has('secondary')),
     // Holding the brace drains a little, so a fresh student starts with enough to hold through one fall.

@@ -3,7 +3,7 @@
 // `?debug` hooks to fixed scenarios and saves screenshots and short frame
 // sequences per piece. Usage:
 //   node tools/capture.mjs [url] [--out captures] [--only hands,district] [--url http://...] [--port 4173] [--gpu]
-// Pieces: ui, hud, hands, variants, sign, poses, third-person, views, compound, vfx, style, encounters, fight, expand, roles, workshop, tutorial, drill, perf.
+// Pieces: ui, hud, hands, variants, sign, poses, third-person, views, compound, vfx, style, encounters, fight, expand, roles, workshop, tutorial, drill, electro, perf.
 // Without a URL it serves dist/ itself (run `npm run build` first).
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -14,7 +14,7 @@ const { url, args, stop } = await resolveTarget();
 
 const out = args.out ?? 'captures';
 const only = args.only ? new Set(args.only.split(',')) : null;
-const TECHS = ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension'];
+const TECHS = ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension', 'electro'];
 const MODAL_SIZES = [[1280, 720], [1920, 1080]];
 const HUD_SIZES = [[1280, 720], [1920, 1080], [2000, 1000], [2560, 1440]];
 mkdirSync(out, { recursive: true });
@@ -458,6 +458,51 @@ if (run('drill')) {
   await startRun('recoil');
   await api((g) => { g.teleport([-20, 0, 10]); g.camera('third'); g.look(0, 0.2); g.drill('recoil-crane'); });
   for (const f of [60, 150]) { await step(f === 60 ? 60 : 90); await shot('drill', `recoil-crane-f${f}`); }
+  await api((g) => g.quitDrill());
+  await startRun('electro');
+  await api((g) => { const p = g.game.world.pond.center; g.teleport([p.x, 0, p.z - 8]); g.camera('third'); g.look(Math.PI, -0.2); g.drill('electro-wet-stone'); });
+  for (const f of [60, 150]) { await step(f === 60 ? 60 : 90); await shot('drill', `electro-wet-stone-f${f}`); }
+  await api((g) => g.quitDrill());
+}
+
+// Electro in the sandbox (issue #19), from the top-down camera and over the
+// shoulder: a discharge into the koi pond with two bodies standing in it,
+// through an iron pot to a body beyond, and the pot left holding the charge.
+// `npm run check:electro` proves the rules; this is for the critic's eye.
+if (run('electro')) {
+  for (const view of ['top', 'third']) {
+    const scene = async (name, setup, at, pitch) => {
+      await startRun('electro');
+      await api((g, v, src) => {
+        const G = g.game, V = G.player.position.constructor;
+        g.quitDrill(); g.god(true); g.camera(v);
+        new Function('g', 'G', 'V', `(${src})(g, G, V)`)(g, G, V);
+        G.techniques.resource = 100;
+        for (const e of G.encounters.enemies) { e.attackCd = 1e9; e.castCd = 1e9; e.locked = 1e9; }
+      }, view, setup.toString());
+      await api((g, at, pitch) => {
+        const G = g.game, V = G.player.position.constructor, p = G.player.position;
+        g.look(Math.atan2(-(at[0] - p.x), -(at[2] - p.z)), pitch);
+        for (let i = 0; i < 2; i++) { const n = new V(...at).project(G.renderer.camera); G.input.mouse.x = n.x; G.input.mouse.y = n.y; g.step(30); }
+        G.techniques.cast('primary', true);
+      }, at, pitch);
+      let prev = 0;
+      for (const f of [16, 20, 26, 34]) { await step(f - prev); prev = f; await shot('electro', `${name}-${view}-f${f}`); }
+      await api((g) => { for (const p of window.__electroProps ?? []) g.game.props.remove(p); window.__electroProps = []; });
+    };
+    await scene('pond', (g, G, V) => {
+      const p = G.world.pond;
+      g.teleport([p.center.x, 0.25, p.center.z + 3.4]);
+      G.encounters.spawn('thug', new V(p.center.x + 0.9, -0.9, p.center.z - 0.7));
+      G.encounters.spawn('thug', new V(p.center.x - 1.3, -0.9, p.center.z + 0.9));
+    }, [11, -0.15, 13.1], -0.95);
+    await scene('pot', (g, G, V) => {
+      g.teleport([0, 0, 7]);
+      (window.__electroProps ??= []).push(G.props.spawn('pot', new V(0, 0, 5.4)));
+      G.encounters.spawn('thug', new V(0.4, 0, 3.6));
+    }, [0, 0.4, 5.4], -0.25);
+    await scene('touch', (g, G, V) => { g.teleport([0, 0, 7]); G.encounters.spawn('thug', new V(0.45, 0, 5.85)); }, [0.45, 1, 5.85], -0.12);
+  }
 }
 
 // Fight direction (issues #10 and #11), from the top-down camera the game is

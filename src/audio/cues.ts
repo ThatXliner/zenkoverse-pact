@@ -95,6 +95,26 @@ export const CUES = {
   'rime.max.blow': sfx([S(GLASS_H, 1, { pitch: 0.6 }), S(MINING, 0.6, { pitch: 0.7 }), Y('crack', { dur: 0.1, hp: 2500 }, { gain: 0.8 }), Y('boom', { f0: 90, f1: 30, dur: 1.4 }, { gain: 1 }), Y('tinkle', { count: 30, spread: 1.8, lo: 1500 }, { gain: 0.9 }), Y('shimmer', { f: 520, dur: 2.4 }, { gain: 0.2 })], { wet: 0.6, duck: 1 }),
   'rime.max.tail': net([Y('tinkle', { count: 22, spread: 1.6, lo: 1600 }, { gain: 0.8 }), Y('rumble', { dur: 1.4, lp: 300 }, { gain: 0.5 }), S(GLASS_H, 0.5, { pitch: 0.5 })], { wet: 0.5 }),
 
+  // ------------------------------------------------------------ Electro: any energy in, only electricity out
+  'electro.cast': net([S(CLOTH, 0.3, { pitch: 1.2 }), Y('buzz', { dur: 0.3, f: 120, band: 900, attack: 0.25 }, { gain: 0.16 }), Y('zap', { dur: 0.12, count: 4, hp: 3200 }, { gain: 0.35 })]),
+  'electro.convert.cast': net([S(SOFT_M, 0.3, { pitch: 1.4 }), Y('buzz', { dur: 0.35, f: 60, band: 500 }, { gain: 0.2 }), Y('inhale', { dur: 0.18, f1: 3000 }, { gain: 0.2 })]),
+  'electro.discharge': net([S('zapTwoTone', 0.55, { pitch: 0.8, vary: 0.08 }), Y('zap', { dur: 0.3, count: 22 }, { gain: 0.8 }), Y('crack', { dur: 0.05, hp: 3000 }, { gain: 0.6 }), Y('boom', { f0: 150, f1: 60, dur: 0.3 }, { gain: 0.4, w: 0.6 })], { wet: 0.3, duck: 0.2 }),
+  'electro.snap': net([Y('zap', { dur: 0.08, count: 5, hp: 4000 }, { gain: 0.45 }), S('tick_001', 0.25, { pitch: 1.6 })]),
+  'electro.jump': net([Y('zap', { dur: 0.1, count: 8, hp: 2800 }, { gain: 0.5 }), S('zapTwoTone', 0.18, { pitch: 1.3, vary: 0.1 })], { every: 0.03 }),
+  'electro.water': net([Y('splash', { size: 0.8, bubbles: 3 }, { gain: 0.5 }), Y('zap', { dur: 0.45, count: 30, hp: 1800 }, { gain: 0.7 }), Y('buzz', { dur: 0.5, f: 100, band: 1200 }, { gain: 0.25 })], { wet: 0.4 }),
+  'electro.metal': net([S(v('impactMetal_light_', 2), 0.45, { pitch: 1.3, vary: 0.1 }), Y('zap', { dur: 0.15, count: 10, hp: 3500 }, { gain: 0.5 }), Y('shimmer', { f: 1320, dur: 0.4 }, { gain: 0.06 })], { every: 0.04 }),
+  'electro.crackle': net([Y('zap', { dur: 0.1, count: 4, hp: 5000 }, { gain: 0.22 })], { every: 0.08 }),
+  'electro.converted': net([S(v('impactPlate_heavy_', 2), 0.45, { pitch: 1.3 }), Y('buzz', { dur: 0.4, f: 90, band: 1400 }, { gain: 0.3 }), Y('zap', { dur: 0.2, count: 10 }, { gain: 0.45 })], { wet: 0.3 }),
+  'electro.backlash': net([S('glitch_001', 0.45, { pitch: 0.9 }), Y('zap', { dur: 0.35, count: 24, hp: 1500 }, { gain: 0.75 }), Y('buzz', { dur: 0.4, f: 55, band: 700 }, { gain: 0.35 })]),
+  'electro.supply': net([Y('heartbeat', { gain: 0.55 }), Y('buzz', { dur: 0.7, f: 80, band: 700, attack: 0.5 }, { gain: 0.25 }), S('powerUp9', 0.22, { pitch: 0.6 })]),
+  'electro.spent': net([Y('heartbeat', { gain: 0.75 }), S('glitch_001', 0.3, { pitch: 0.7 }), Y('tone', { f: 220, glide: 90, dur: 0.4, lp: 600 }, { gain: 0.18 })]),
+  'electro.ignite': net([Y('zap', { dur: 0.1, count: 6 }, { gain: 0.5 }), Y('whoosh', { dur: 0.5, f0: 200, f1: 1200, peak: 0.2 }, { gain: 0.6 }), Y('rumble', { dur: 1.0, lp: 500 }, { gain: 0.45 })], { wet: 0.3 }),
+  'electro.max.cast': sfx([Y('riser', { dur: 1.2, f0: 120, f1: 3600, tone: 0.3 }, { gain: 0.4 }), Y('buzz', { dur: 1.2, f: 50, band: 600, attack: 1.0 }, { gain: 0.3 })]),
+  'electro.max.charge': sfx([Y('riser', { dur: 1.0, f0: 120, f1: 4200, tone: 0.35 }, { gain: 0.45 }), Y('buzz', { dur: 1.1, f: 50, band: 900, attack: 0.9 }, { gain: 0.4 }), Y('zap', { dur: 1.0, count: 26, hp: 3000 }, { gain: 0.35 })], { duck: 0.6 }),
+  'electro.max.inhale': sfx([Y('inhale', { dur: 0.45, f1: 7000 }, { gain: 0.5 }), Y('buzz', { dur: 0.45, f: 100, band: 2400, attack: 0.4 }, { gain: 0.3 })]),
+  'electro.max.blow': sfx([S('zapTwoTone', 0.9, { pitch: 0.45 }), S(MINING, 0.5, { pitch: 0.9 }), Y('crack', { dur: 0.14, hp: 1200 }, { gain: 1 }), Y('zap', { dur: 0.9, count: 70, hp: 1500 }, { gain: 1 }), Y('boom', { f0: 110, f1: 28, dur: 1.6 }, { gain: 1.1 }), Y('buzz', { dur: 1.4, f: 50, band: 500 }, { gain: 0.4 })], { wet: 0.6, duck: 1 }),
+  'electro.max.tail': net([Y('zap', { dur: 1.2, count: 40, hp: 2400 }, { gain: 0.6 }), Y('buzz', { dur: 1.6, f: 60, band: 800 }, { gain: 0.35 }), Y('rumble', { dur: 1.2, lp: 300 }, { gain: 0.4 })], { wet: 0.5 }),
+
   // ------------------------------------------------------------ Shift: translation through what lies between
   'shift.cast': net([Y('warp', { dur: 0.16, f0: 300, f1: 1400 }, { gain: 0.16 }), S(CLOTH, 0.3, { pitch: 1.3 })]),
   'shift.translate.cast': net([Y('warp', { dur: 0.22, f0: 200, f1: 1800 }, { gain: 0.18 }), Y('inhale', { dur: 0.2 }, { gain: 0.25 })]),

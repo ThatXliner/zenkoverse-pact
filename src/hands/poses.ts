@@ -40,6 +40,12 @@ const cup = f([0.3, 0.3, 0.2], [0.35, 0.3, 0.2], [0.35, 0.3, 0.2], [0.35, 0.3, 0
 const ember = f([0.35, 0.25, 0.15], [0.45, 0.5, 0.35], [0.45, 0.55, 0.35], [0.5, 0.55, 0.35], [0.55, 0.55, 0.35]);
 // A grip opened to take a head: every finger bent at every joint, spread.
 const grip = f([0.3, 0.35, 0.25], [0.3, 0.5, 0.35], [0.3, 0.52, 0.35], [0.32, 0.52, 0.35], [0.36, 0.52, 0.35]);
+// A spear hand: four fingers straight and pressed together, the thumb tucked along them.
+const spear = f([0.45, 0.25, 0.1], [0, 0, 0], [0, 0.02, 0], [0.02, 0.04, 0], [0.05, 0.08, 0.02]);
+// Fingers splayed and stiff, as a current locks them.
+const splay = f([0.05, 0, 0], [0.12, 0.05, 0], [0.1, 0.05, 0], [0.12, 0.06, 0], [0.15, 0.08, 0]);
+// Fingertips meeting fingertips, the palms apart.
+const tented = f([0.15, 0.15, 0.1], [0.12, 0.15, 0.1], [0.12, 0.15, 0.1], [0.15, 0.18, 0.1], [0.18, 0.2, 0.12]);
 const sealed = f([0.15, 0.1, 0.05], [0.04, 0.06, 0.04], [0.02, 0.05, 0.04], [0.04, 0.06, 0.04], [0.08, 0.1, 0.06]);
 // A thread held between the thumb and the side of the index, the other
 // fingers tucked; and the hand thrown open after it, the index leading.
@@ -129,6 +135,21 @@ export const POSES = {
   cradle: { pos: [0.11, -0.21, -0.4], rot: [1.25, -0.04, -1.5], fingers: cradle, spread: 0.6 },
   cradleWide: { pos: [0.24, -0.19, -0.42], rot: [1.15, 0.3, -1.35], fingers: cradle, spread: 0.65 },
   drawYank: { pos: [0.24, -0.3, -0.3], rot: [0.35, 0.3, -2.4], fingers: fist, spread: 0 },
+  // Electro. A spear hand drawn back by the ear, then driven out thumb up so
+  // the fingers show their length: a discharge needs a touch to go through.
+  spearDraw: { pos: [0.27, -0.11, -0.3], rot: [0.45, 0.4, -1.5], fingers: spear, spread: 0 },
+  spear: { pos: [0.08, -0.2, -0.48], rot: [0.1, 0.3, -1.45], fingers: spear, spread: 0 },
+  // Impact Conversion meets the blow with one splayed palm and sends the
+  // rest to the ground with the other, palm down at the hip.
+  catchPalm: { pos: [0.12, -0.17, -0.44], rot: [1.25, 0.2, -0.2], fingers: splay, spread: 0.5 },
+  groundPalm: { pos: [0.3, -0.33, -0.3], rot: [-0.9, 0.3, 0.25], fingers: splay, spread: 0.45 },
+  // Self-Supply: the hands open wide, then the fists clench down by the
+  // hips, the body burning its own fuel.
+  gripOpen: { pos: [0.29, -0.13, -0.36], rot: [0.9, 0.5, -0.6], fingers: splay, spread: 0.55 },
+  gripDown: { pos: [0.3, -0.33, -0.3], rot: [0.3, 0.3, -1.4], fingers: fist, spread: 0 },
+  // The sign: fingertips tented before the sternum, then torn apart.
+  tent: { pos: [0.045, -0.21, -0.4], rot: [1.2, 0.35, -1.5], fingers: tented, spread: 0.35 },
+  arcSpread: { pos: [0.3, -0.17, -0.4], rot: [0.95, 0.5, -0.55], fingers: splay, spread: 0.6 },
 } satisfies Record<string, HandPose>;
 
 export type PoseName = keyof typeof POSES;

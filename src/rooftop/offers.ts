@@ -62,6 +62,8 @@ const SPECIFIC: Template[] = [
   { id: 'tripwire', name: 'Tripwire', only: 'tension', kinds: ['primary'], shape: 'thread', behaviors: ['barbed'], restrict: ['direction:ground', 'target:people'] },
   { id: 'braid', name: 'Braided Line', only: 'tension', kinds: ['primary'], shape: 'thread', behaviors: ['braid'], restrict: ['range:short', 'trigger:still'] },
   { id: 'bowstring', name: 'Bowstring', only: 'tension', kinds: ['secondary'], shape: 'draw', behaviors: ['quick'], restrict: ['trigger:grounded', 'resource:half'] },
+  { id: 'livewire', name: 'Live Wire', only: 'electro', kinds: ['primary'], shape: 'discharge', behaviors: ['relay', 'seize'], restrict: ['target:conductive', 'trigger:grounded'] },
+  { id: 'groundfault', name: 'Ground Fault', only: 'electro', kinds: ['secondary'], shape: 'convert', behaviors: ['earth', 'bank'], restrict: ['direction:front', 'resource:half'] },
 ];
 
 // Two sacrifices are the same surrender when they name the same tag, or when

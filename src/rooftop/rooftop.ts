@@ -77,7 +77,7 @@ export class Rooftop {
   private counted = new WeakSet<Enemy>();
 
   constructor(private game: Game) {
-    this.arena = buildArena(game.world, game.physics, game.renderer.scene, game.props, game.renderer.lights);
+    this.arena = buildArena(game.world.home, game.physics, game.renderer.scene, game.props, game.renderer.lights);
     // A run that was closed mid-way left its Pacts in the saved book. Put the real ones back.
     this.restorePlayer();
   }

@@ -340,7 +340,7 @@ export class Aura {
 
     // Foreign fields: the Master's and, online, other players'.
     const owners: Owner[] = g.encounters.enemies.filter((e) => e.field && !e.disposed);
-    if (g.net) for (const r of g.net.remotes.values()) if (!r.disposed) owners.push(r);
+    if (g.net) for (const r of g.net.remotes.values()) if (!r.disposed && !r.elsewhere) owners.push(r);
     let pressed = 1;
     for (const o of owners) {
       const radius = o.def.ai === 'rival' ? (o as RemotePlayer).fieldRadius : o.field!.radius;

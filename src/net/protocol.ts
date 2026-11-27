@@ -10,6 +10,8 @@ export const RULES = rulesJson as {
   maxPlayers: number; defaultRoom: string; tickHz: number; sendHz: number; interpMs: number; maxHp: number;
   respawnSeconds: number; spawnProtectSeconds: number; hitTimeoutMs: number; maxHitDamage: number; maxHitRange: number;
   reconnectGraceSeconds: number; spawns: [number, number, number][];
+  // The regions past the valley (src/world/atlas.ts): a player downed on one's land ([x0, z0, x1, z1]) gets up at one of its spawns.
+  regions: { id: string; bounds: [number, number, number, number]; spawns: [number, number, number][] }[];
   // Health comes back out of a fight: after `quietSeconds` with no blow dealt
   // or taken (and, offline, no enemy standing within `clearRadius` m), at up
   // to `perSecond` health a second, reached over `rampSeconds`.
@@ -96,7 +98,8 @@ export type ClientMsg =
   // A blow on a breakable prop; `max` is its full health.
   | { type: 'prop-hit'; prop: number; amount: number; max: number; from: Vec3 }
   // Rime froze the koi pond into a floor for `s` seconds.
-  | { type: 'ice'; s: number }
+  // The pond's floor for `s` seconds; with `at` (x, z) and `r`, a canal frozen across there instead.
+  | { type: 'ice'; s: number; at?: [number, number]; r?: number }
   // This player began a Maximum Output: `cut` names the cutscene, `target`
   // the player pulled into it, `ms` its length, `p` and `yaw` where the
   // caster stands and faces. The server locks the two for `ms` at most.
@@ -128,7 +131,7 @@ export type ServerMsg =
   | { type: 'props'; id: number; s: PropWire[] }
   | { type: 'prop-owner'; prop: number; owner: number | null }
   | { type: 'prop-break'; prop: number; by: number; from: Vec3 }
-  | { type: 'ice'; id: number; s: number }
+  | { type: 'ice'; id: number; s: number; at?: [number, number]; r?: number }
   // A Maximum Output started, to the whole room: the caster and the target
   // (null when the server dropped it) are locked until max-end. Until then
   // neither can be hit by anyone else, and the target cannot act.

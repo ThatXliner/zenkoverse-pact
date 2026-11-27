@@ -35,7 +35,9 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
 page.on('console', (m) => { if (m.type() === 'error' && !/favicon|WebGL|GPU stall|Automatic fallback|WebSocket/.test(m.text())) errors.push(`console: ${m.text()}`); });
 const api = (fn, arg) => page.evaluate(([src, a]) => (0, eval)(src)(window.game, a), [fn.toString(), arg]);
-const pos = () => api((g) => { const p = g.game.player.position; return [p.x, p.y, p.z]; });
+// Heights are read from the ward's own floor: it stands on the plain at the foot of the pass.
+let OY = 0;
+const pos = () => api((g) => { const p = g.game.player.position; return [p.x, p.y, p.z]; }).then(([x, y, z]) => [x, y - OY, z]);
 const zone = () => api((g) => g.game.world.zoneAt(g.game.player.position)?.id ?? null);
 let shotN = 0;
 const shot = (name) => page.screenshot({ path: join(out, `${String(++shotN).padStart(2, '0')}-${name}.png`), animations: 'disabled' });
@@ -50,7 +52,8 @@ await page.getByRole('button', { name: 'Begin', exact: true }).click();
 await page.locator('.card', { hasText: 'Recoil' }).click();
 await page.getByRole('button', { name: 'Skip tutorial' }).click();
 await page.waitForFunction(() => window.game.state() === 'explore', null, { timeout: 8000 });
-const O = await api((g) => { const o = g.game.city.origin; return [o.x, o.y, o.z]; });
+const O = await api((g) => g.world().origins.city);
+OY = O[1];
 // Region metres to world.
 const W = (x, z) => [x + O[0], z + O[2]];
 check((await zone()) === 'city-plaza', `the run starts in the station plaza (${await zone()})`);
@@ -116,19 +119,19 @@ async function aimAt(x, y, z) {
     await wait(i ? 350 : 150);
   }
 }
-const teleport = (x, y, z) => api((g, p) => g.teleport(p), [x + O[0], y, z + O[2]]);
+const teleport = (x, y, z) => api((g, p) => g.teleport(p), [x + O[0], y + O[1], z + O[2]]);
 
 console.log('every point of the ward has a floor under it');
 {
   const holes = await api((g, o) => {
     const V = g.game.player.position.constructor;
-    const city = g.game.city, b = city.bounds;
+    const b = g.world().bounds.city;
     const miss = [];
     let n = 0;
-    for (let x = b.min.x + 0.5; x < b.max.x; x += 2) for (let z = b.min.z + 0.5; z < b.max.z; z += 2) {
+    for (let x = b.x0 + 0.5; x < b.x1; x += 2) for (let z = b.z0 + 0.5; z < b.z1; z += 2) {
       n++;
-      const h = g.game.physics.castRay(new V(x, 45, z), new V(0, -1, 0), 60, 1);
-      if (!h || h.point.y < -3.4) miss.push([Math.round(x - o[0]), Math.round(z - o[2]), h ? h.point.y.toFixed(1) : 'none']);
+      const h = g.game.physics.castRay(new V(x, o[1] + 45, z), new V(0, -1, 0), 60, 1);
+      if (!h || h.point.y - o[1] < -3.4) miss.push([Math.round(x - o[0]), Math.round(z - o[2]), h ? h.point.y.toFixed(1) : 'none']);
     }
     return { n, miss };
   }, O);
@@ -205,7 +208,7 @@ console.log('the edges hold');
     await page.keyboard.up(key);
     await page.keyboard.up('ShiftLeft');
     const [px, py, pz] = await pos();
-    const inside = await api((g) => g.game.city.bounds.clone().expandByScalar(0.5).containsPoint(g.game.player.position));
+    const inside = await api((g) => { const b = g.world().bounds.city, p = g.game.player.position; return p.x >= b.x0 - 0.5 && p.x <= b.x1 + 0.5 && p.z >= b.z0 - 0.5 && p.z <= b.z1 + 0.5; });
     // The west end of the main road is the way in from the pass: the ward
     // stays open there for the region system to lead on.
     check(name === 'w road' ? true : inside, `${name} edge: the player stays in (at ${(px - O[0]).toFixed(1)}, ${py.toFixed(1)}, ${(pz - O[2]).toFixed(1)})`);
@@ -225,12 +228,12 @@ console.log('Rime freezes the canal into a floor; Echo rings a fuel drum until i
   await wait(500);
   // Aim at the middle of the canal through the real cursor, and cast with the right button.
   const [cx, cz] = W(-19, 43.5);
-  await aimAt(cx, -1.5, cz);
+  await aimAt(cx, O[1] - 1.5, cz);
   await page.mouse.down({ button: 'right' });
   await wait(120);
   await page.mouse.up({ button: 'right' });
   await wait(1400);
-  const ice = await api((g, p) => { const V = g.game.player.position.constructor; const h = g.game.physics.castRay(new V(p[0], 5, p[1]), new V(0, -1, 0), 10, 1); return h ? h.point.y : null; }, W(-19, 43.5));
+  const ice = await api((g, p) => { const V = g.game.player.position.constructor; const h = g.game.physics.castRay(new V(p[0], p[2] + 5, p[1]), new V(0, -1, 0), 10, 1); return h ? h.point.y - p[2] : null; }, [...W(-19, 43.5), O[1]]);
   check(ice !== null && ice > -1.3, `a block of ice spans the canal to stand on (floor at ${ice?.toFixed(2)})`);
   await shot('canal-frozen');
   const walked = await walk([[-19, 44.5]]);
@@ -238,7 +241,7 @@ console.log('Rime freezes the canal into a floor; Echo rings a fuel drum until i
   check(walked.all && iy > -1.3, `the player walks from the landing out onto the ice (standing at ${iy.toFixed(2)} m)`);
   await shot('on-the-ice');
   await api((g) => g.technique('echo'));
-  const drum = await api((g) => { const d = g.game.props.instances.find((p) => p.key === 'drum' && p.mesh.position.y < 2); const p = d.mesh.position; return { id: d.id, at: [p.x, p.z] }; });
+  const drum = await api((g, oy) => { const d = g.game.props.instances.find((p) => p.key === 'drum' && p.mesh.position.y - oy < 2); const p = d.mesh.position; return { id: d.id, at: [p.x, p.z] }; }, O[1]);
   await teleport(drum.at[0] - O[0] - 2.4, 0.1, drum.at[1] - O[2]);
   await wait(500);
   // The top-down cursor aims on a plane at chest height, so point where that
@@ -261,7 +264,7 @@ console.log('the map opens on the city');
   await wait(600);
   const map = await page.evaluate(() => {
     const svg = document.querySelector('.nav-map svg');
-    return { scope: svg?.getAttribute('data-scope'), shapes: svg?.querySelectorAll('.m-city rect').length ?? 0, places: document.querySelectorAll('.map-list [data-place]').length };
+    return { scope: svg?.getAttribute('data-scope'), shapes: svg?.querySelectorAll('[data-region="city"] rect').length ?? 0, places: document.querySelectorAll('.map-list [data-poi^="city-"]').length };
   });
   check(map.scope === 'city' && map.shapes > 60 && map.places >= 8, `the map shows the ward's plan (${map.scope}, ${map.shapes} shapes, ${map.places} places)`);
   await shot('map');

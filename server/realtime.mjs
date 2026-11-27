@@ -93,11 +93,16 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
     return -1;
   }
 
-  // The spawn farthest from everyone standing.
+  // The spawn farthest from everyone standing, in the region the player went
+  // down in: out on the pass a player gets up on the pass, not back in the
+  // compound (rules.regions; the compound's are rules.spawns).
   function spawnPoint(room, self) {
     const others = present(room).filter((p) => p !== self && !p.down && p.state);
-    let best = rules.spawns[0], bestD = -1;
-    for (const s of rules.spawns) {
+    const at = self?.state?.p;
+    const region = at ? (rules.regions ?? []).find(({ bounds: [x0, z0, x1, z1] }) => at[0] >= x0 && at[0] <= x1 && at[2] >= z0 && at[2] <= z1) : null;
+    const spawns = region ? region.spawns : rules.spawns;
+    let best = spawns[0], bestD = -1;
+    for (const s of spawns) {
       const d = others.length ? Math.min(...others.map((o) => dist(o.state.p, s))) : Math.random();
       if (d > bestD) { bestD = d; best = s; }
     }
@@ -443,7 +448,9 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
         const secs = num(m.s, 0, 20);
         if (secs <= 0 || now - p.iceAt < ICE_EVERY_MS) return;
         p.iceAt = now;
-        broadcast(room, { type: 'ice', id: p.id, s: secs }, p);
+        // A canal frozen across: where (bounded to the world) and how wide.
+        const at = Array.isArray(m.at) && m.at.length === 2 ? [num(m.at[0], -5000, 5000), num(m.at[1], -5000, 5000)] : null;
+        broadcast(room, at ? { type: 'ice', id: p.id, s: secs, at, r: num(m.r, 0.5, 20) } : { type: 'ice', id: p.id, s: secs }, p);
         return;
       }
       case 'ping':

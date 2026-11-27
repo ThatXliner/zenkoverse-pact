@@ -9,6 +9,8 @@
 // too steep to climb closes the valley on every side; wooded slopes run on
 // up behind the cliffs.
 
+import { carve as carvePass } from './pass/route';
+
 export type Pt = readonly [number, number];
 
 // The valley floor and the water surface.
@@ -31,6 +33,8 @@ export const PATHS: readonly (readonly Pt[])[] = [
   [[28.5, -24.5], [37, -27.5], [44, -25.5]],
   [[37, -27.5], [30, -35], [12, -38.5], [-8, -39.5], [-27, -40.5], [-38, -42.5]],
   [[-28.5, -24.5], [-27.5, -33], [-27, -40.5]],
+  // Off the road before the torii, east to the cutting the pass road climbs through.
+  [[3.4, 70], [11, 75.5], [18, 82], [22.6, 88.5]],
   // West from the road to the terraces.
   [[2.6, 58], [-10, 61.5], [-23.6, 64.6]],
   // Through the tall grass, over the stepping stones, up to the training ground.
@@ -160,7 +164,8 @@ export function heightAt(x: number, z: number): number {
   }
   const pool = Math.hypot(x - FALLS.x, z - FALLS.z);
   if (pool < FALLS.rim) h = Math.min(h, -1.2 + 1.2 * smooth(FALLS.pool, FALLS.rim, pool));
-  return h + FLOOR_Y;
+  // The pass road's cutting through the south cliff (src/world/pass/route.ts).
+  return carvePass(x, z, h + FLOOR_Y);
 }
 
 // How far out of the walls a point is, 0 inside to 1 a few metres out.

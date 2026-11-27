@@ -3,8 +3,11 @@ import { SPAWN, HALL, STORE, GATE } from '../world/compound';
 import { FIELD, FALLS, GROUNDS, GINKGO, TERRACES, SHRINE, STONE_AT, heightAt, tierY } from '../world/valleyPlan';
 import type { TutorialStepId } from '../app/state';
 import { ZONES as CITY_ZONES } from '../world/city/plan';
+import { AWAY_PLACES } from '../world/atlas';
 
-export type PoiId = keyof typeof SPAWN;
+// A place's id: the compound's and the valley's name their SPAWN entry; the
+// regions past them name their own (src/world/atlas.ts).
+export type PoiId = string;
 
 // One entry per place worth going to, in the compound and the valley round
 // it. The compass, the
@@ -12,6 +15,8 @@ export type PoiId = keyof typeof SPAWN;
 // read this table, so adding a place means adding a row.
 export interface Poi {
   id: PoiId;
+  // The region whose land it stands on; the compound's and the valley's are 'home'.
+  region: string;
   name: string;
   jp: string;
   glyph: string;
@@ -21,7 +26,7 @@ export interface Poi {
   // Anchor of the name label hung in the world.
   label: THREE.Vector3;
   // The waypoint shrine. Standing within UNLOCK_RADIUS of it counts the place as visited.
-  shrine: THREE.Vector3;
+  shrine?: THREE.Vector3;
 }
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -29,7 +34,7 @@ const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const g = (x: number, z: number, up = 0) => new THREE.Vector3(x, heightAt(x, z) + up, z);
 const stone = (id: keyof typeof STONE_AT) => g(...STONE_AT[id]);
 
-export const POIS: readonly Poi[] = [
+const HOME_POIS: readonly Omit<Poi, 'region'>[] = [
   { id: 'hall', name: 'Training hall', jp: '道場', glyph: '道', blurb: 'The Pact Architect keeps the Workshop at the desk inside. The dummies wait at the back, and the Master takes challengers on the mat.', at: v(3, HALL.floorY, -8), label: v(0, HALL.deckY + 0.5, HALL.z1 + 1.5), shrine: v(-3.2, 0, HALL.z1 + 2.6) },
   { id: 'ring', name: 'Sparring ring', jp: '稽古場', glyph: '稽', blurb: 'A raked sand circle for sparring. Call the partners from the centre.', at: SPAWN.ring.clone(), label: v(SPAWN.ring.x, 3.6, SPAWN.ring.z), shrine: v(SPAWN.ring.x - 1, 0, SPAWN.ring.z + 7.4) },
   { id: 'pond', name: 'Koi pond', jp: '池', glyph: '池', blurb: 'Water for Rime. Freeze it and walk across.', at: v(11, 0, 11), label: v(11, 2.4, 11), shrine: v(11, 0, 16.6) },
@@ -43,6 +48,8 @@ export const POIS: readonly Poi[] = [
   { id: 'ginkgo', name: 'Old ginkgo', jp: '大銀杏', glyph: '杏', blurb: 'The great gold tree on the knoll north-east of the walls, bound with rope.', at: g(GINKGO.x, GINKGO.z), label: g(GINKGO.x, GINKGO.z, 7), shrine: stone('ginkgo') },
   { id: 'terraces', name: 'Rice terraces', jp: '棚田', glyph: '田', blurb: 'Paddies stepping up the west slope. Walk the wide bunds.', at: v(TERRACES.x1 - 4.5, tierY(0), (TERRACES.z0 + TERRACES.z1) / 2), label: v(TERRACES.x1 - 9, tierY(1) + 2.6, (TERRACES.z0 + TERRACES.z1) / 2), shrine: stone('terraces') },
 ];
+
+export const POIS: readonly Poi[] = [...HOME_POIS.map((p) => ({ ...p, region: 'home' })), ...AWAY_PLACES];
 
 export const poiById = (id: PoiId): Poi => POIS.find((p) => p.id === id)!;
 
@@ -69,6 +76,8 @@ export const GOALS: readonly Goal[] = [
   { id: 'pond', poi: 'pond', title: 'Visit the koi pond', hint: 'East side of the yard, under the maple.' },
   { id: 'shrine', poi: 'shrine', title: 'Walk the road to the shrine', hint: 'Out of the gate and south, over the red bridge.' },
   { id: 'falls', poi: 'falls', title: 'Find the falls', hint: 'Round the back of the walls and west through the north wood.' },
+  { id: 'col', poi: 'col', title: 'Walk over the pass', hint: 'The road through the cutting, east of the shrine, climbs to it.' },
+  { id: 'city', poi: 'city-plaza', title: 'Walk into the city', hint: 'Down the far side of the pass, past the bus stop, east along the main road.' },
 ];
 
 export const ZONE_JP: Record<string, string> = {

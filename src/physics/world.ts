@@ -108,7 +108,11 @@ export class Physics {
   }
 
   castRay(origin: THREE.Vector3, dir: THREE.Vector3, maxDist: number, filterGroups = 0xffff, exclude?: RAPIER.RigidBody): { point: THREE.Vector3; normal: THREE.Vector3; collider: RAPIER.Collider; toi: number } | null {
-    const ray = new RAPIER.Ray(origin, dir);
+    // Rapier's heightfield misses a ray that is exactly vertical in some of
+    // its cells (about 1 in 80 on a large grid). A tilt far below a millimetre
+    // over any reach here finds the ground every time.
+    const d = dir.x === 0 && dir.z === 0 ? { x: 1e-4, y: dir.y, z: 1e-4 } : dir;
+    const ray = new RAPIER.Ray(origin, d);
     const hit = this.world.castRayAndGetNormal(ray, maxDist, true, undefined, groups(0xffff, filterGroups), undefined, exclude);
     if (!hit) return null;
     const p = ray.pointAt(hit.timeOfImpact);

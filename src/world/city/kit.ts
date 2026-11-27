@@ -148,12 +148,16 @@ export class CityKit {
 
   // Bakes the district: each group into its own meshes (faded together),
   // then everything else that never moves.
-  finish(): void {
+  finish(): void { for (const _ of this.finishing()) { /* all at once */ } }
+
+  // The same bake, a group or a tile at a time, for a build spread over frames.
+  *finishing(): Generator<void, void, void> {
     this.root.updateMatrixWorld(true);
     for (const [name, gi] of this.groups) {
+      yield;
       const live = gi.meshes.filter((m) => m.parent);
       if (!live.length) continue;
-      for (const merged of bakeSet(live, this.root, true)) {
+      for (const merged of yield* bakeSet(live, this.root, true)) {
         const src = merged.material as THREE.Material;
         const mat = src.clone();
         if ((mat as THREE.MeshToonMaterial).isMeshToonMaterial) mangaShading(mat as THREE.MeshToonMaterial);
@@ -166,6 +170,7 @@ export class CityKit {
       }
     }
     const rest: THREE.Mesh[] = [];
+    yield;
     this.root.traverse((o) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh || m.userData.cutaway !== undefined) return;
@@ -177,14 +182,15 @@ export class CityKit {
     // stands in; pieces longer than a tile (a road, a canal wall) go whole.
     const tiles = new Map<string, THREE.Mesh[]>();
     const box = new THREE.Box3(), mid = new THREE.Vector3(), size = new THREE.Vector3();
-    for (const m of rest) {
+    for (const [i, m] of rest.entries()) {
+      if (i % 300 === 299) yield;
       box.setFromObject(m).getCenter(mid);
       box.getSize(size);
       const key = Math.max(size.x, size.z) > TILE ? 'long' : `${Math.floor((mid.x - this.origin.x) / TILE)}:${Math.floor((mid.z - this.origin.z) / TILE)}`;
       const l = tiles.get(key);
       if (l) l.push(m); else tiles.set(key, [m]);
     }
-    for (const l of tiles.values()) bakeSet(l, this.root, false);
+    for (const l of tiles.values()) { yield; yield* bakeSet(l, this.root, false); }
   }
 
   dispose(): void {
@@ -215,8 +221,9 @@ export class CityKit {
 // Folds a set of meshes into as few as possible: every plain, opaque,
 // one-sided toon piece into one mesh per shadow setting with its colour in
 // the vertices; every other piece into one mesh per material and shadow
-// setting. Returns the meshes made.
-function bakeSet(list: THREE.Mesh[], parent: THREE.Object3D, keepAlone: boolean): THREE.Mesh[] {
+// setting. Returns the meshes made. A generator: the pieces go into world
+// space a batch at a time, so a large set spreads over several slices.
+function* bakeSet(list: THREE.Mesh[], parent: THREE.Object3D, keepAlone: boolean): Generator<void, THREE.Mesh[], void> {
   const painted = new Map<string, THREE.Mesh[]>();
   const byMat = new Map<string, THREE.Mesh[]>();
   for (const m of list) {
@@ -229,9 +236,17 @@ function bakeSet(list: THREE.Mesh[], parent: THREE.Object3D, keepAlone: boolean)
     if (l) l.push(m); else target.set(key, [m]);
   }
   const out: THREE.Mesh[] = [];
+  const BATCH = 60;
+  const world = function* (l: THREE.Mesh[], colour: boolean): Generator<void, THREE.BufferGeometry[], void> {
+    const geos: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < l.length; i++) { geos.push(worldGeometry(l[i]!, colour)); if (i % BATCH === BATCH - 1) yield; }
+    return geos;
+  };
   for (const l of painted.values()) {
     if (l.length < 2 && !keepAlone) continue;
-    const geo = mergeGeometries(l.map((m) => worldGeometry(m, true)), false);
+    const geos = yield* world(l, true);
+    yield;
+    const geo = mergeGeometries(geos, false);
     if (!geo) throw new Error('city bake: painted geometries do not match');
     const mat = toon(0xffffff);
     mat.vertexColors = true;
@@ -239,7 +254,8 @@ function bakeSet(list: THREE.Mesh[], parent: THREE.Object3D, keepAlone: boolean)
   }
   for (const l of byMat.values()) {
     if (l.length < 2 && !keepAlone) continue;
-    const geo = mergeGeometries(l.map((m) => worldGeometry(m, false)), false);
+    const geos = yield* world(l, false);
+    const geo = mergeGeometries(geos, false);
     if (!geo) throw new Error('city bake: geometries do not match');
     out.push(place(new THREE.Mesh(geo, l[0]!.material), l, parent));
   }

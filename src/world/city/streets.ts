@@ -19,7 +19,7 @@ export const GROUND = { asphalt: 0x5e6068, line: 0xe9e4d8, kerb: 0xa9a49a, pavin
 
 export interface Streets { water: THREE.ShaderMaterial }
 
-export function buildStreets(k: CityKit): Streets {
+export function* buildStreets(k: CityKit): Generator<void, Streets, void> {
   const r = rng(11);
   const paving = toon(0xffffff, { map: flagstones(GROUND.paving, 0xb3aa98, GROUND.pavingLine, 4) });
   paving.map!.repeat.set(1, 1);
@@ -27,15 +27,25 @@ export function buildStreets(k: CityKit): Streets {
   const stoneWall = toon(0xffffff, { map: ashlar(0x8f9596, 0x7d8486, 0x5c6264) });
   const S: PieceOpts = { shadow: false, collide: false };
 
+  yield;
   // ------------------------------------------------------------ ground
+  yield;
   // One asphalt slab over the ward and out past its edges, cut for the
+  yield;
   // canal; its collider stops at the bounds.
-  const far = 120;
-  k.span(GROUND.asphalt, -far, far, -0.4, 0, -far, CANAL.z0, { ...S });
-  k.span(GROUND.asphalt, -far, far, -0.4, 0, CANAL.z1, far, { ...S });
+  yield;
+  // The ground beyond it is the outskirts' plain (src/world/outskirts.ts):
+  yield;
+  // the slab stops a step past the west edge, where the road from the pass
+  yield;
+  // comes in, and past the canal's end in the east.
+  const far = CANAL.x1 + 2, west = BOUNDS.x0 - 2;
+  k.span(GROUND.asphalt, west, far, -0.4, 0, BOUNDS.z0 - 2, CANAL.z0, { ...S });
+  k.span(GROUND.asphalt, west, far, -0.4, 0, CANAL.z1, BOUNDS.z1 + 2, { ...S });
   k.block(BOUNDS.x0 - 20, BOUNDS.x1 + 20, -1, 0, BOUNDS.z0 - 20, CANAL.z0, 'stone');
   k.block(BOUNDS.x0 - 20, BOUNDS.x1 + 20, -1, 0, CANAL.z1, BOUNDS.z1 + 20, 'stone');
 
+  yield;
   // Paved ground: a raised pavement (kerbed) or level paving, in metres.
   const pave = (x0: number, x1: number, z0: number, z1: number, y = 0.12, mat: THREE.Material = paving): void => {
     const m = k.span(mat, x0, x1, 0, y, z0, z1, { shadow: false, surface: 'stone' });
@@ -45,54 +55,72 @@ export function buildStreets(k: CityKit): Streets {
       k.span(GROUND.kerb, x0 - 0.02, x1 + 0.02, y - 0.04, y + 0.005, z1 - 0.14, z1 + 0.02, S);
     }
   };
+  yield;
   // The main road's pavements, the station street and plaza (level paving),
+  yield;
   // the arcade's floor, the walk along the tracks, the canal walks.
-  pave(-far, far, ODORI.z0, ODORI.road0);
-  pave(-far, far, ODORI.road1, ODORI.z1);
+  pave(west, far, ODORI.z0, ODORI.road0);
+  pave(west, far, ODORI.road1, ODORI.z1);
   pave(PLAZA.x0, PLAZA.x1, PLAZA.z0, PLAZA.z1, 0.04);
-  pave(-far, far, UNDER.z0, UNDER.z1, 0.04);
+  pave(west, far, UNDER.z0, UNDER.z1, 0.04);
   pave(ARCADE.x0 - 0.2, ARCADE.x1 + 0.2, ARCADE.z0, ARCADE.z1, 0.04, arcadeFloor);
-  pave(-far, far, PROMENADE.z0, PROMENADE.z1, 0.12);
-  pave(-far, far, SOUTH_WALK.z0, SOUTH_WALK.z1, 0.12);
+  pave(west, far, PROMENADE.z0, PROMENADE.z1, 0.12);
+  pave(west, far, SOUTH_WALK.z0, SOUTH_WALK.z1, 0.12);
+  yield;
   // The strip between the shop row and the promenade, and between the
+  yield;
   // buildings, laid as paving too.
-  pave(-far, far, ODORI.z1, PROMENADE.z0, 0.04);
+  pave(west, far, ODORI.z1, PROMENADE.z0, 0.04);
+  yield;
   // The station street: a painted edge line each side and a stop line.
   for (const z of [EKIMAE.z0 + 0.3, EKIMAE.z1 - 0.3]) k.span(GROUND.line, BOUNDS.x0, BOUNDS.x1, 0, 0.012, z - 0.06, z + 0.06, S);
+  yield;
   // The back streets: white edge lines and 止まれ at the main road.
   for (const b of [BACK_W, BACK_E]) {
     for (const x of [b.x0 + 0.25, b.x1 - 0.25]) k.span(GROUND.line, x - 0.06, x + 0.06, 0, 0.012, b.z0, b.z1, S);
     k.span(GROUND.line, b.x0 + 0.3, b.x1 - 0.3, 0, 0.012, b.z1 - 1.2, b.z1 - 0.9, S);
   }
+  yield;
   // The main road: a centre line in dashes, lane edges, and the zebra
+  yield;
   // crossing from the arcade to the park.
   const mid = (ODORI.road0 + ODORI.road1) / 2;
-  for (let x = -far; x < far; x += 6) if (Math.abs(x) > 6) k.span(GROUND.line, x, x + 3, 0, 0.012, mid - 0.08, mid + 0.08, S);
-  for (const z of [ODORI.road0 + 0.25, ODORI.road1 - 0.25]) k.span(GROUND.line, -far, far, 0, 0.012, z - 0.06, z + 0.06, S);
+  for (let x = west; x < far; x += 6) if (Math.abs(x) > 6) k.span(GROUND.line, x, x + 3, 0, 0.012, mid - 0.08, mid + 0.08, S);
+  for (const z of [ODORI.road0 + 0.25, ODORI.road1 - 0.25]) k.span(GROUND.line, west, far, 0, 0.012, z - 0.06, z + 0.06, S);
   for (let x = -3.6; x <= 3.6; x += 0.9) k.span(GROUND.line, x - 0.25, x + 0.25, 0, 0.014, ODORI.road0 + 0.6, ODORI.road1 - 0.6, S);
   for (const x of [-38, 46]) for (let dx = -2.4; dx <= 2.4; dx += 0.9) k.span(GROUND.line, x + dx - 0.25, x + dx + 0.25, 0, 0.014, ODORI.road0 + 0.6, ODORI.road1 - 0.6, S);
+  yield;
   // The lanes of the back alleys: pale concrete laid level.
   const lane = k.shared('lane', () => toon(0xa9a398));
   k.span(lane, -66, -18, 0, 0.03, -14, 18, { collide: false, shadow: false });
+  yield;
   // The cross alley through the shop rows: worn paving.
   pave(-14, -4, CROSS.z0, CROSS.z1, 0.04);
   pave(4, 14, CROSS.z0, CROSS.z1, 0.04);
 
+  yield;
   // ------------------------------------------------------------ canal
+  yield;
   // Stone walls down to a bed under shallow water, a landing at the water's
+  yield;
   // edge with steps down to it, stone blocks along both walls a body can
+  yield;
   // climb out by, and a railing along the walk.
   const C = CANAL;
-  k.span(0x4e5a52, -far, far, C.bedY - 0.4, C.bedY, C.z0, C.z1, { shadow: false, surface: 'stone' });
-  k.span(stoneWall, -far, far, C.bedY - 0.4, 0, C.z0 - 0.6, C.z0, { shadow: false, uv: 2 });
-  k.span(stoneWall, -far, far, C.bedY - 0.4, 0, C.z1, C.z1 + 0.6, { shadow: false, uv: 2 });
-  k.span(INK.parapet, -far, far, -0.02, 0.14, C.z0 - 0.5, C.z0 + 0.02, S);
-  k.span(INK.parapet, -far, far, -0.02, 0.14, C.z1 - 0.02, C.z1 + 0.5, S);
+  k.span(0x4e5a52, west, far, C.bedY - 0.4, C.bedY, C.z0, C.z1, { shadow: false, surface: 'stone' });
+  k.span(stoneWall, west, far, C.bedY - 0.4, 0, C.z0 - 0.6, C.z0, { shadow: false, uv: 2 });
+  k.span(stoneWall, west, far, C.bedY - 0.4, 0, C.z1, C.z1 + 0.6, { shadow: false, uv: 2 });
+  k.span(INK.parapet, west, far, -0.02, 0.14, C.z0 - 0.5, C.z0 + 0.02, S);
+  k.span(INK.parapet, west, far, -0.02, 0.14, C.z1 - 0.02, C.z1 + 0.5, S);
   const water = waterMaterial(0x3f7f96, 0x8ac6d6);
-  const sheet = new THREE.Mesh(new THREE.PlaneGeometry(far * 2, C.z1 - C.z0), water);
+  yield;
+  // The canal ends at the ward's west edge against a stone wall.
+  k.span(stoneWall, west - 0.6, west, C.bedY - 0.4, 0.14, C.z0 - 0.6, C.z1 + 0.6, { shadow: false, uv: 2 });
+  const sheet = new THREE.Mesh(new THREE.PlaneGeometry(far - west, C.z1 - C.z0), water);
   sheet.rotation.x = -Math.PI / 2;
-  sheet.position.copy(k.w(0, C.waterY, (C.z0 + C.z1) / 2));
+  sheet.position.copy(k.w((far + west) / 2, C.waterY, (C.z0 + C.z1) / 2));
   k.keep(sheet);
+  yield;
   // The landing: a ledge at the water's edge, steps down to it from the walk.
   const L = LANDING;
   k.span(stoneWall, L.x0, L.steps.x0, C.bedY, L.y, L.z0, L.z1, { uv: 2 });
@@ -100,11 +128,13 @@ export function buildStreets(k: CityKit): Streets {
     const n = 4, rise = -L.y / n, run = (L.steps.x1 - L.steps.x0) / n;
     for (let i = 0; i < n; i++) k.span(INK.parapet, L.steps.x1 - (i + 1) * run, L.steps.x1 - i * run, C.bedY, -(i + 1) * rise, L.z0, L.z1, { surface: 'stone' });
   }
+  yield;
   // Climbing blocks along both walls.
   for (const [x, north] of [[-50, true], [6, true], [30, true], [56, true], [-40, false], [-8, false], [20, false], [50, false]] as const) {
     const z0 = north ? C.z0 : C.z1 - 1.2, z1 = north ? C.z0 + 1.2 : C.z1;
     k.span(stoneWall, x - 1, x + 1, C.bedY, -1.0, z0, z1, { uv: 2 });
   }
+  yield;
   // Railings along the walks, open where the steps and the bridges are.
   const bridgeGaps = BRIDGES.map((b) => [b.x0 - 0.2, b.x1 + 0.2] as [number, number]);
   for (const [z, gaps] of [[C.z0 - 0.3, [[L.steps.x0, L.steps.x1 + 0.3] as [number, number], ...bridgeGaps]], [C.z1 + 0.3, bridgeGaps]] as const) {
@@ -112,6 +142,7 @@ export function buildStreets(k: CityKit): Streets {
     for (const [a, b] of [...gaps].sort((p, q) => p[0] - q[0])) { railing(k, at, a, z); at = b; }
     railing(k, at, BOUNDS.x1 + 6, z);
   }
+  yield;
   // Bridges: a flat deck on the walls with solid parapets.
   for (const b of BRIDGES) {
     const z0 = C.z0 - 0.8, z1 = C.z1 + 0.8;
@@ -128,10 +159,15 @@ export function buildStreets(k: CityKit): Streets {
     k.span(INK.band, b.x0, b.x1, b.deckY - 0.7, b.deckY - 0.5, z0, z1, S);
   }
 
+  yield;
   // ------------------------------------------------------------ poles and wires
+  yield;
   // Wooden-look concrete poles every dozen metres along the main road's
+  yield;
   // south pavement, the station street and the lane through the back
+  yield;
   // alleys, with a crossarm, a transformer here and there, and three wires
+  yield;
   // sagging between each pair.
   const runs: [number, number][][] = [
     Array.from({ length: 10 }, (_, i) => [-56 + i * 12.4, ODORI.z1 - 0.5] as [number, number]),
@@ -143,18 +179,24 @@ export function buildStreets(k: CityKit): Streets {
     run.forEach(([x, z], i) => pole(k, x, z, i % 3 === 1));
     for (let i = 0; i < run.length - 1; i++) for (const [dy, dz] of [[8.1, -0.55], [8.1, 0.55], [7.4, 0]] as const) wire(k, run[i]![0], run[i]![1] + dz, run[i + 1]![0], run[i + 1]![1] + dz, dy, 0.45);
   }
+  yield;
   // Service wires off the lane poles to the houses.
   for (const [x, z, tx, tz] of [[-50.5, 6.8, -52, 3.6], [-37.5, 6.8, -38, 7.2], [-26, 6.8, -28, 3.6], [-19, 6.8, -21, 3.6]] as const) wire(k, x, z, tx, tz, 7.4, 0.2, 5.2);
 
+  yield;
   // ------------------------------------------------------------ street trees
+  yield;
   // Ginkgo along the main road's north pavement, gold for the season.
   for (let x = -58; x <= 60; x += 11) if (Math.abs(x) > 8 && Math.abs(x + 16) > 3 && Math.abs(x - 16) > 3) tree(k, x + r() * 1.2, ODORI.z0 + 1.0, 'ginkgo', 0.95 + r() * 0.2, r);
+  yield;
   // Willows on the canal walk.
   for (let x = -60; x <= 62; x += 13) if (Math.abs(x) > 6 && Math.abs(x - 39) > 4 && Math.abs(x + 14) > 5) willow(k, x + r() * 2, PROMENADE.z0 + 1.6, r);
 
+  yield;
   // ------------------------------------------------------------ street furniture
   for (const [x, z, rot] of [[-21.4, -24, Math.PI / 2], [10, -18.6, Math.PI], [-15.4, 12, Math.PI / 2], [17.6, 19, Math.PI], [-35.4, 6.4, 0], [26, 27.2, Math.PI], [-24.6, -17.6, Math.PI]] as const) vending(k, x, z, rot, r);
   for (const [x, z] of [[-18, -22], [-14, -22], [-6, -24.8]] as const) bench(k, x, z, 0);
+  yield;
   // Bicycles parked along the plaza's west edge, a row of them in a rack.
   for (let i = 0; i < 8; i++) {
     const x = -21 + i * 0.7, z = -19.2;
@@ -169,8 +211,11 @@ export function buildStreets(k: CityKit): Streets {
   k.block(-21.4, -15.6, 0, 1, -19.8, -18.6);
   k.span(INK.steel, -21.6, -15.4, 0.1, 0.16, -19.25, -19.15, S);
 
+  yield;
   // The bounds: invisible walls round the ward. The west end of the main
+  yield;
   // road is where the pass comes in; it stays open (the region owner seals
+  yield;
   // it or leads the road on).
   const wallH = 30;
   k.block(BOUNDS.x0 - 1, BOUNDS.x0, -3, wallH, BOUNDS.z0, ODORI.z0);

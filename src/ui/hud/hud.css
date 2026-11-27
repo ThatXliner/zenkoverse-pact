@@ -190,6 +190,8 @@ body.top-view .hud { cursor: none; }
 /* A Pact a lost Wager put out: its key reads dim until it comes back. */
 .hud .x.dark .name, .hud .ab.dark .box { opacity: 0.45; }
 .hud .x.dark .name { text-decoration: line-through; }
+.hud .x.tool .glyph { color: var(--paper-ink); -webkit-text-stroke: 0; }
+.hud .x.tool.dark .box { opacity: 0.45; }
 
 /* The open Wager: a slip of paper under the player, gold while it is open
    and when it pays, red when the forfeit lands. */

@@ -57,6 +57,8 @@ export interface TechniqueKit {
   // something the player must read at a glance (Dark Dimension's storage).
   panel?: FunctionComponent<{ game: Game }>;
   cutscene: CutsceneDef;
+  // Something ordinary the user carries, on its own key (src/techniques/tool.ts).
+  tool?: KitTool;
   effects: {
     cast(ctx: AbilityContext): CastResult | void;
     hold?(ctx: AbilityContext, dt: number): void;
@@ -71,6 +73,20 @@ export interface TechniqueKit {
   // The cue under each kind's wind-up (src/audio/cues.ts), and under any
   // shape's that has one of its own.
   audio: Record<AbilityKind, CueName> & Partial<Record<string, CueName>>;
+}
+
+// A carried thing that is not the Technique (Fuel's lighter): no Pact shapes
+// it and it draws on no resource. It plays `gestures[gesture]`, which the
+// other screens play by that key, and `use` runs on the gesture's impact.
+export interface KitTool {
+  name: string;
+  glyph: string;
+  description: string;
+  cooldown: number;
+  gesture: string;
+  // Why it cannot be used here and now, or null.
+  refuses?(game: Game): string | null;
+  use(game: Game): void;
 }
 
 export interface AbilityContext {

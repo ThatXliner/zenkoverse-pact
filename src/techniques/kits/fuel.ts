@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { signal } from '@preact/signals';
-import type { TechniqueKit, AbilityContext } from '../kit';
+import type { TechniqueKit, AbilityContext, KitTool } from '../kit';
 import type { Game } from '../../app/game';
 import { signGesture, gestureSet, rangeFor, frontOnly, targetsAllowed } from './shared';
+import { variants } from '../../hands/gestures';
+import { kindle } from '../ignition';
 import type { Pact } from '../../pacts/schema';
 import { opening, blow, type CutsceneDef } from '../../cutscene/cutscene';
 import { GROUP_WORLD, GROUP_PROP } from '../../physics/world';
@@ -17,6 +19,9 @@ import { dokasen, showStation } from '../../drills/dokasen';
 // find the flame. Where it gathers matters more than where she stands when it
 // burns, and it burns her too if she stands in it. The vapour itself, and
 // every rule of how it drifts, thins and burns, is src/techniques/kits/fuelVapour.ts.
+// She carries a lighter for when no flame is near. It is a lighter, not the
+// Technique: one small flame at her hand or a few metres off, through the
+// same ignition as every other fire.
 
 const COLOR = 0xb4d23c;
 
@@ -24,6 +29,9 @@ const COLOR = 0xb4d23c;
 const RESIDUE = { lay: 0.15, pour: 0.025, soak: 0.08, herd: 0.03, clear: -0.3, max: 0.6 };
 // How long a herd outlasts the last frame its key was down, and how long an untimed one runs.
 const HOLD_GRACE = 0.12, HERD_TAP = 0.8;
+// The lighter: its cooldown, how far it tosses the flame toward the aim, the
+// reach of the flame at the hand and where it lands, and how fast it flies (m/s).
+const LIGHTER = { cooldown: 1.5, reach: 4.5, hand: 0.35, lands: 0.6, speed: 10 };
 
 export const fuelUi = { residue: signal(0) };
 
@@ -57,6 +65,7 @@ interface Herding { left: number; held: boolean; potency: number; thin: boolean;
 interface Pouring { at: THREE.Vector3 | null; t: number; potency: number; range: number }
 let herding: Herding | null = null;
 let pouring: Pouring | null = null;
+let flicks = 0;
 
 const flatOf = (v: THREE.Vector3): THREE.Vector3 => { const f = v.clone().setY(0); return f.lengthSq() > 1e-6 ? f.normalize() : new THREE.Vector3(0, 0, -1); };
 const addResidue = (amount: number): void => { self.residue = THREE.MathUtils.clamp(self.residue + amount, 0, 1.2); };
@@ -189,6 +198,40 @@ function tickHerd(g: Game, h: Herding, dt: number): void {
   }
 }
 
+// ---------------------------------------------------------------- the lighter
+// A flick of the wheel lights whatever vapour is at her hand, and the flame is
+// tossed on toward the aim, up to a few metres, and lights what it lands in.
+// It hurts no one itself. Lit while she stands in her own vapour, it burns her.
+function flick(g: Game): void {
+  const me = g.player.position;
+  const fwd = flatOf(g.cam.aimDirection()), right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+  const hand = g.player.eye().addScaledVector(fwd, 0.35).addScaledVector(right, 0.18).add(new THREE.Vector3(0, -0.45, 0));
+  flicks++;
+  g.vfx.burst(hand, 5, 'spark', 1.4, 0xffd27a, fwd);
+  g.audio.play('fuel.lighter', { at: hand });
+  kindle(hand, LIGHTER.hand);
+  const off = aimPoint(g).sub(me).setY(0);
+  const d = Math.min(off.length(), LIGHTER.reach);
+  if (d < 1) return;
+  const land = me.clone().add(off.setLength(d));
+  const floor = g.physics.castRay(land.clone().setY(me.y + 1.5), new THREE.Vector3(0, -1, 0), 4, GROUP_WORLD, g.player.body);
+  land.y = floor ? floor.point.y + 0.05 : me.y;
+  g.vfx.trail([hand, hand.clone().lerp(land, 0.5).add(new THREE.Vector3(0, 0.35, 0)), land], 0xffb050, 0.07, 0.35);
+  g.vfx.after(d / LIGHTER.speed, () => {
+    g.vfx.burst(land, 6, 'spark', 1.8, 0xffd27a);
+    g.vfx.flames(land, 0.12, 3, 0.4);
+    kindle(land, LIGHTER.lands);
+  });
+}
+
+const lighter: KitTool = {
+  name: 'Lighter', glyph: '火', gesture: 'lighter', cooldown: LIGHTER.cooldown,
+  description: 'A plain lighter. It lights the vapour at your hand, or tosses the flame a few metres toward the aim.',
+  // Dōkasen is lit from the lantern.
+  refuses: (g) => (g.drills.running === 'fuel-dokasen' ? 'Not in this drill: the lantern lights it' : null),
+  use: flick,
+};
+
 // ---------------------------------------------------------------- Saturation
 // Every bit of vapour she can make, condensed and driven out at once: the
 // target is drenched and thrown back by it, and the ground for metres round
@@ -231,7 +274,7 @@ function saturate(ctx: AbilityContext) {
 // ---------------------------------------------------------------- the kit
 export const fuel: TechniqueKit = {
   id: 'fuel', name: 'Fuel', glyph: '燃', color: COLOR, type: 'Production, Matter', sfx: 'ボワッ',
-  blurb: 'Make a faint vapour that burns, and move it. You cannot light it. Something else has to.',
+  blurb: 'Make a faint vapour that burns, and move it. The Technique cannot light it. You carry a lighter, or find a flame.',
   breadth: 2,
   resource: { name: 'Vapour', max: 100, regen: 7, startsFull: true },
   gauge: { name: 'Residue', glyph: '油', value: fuelUi.residue },
@@ -285,6 +328,14 @@ export const fuel: TechniqueKit = {
       { t: 1.62, right: 'twinPalm', left: 'twinPalm', snap: true, camera: { fov: 12, pitch: 0.03 } },
       { t: 2.1, right: 'rest', left: 'rest' },
     ]),
+    // The lighter: brought up thumb first, the thumb rolled down the wheel,
+    // and the wrist flicked out at the aim.
+    lighter: variants({ duration: 0.62, impactAt: 0.18, holds: 'lighter', keys: [
+      { t: 0, right: 'lighterUp', slow: true },
+      { t: 0.16, right: 'lighterStrike', snap: true },
+      { t: 0.26, right: 'lighterToss', snap: true, camera: { fov: 1 } },
+      { t: 0.56, right: 'rest' },
+    ] }),
   },
   // The palms press together, then part slowly with the fingers spread, as
   // if something clinging stretched between them, and close again; on the
@@ -308,6 +359,7 @@ export const fuel: TechniqueKit = {
   },
   drill: dokasen,
   cutscene,
+  tool: lighter,
   effects: {
     cast(ctx) {
       const g = ctx.game;
@@ -353,7 +405,7 @@ export const fuel: TechniqueKit = {
       showStation(g, true);
     },
     reset(game) {
-      herding = null; pouring = null;
+      herding = null; pouring = null; flicks = 0;
       resetVapour();
       fuelUi.residue.value = 0;
       showStation(game, false);
@@ -362,5 +414,5 @@ export const fuel: TechniqueKit = {
   audio: { primary: 'fuel.cast', secondary: 'fuel.herd', max: 'fuel.max.cast' },
 };
 
-// For the checks: whether a herd or a pour is running now.
-export const fuelHands = (): { herding: boolean; pouring: boolean; took: number } => ({ herding: !!herding && herding.left > 0, pouring: !!pouring, took: herding?.took ?? 0 });
+// For the checks: whether a herd or a pour is running now, and how often the lighter has been struck.
+export const fuelHands = (): { herding: boolean; pouring: boolean; took: number; flicks: number } => ({ herding: !!herding && herding.left > 0, pouring: !!pouring, took: herding?.took ?? 0, flicks });

@@ -61,6 +61,9 @@ const bunch = f([0.45, 0.4, 0.3], [0.55, 0.55, 0.4], [0.55, 0.6, 0.4], [0.6, 0.6
 const flatSplay = f([0.0, -0.05, -0.05], [-0.05, 0, 0], [-0.05, 0, 0], [-0.05, 0, 0], [-0.05, 0, 0]);
 // Thumb and index out at a right angle, the rest curled: one corner of a frame.
 const corner = f([0, 0, 0], [0, 0, 0], [1, 1, 0.9], [1, 1, 0.9], [1, 1, 0.95]);
+// A lighter held in the fist, the thumb up on its wheel; and the thumb rolled down over it.
+const lighterGrip = f([0.05, 0.1, 0.05], [0.8, 0.95, 0.7], [0.85, 1, 0.8], [0.9, 1, 0.8], [0.95, 1, 0.8]);
+const lighterRolled = f([0.55, 0.6, 0.4], [0.8, 0.95, 0.7], [0.85, 1, 0.8], [0.9, 1, 0.8], [0.95, 1, 0.8]);
 
 export const POSES = {
   // Idle: low in the corners, thumb side up and turned in a little, the
@@ -212,6 +215,12 @@ export const POSES = {
   parting: { pos: [0.34, -0.19, -0.33], rot: [1.2, -0.55, -0.3], fingers: open, spread: 0.5 },
   stretch: { pos: [0.075, -0.23, -0.4], rot: [1.3, 0.1, -1.5], fingers: cradle, spread: 0.45 },
   stretchWide: { pos: [0.19, -0.22, -0.41], rot: [1.25, 0.2, -1.45], fingers: cradle, spread: 0.6 },
+  // Fuel's lighter, which is not the Technique: `lighterUp` brings it up
+  // thumb first, `lighterStrike` rolls the thumb down the wheel, and
+  // `lighterToss` flicks the wrist out at the aim.
+  lighterUp: { pos: [0.15, -0.17, -0.36], rot: [0.5, 0.25, -1.55], fingers: lighterGrip, spread: 0 },
+  lighterStrike: { pos: [0.14, -0.18, -0.39], rot: [0.42, 0.25, -1.6], fingers: lighterRolled, spread: 0 },
+  lighterToss: { pos: [0.11, -0.15, -0.46], rot: [0.75, 0.2, -1.5], fingers: lighterRolled, spread: 0 },
 } satisfies Record<string, HandPose>;
 
 export type PoseName = keyof typeof POSES;

@@ -20,7 +20,12 @@ export interface Gesture {
   keys: GestureKey[];
   impactAt: number;
   hold?: boolean;
+  // A thing the right hand holds for the length of the gesture, lit from
+  // the impact on (src/hands/held.ts).
+  holds?: Holdable;
 }
+
+export type Holdable = 'lighter';
 
 export interface GestureSet { long: Gesture; short: Gesture; none: Gesture }
 
@@ -35,13 +40,13 @@ export function resolvePose(p: PoseName | HandPose | undefined, fallback: HandPo
 // so trained activation reads as the same sign done faster and smaller.
 export function shorten(long: Gesture, factor = 0.5): Gesture {
   const keys = long.keys.filter((k, i) => i === 0 || i >= long.keys.length - 2 || !k.slow).map((k) => ({ ...k, t: k.t * factor }));
-  return { duration: long.duration * factor, keys, impactAt: long.impactAt * factor, hold: long.hold };
+  return { duration: long.duration * factor, keys, impactAt: long.impactAt * factor, hold: long.hold, holds: long.holds };
 }
 
 export function flick(long: Gesture): Gesture {
   const last = long.keys[long.keys.length - 1];
   const impactKey = long.keys.reduce((best, k) => (Math.abs(k.t - long.impactAt) < Math.abs(best.t - long.impactAt) ? k : best), long.keys[0]!);
-  return { duration: 0.22, impactAt: 0.06, hold: long.hold, keys: [{ t: 0, left: impactKey.left, right: impactKey.right, snap: true, camera: impactKey.camera, event: impactKey.event }, { t: 0.16, left: last?.left, right: last?.right }] };
+  return { duration: 0.22, impactAt: 0.06, hold: long.hold, holds: long.holds, keys: [{ t: 0, left: impactKey.left, right: impactKey.right, snap: true, camera: impactKey.camera, event: impactKey.event }, { t: 0.16, left: last?.left, right: last?.right }] };
 }
 
 export function variants(long: Gesture): GestureSet {

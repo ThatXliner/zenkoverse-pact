@@ -36,6 +36,7 @@
     "check:wagers": "node tools/check-wagers.mjs",
     "check:training": "node tools/check-training.mjs",
     "check:valley": "node tools/check-valley.mjs",
+    "check:city": "node tools/check-city.mjs",
     "manifest": "node tools/manifest.mjs"
   },
   "dependencies": {

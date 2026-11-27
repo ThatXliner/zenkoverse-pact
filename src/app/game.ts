@@ -37,6 +37,14 @@ import { Waypoints } from '../world/waypoints';
 import { installDebug } from './debug';
 import { Net } from '../net/net';
 import type { Enemy } from '../combat/enemies';
+import { buildCity } from '../world/city/city';
+import type { Region } from '../world/city/region';
+
+// `?debug&region=city` loads the city ward on its own, with the player in it,
+// a kilometre east of the compound (which stays loaded for the systems that
+// read it, out of sight).
+const DEBUG_REGION = (() => { const q = new URLSearchParams(location.search); return q.has('debug') ? q.get('region') : null; })();
+export const CITY_ORIGIN = new THREE.Vector3(1200, 0, 0);
 
 export const hud = {
   zone: signal<Zone | null>(null),
@@ -106,6 +114,8 @@ export class Game {
   waypoints!: Waypoints;
   nav!: Navigation;
   techniqueId: TechniqueId = 'recoil';
+  // The city ward, while it is loaded.
+  city: Region | null = null;
   // The online room, while the player is in one.
   net: Net | null = null;
   private titleOrbit = 0;
@@ -133,6 +143,7 @@ export class Game {
     this.env = setupEnvironment(scene);
     this.props = new PropSystem(this.assets, this.physics, scene);
     this.world = buildCompound(this.assets, this.physics, scene, this.props, this.renderer.lights);
+    if (DEBUG_REGION === 'city') this.loadCity();
     this.audio = new Audio(this);
     bindUiSounds(this.audio, hud);
     this.vfx = new Vfx(scene, this.renderer.lights);
@@ -140,7 +151,7 @@ export class Game {
     this.cam.snap(settings.value.camera);
     this.vfx.viewer = { camera: this.renderer.camera, first: () => this.cam.isFirst && !this.cam.inShot };
     hud.camera.value = this.cam.mode;
-    this.player = new PlayerController(this.physics, SPAWN.courtyard.clone(), {
+    this.player = new PlayerController(this.physics, this.home(), {
       onStep: (speed, surface) => { this.audio.footstep(surface, speed); this.hands.step(speed); },
       onLand: (v) => { this.cam.land(v); this.audio.land(v); this.hands.land(v); },
       onJump: () => { this.audio.play('jump'); this.hands.jump(); },
@@ -170,6 +181,21 @@ export class Game {
     setState({ kind: 'title' });
     this.renderer.gl.setAnimationLoop(() => this.frame());
   }
+
+  // Builds the city ward and folds it into the world the game reads: its
+  // zones, the meshes the top-down camera fades, its canal for Rime.
+  private loadCity(): void {
+    const city = buildCity({ parent: this.renderer.scene, physics: this.physics, lights: this.renderer.lights, props: this.props, assets: this.assets, origin: CITY_ORIGIN });
+    this.city = city;
+    this.world.group.visible = false;
+    this.world.occluders.push(...city.occluders);
+    this.world.waters.push(...city.waters);
+    const compoundZone = this.world.zoneAt;
+    this.world.zoneAt = (p) => city.zoneAt(p) ?? compoundZone(p);
+  }
+
+  // Where a run starts: the courtyard, or the station plaza when the city is loaded.
+  private home(): THREE.Vector3 { return this.city ? this.city.spawns.plaza!.clone() : SPAWN.courtyard.clone(); }
 
   setTechnique(id: TechniqueId): void {
     if (!TECHNIQUE_IDS.includes(id)) return;
@@ -246,9 +272,9 @@ export class Game {
     this.combat.resetPlayer();
     this.endScene();
     this.book.preview.value = null;
-    this.player.teleport(SPAWN.courtyard.clone());
+    this.player.teleport(this.home());
     this.cam.yaw = 0;
-    if (opts.skipTutorial) {
+    if (opts.skipTutorial || this.city) {
       this.tutorial.skip();
       setState({ kind: 'explore' });
       toast(`The compound is yours. ${keyLabel('workshop')} opens the Pact Workshop anywhere.`);
@@ -337,10 +363,10 @@ export class Game {
     if (st.kind === 'title' || st.kind === 'boot') {
       // A slow orbit over the compound, looking down at the courtyard.
       this.titleOrbit += raw * 0.035;
-      const r = 36;
+      const r = this.city ? 52 : 36, o = this.city?.origin ?? new THREE.Vector3();
       const c = this.renderer.camera;
-      c.position.set(Math.cos(this.titleOrbit) * r, 15 + Math.sin(this.titleOrbit * 0.7) * 2, Math.sin(this.titleOrbit) * r);
-      c.lookAt(0, 1.5, 0);
+      c.position.set(o.x + Math.cos(this.titleOrbit) * r, (this.city ? 30 : 15) + Math.sin(this.titleOrbit * 0.7) * 2, o.z + Math.sin(this.titleOrbit) * r);
+      c.lookAt(o.x, 1.5, o.z);
       c.fov = 52;
       c.updateProjectionMatrix();
       this.avatar.root.visible = false;
@@ -353,6 +379,7 @@ export class Game {
     this.audio.update(raw);
 
     this.world.update(this.clock.time);
+    this.city?.update(this.clock.time, raw, this.player.position, this.renderer.camera);
     this.waypoints.update(raw, this.clock.time);
     this.env.update(this.renderer.camera, this.clock.time);
     this.renderer.render(raw);

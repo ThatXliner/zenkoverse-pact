@@ -120,7 +120,7 @@ export const wetStone: DrillDef = {
   brief: 'One straw figure lights at a time. Reach it with a discharge.',
   howTo: (tier) => {
     const r = rulesOf(tier);
-    return ['One straw figure lights at a time. Reach it with a discharge.', `${keyLabel('primary')} discharges into what you touch. Metal and water carry it on.`, ...TIERS.slice(0, TIERS.findIndex((t) => t.rules === r) + 1).flatMap((t) => t.rules.lines)];
+    return ['One straw figure lights at a time. Reach it with a discharge.', `${keyLabel('secondary')} runs a discharge to where you aim. Metal and water carry it on.`, ...TIERS.slice(0, TIERS.findIndex((t) => t.rules === r) + 1).flatMap((t) => t.rules.lines)];
   },
   cue: () => (current ? 'Strike' : 'Watch the figures'),
   position: [STATION.x, STATION.y, STATION.z],

@@ -144,13 +144,14 @@ console.log('striking posts');
 await api((g) => g.loop(true));
 const posts = () => api((g) => g.posts());
 const fill = () => api((g) => { g.game.techniques.resource = g.game.techniques.def.resource.max; });
-const click = async () => { await page.mouse.move(640, 360); await page.mouse.down(); await page.mouse.up(); };
+// The key each Technique strikes with: Electro's discharge is its right click.
+const click = async () => { const button = (await api((g) => g.game.techniques.def.strikes)) === 'secondary' ? 'right' : 'left'; await page.mouse.move(640, 360); await page.mouse.down({ button }); await page.mouse.up({ button }); };
 const waitFor = (fn, arg, timeout = 8000) => page.waitForFunction(new Function('a', `return (${fn.toString()})(window.game, a);`), arg, { polling: 'raf', timeout }).then(() => true, () => false);
 // Stands 1.6 m from the lit post on the line from the mark (inside the
 // shortest reach, Kinetic Release's) and faces its chest. Walking there is
 // the player's part; the check is about what the drill scores.
 const faceLit = async () => api((g) => {
-  const v = g.posts(); const s = v.spots[v.lit]; const m = v.station;
+  const v = g.posts(); if (v.lit < 0) return; const s = v.spots[v.lit]; const m = v.station;
   const dx = m[0] - s[0], dz = m[2] - s[2], d = Math.hypot(dx, dz);
   const at = [s[0] + dx / d * 1.6, 0, s[2] + dz / d * 1.6];
   g.teleport(at);

@@ -39,8 +39,11 @@ const slot = (s: 'primary' | 'secondary') => techUi.slots.value[s];
 const wagerSlot = () => KEY_SLOTS.find((k) => !!techUi.slots.value[k].wager) ?? null;
 // The Technique stores what it absorbs instead of spending what it holds (Recoil).
 const stores = (g: Game) => !g.techniques.def.resource.startsFull;
-// The secondary is held (Recoil's brace), or met at the moment it lands (Electro's conversion).
-const held = (g: Game) => { const p = g.techniques.pactFor('secondary'); return p ? restriction(p, 'duration') === 'held' : !!g.techniques.def.effects.hold; };
+// The key the Technique strikes with, and the other, its reserve.
+const strike = (g: Game) => g.techniques.def.strikes ?? 'primary';
+const reserve = (g: Game) => (strike(g) === 'primary' ? 'secondary' : 'primary');
+// The reserve is held (Recoil's brace), or met at the moment it lands (Electro's conversion).
+const held = (g: Game) => { const p = g.techniques.pactFor(reserve(g)); return p ? restriction(p, 'duration') === 'held' : !!g.techniques.def.effects.hold; };
 
 const STEPS: Step[] = [
   {
@@ -55,15 +58,15 @@ const STEPS: Step[] = [
   },
   {
     id: 'primary', title: 'Your Technique', jp: '技',
-    line: () => `${cap(keyLabel('primary'))} fires ${slot('primary').name} where you aim.`,
-    done: (_g, ev) => ev.has('primary'),
+    line: (g) => `${cap(keyLabel(strike(g)))} fires ${slot(strike(g)).name} where you aim.`,
+    done: (g, ev) => ev.has(strike(g)),
   },
   {
     id: 'reserve', title: 'Reserve', jp: '蓄',
     line: (g) => stores(g)
-      ? `${held(g) ? `Hold ${keyPhrase('secondary')} as the crate falls` : `${cap(keyLabel('secondary'))} as the crate reaches you`}. ${slot('secondary').name} stores the blow in your ${g.techniques.def.resource.name}.`
-      : `${cap(keyLabel('secondary'))} fires ${slot('secondary').name}. It spends your ${g.techniques.def.resource.name}, the bar under your health.`,
-    done: (g, ev) => (stores(g) ? ev.has('absorbed') : ev.has('secondary')),
+      ? `${held(g) ? `Hold ${keyPhrase(reserve(g))} as the crate falls` : `${cap(keyLabel(reserve(g)))} as the crate reaches you`}. ${slot(reserve(g)).name} stores the blow in your ${g.techniques.def.resource.name}.`
+      : `${cap(keyLabel(reserve(g)))} fires ${slot(reserve(g)).name}. It spends your ${g.techniques.def.resource.name}, the bar under your health.`,
+    done: (g, ev) => (stores(g) ? ev.has('absorbed') : ev.has(reserve(g))),
     // Holding the brace drains a little, so a fresh student starts with enough to hold through one fall.
     enter: (g) => { if (stores(g)) g.techniques.resource = Math.max(g.techniques.resource, 0.5 * g.techniques.def.resource.max); },
     tick: (g, dt, t) => { if (stores(g)) t.dropCrates(dt); },

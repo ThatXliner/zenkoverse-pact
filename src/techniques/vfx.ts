@@ -11,11 +11,11 @@ interface Trail { mesh: THREE.Mesh; points: THREE.Vector3[]; life: number; mat: 
 interface Flash { light: PointSource; life: number; max: number; peak: number }
 interface Patch { mesh: THREE.Mesh; life: number; max: number; mat: THREE.MeshPhysicalMaterial; kind: 'frost' | 'burn' | 'fuel'; radius: number }
 interface Timer { left: number; fire(): void }
-// A bolt: a jagged line from `from` to `to`, a white core in a coloured
-// glow, redrawn on a new path every few frames for as long as it lives.
-// Three strokes drawn over each other: an ink edge, the colour, a white core.
-interface ArcLayer { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; width: number; peak: number }
-interface Arc { layers: ArcLayer[]; from: THREE.Vector3; to: THREE.Vector3; life: number; max: number; width: number; jag: number; next: number }
+// A bolt: a jagged line from `from` to `to` with forks that split off and
+// die out, redrawn on a new path every few frames for as long as it lives.
+// Two meshes: a wide additive glow under it, and the bolt itself, an ink
+// edge, the colour and a white-hot core drawn over each other in one mesh.
+interface Arc { glow: THREE.Mesh; body: THREE.Mesh; glowMat: THREE.MeshBasicMaterial; bodyMat: THREE.MeshBasicMaterial; color: THREE.Color; from: THREE.Vector3; to: THREE.Vector3; life: number; max: number; width: number; jag: number; forks: number; next: number }
 interface Held { left: number; end(): void }
 
 // The one owner of every effect's lifetime. It holds the pooled effects every
@@ -93,35 +93,41 @@ export class Vfx {
   }
 
   private dropArc(a: Arc): void {
-    for (const l of a.layers) { this.scene.remove(l.mesh); l.mesh.geometry.dispose(); l.mat.dispose(); }
+    for (const m of [a.glow, a.body]) { this.scene.remove(m); m.geometry.dispose(); }
+    a.glowMat.dispose(); a.bodyMat.dispose();
   }
 
   // An electric arc between two points: `jag` is how far the path wanders
-  // from the straight line, as a share of its length (a short hop crackles,
-  // a long one forks). It takes a new path every few frames while it lives.
-  // Drawn as the page draws lightning: an ink edge, the colour, a white core.
-  arc(from: THREE.Vector3, to: THREE.Vector3, color: number, life = 0.2, width = 0.08, jag = 0.18): void {
-    const layers = ([[INK_ARC, 2.4, 0.85, 4], [color, 1.5, 1, 5], [0xffffff, 0.55, 1, 6]] as const).map(([c, k, peak, order]) => {
-      // Light drawn over what it runs past, as the page inks a bolt over a figure.
-      const mat = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: peak, side: THREE.DoubleSide, depthWrite: false, depthTest: false, toneMapped: false });
-      const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
-      mesh.renderOrder = 20 + order;
-      mesh.frustumCulled = false;
-      this.scene.add(mesh);
-      return { mesh, mat, width: k, peak };
-    });
-    const a: Arc = { layers, from: from.clone(), to: to.clone(), life, max: life, width, jag, next: 0 };
+  // from the straight line, as a share of its length, and `forks` how many
+  // branches split off it (by its length when left out). It takes a new path
+  // every few frames while it lives. Drawn as the page draws lightning: an
+  // ink edge, the colour, a white core, and a glow that lights what it crosses.
+  arc(from: THREE.Vector3, to: THREE.Vector3, color: number, life = 0.2, width = 0.08, jag = 0.18, forks?: number): void {
+    // The oldest go first when a set piece asks for more than the frame can hold.
+    while (this.arcs.length >= MAX_ARCS) this.dropArc(this.arcs.shift()!);
+    const mesh = (mat: THREE.MeshBasicMaterial, order: number): THREE.Mesh => {
+      const m = new THREE.Mesh(new THREE.BufferGeometry(), mat);
+      m.renderOrder = order;
+      m.frustumCulled = false;
+      this.scene.add(m);
+      return m;
+    };
+    // Light drawn over what it runs past, as the page inks a bolt over a figure.
+    const glowMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: GLOW_PEAK, side: THREE.DoubleSide, depthWrite: false, depthTest: false, toneMapped: false, blending: THREE.AdditiveBlending });
+    const bodyMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, side: THREE.DoubleSide, depthWrite: false, depthTest: false, toneMapped: false });
+    const len = from.distanceTo(to);
+    const a: Arc = { glow: mesh(glowMat, 23), body: mesh(bodyMat, 24), glowMat, bodyMat, color: new THREE.Color(color), from: from.clone(), to: to.clone(), life, max: life, width, jag, forks: forks ?? (len > 2.5 ? 3 : len > 1.2 ? 2 : len > 0.5 ? 1 : 0), next: 0 };
     this.redrawArc(a);
     this.arcs.push(a);
   }
 
   private redrawArc(a: Arc): void {
     const eye = this.viewer?.camera.position ?? a.from.clone().add(new THREE.Vector3(0, 10, 0));
-    const paths = boltPaths(a.from, a.to, a.jag);
-    for (const l of a.layers) {
-      l.mesh.geometry.dispose();
-      l.mesh.geometry = boltGeometry(paths, a.width * l.width, eye);
-    }
+    const paths = boltPaths(a.from, a.to, a.jag, a.forks);
+    a.glow.geometry.dispose();
+    a.glow.geometry = boltGeometry(paths, [{ width: a.width * 3.4, color: a.color, alpha: 1 }], eye);
+    a.body.geometry.dispose();
+    a.body.geometry = boltGeometry(paths, [{ width: a.width * 2.1, color: INK, alpha: 1 }, { width: a.width * 1.35, color: a.color, alpha: 1 }, { width: a.width * 0.55, color: WHITE, alpha: 1 }], eye);
   }
 
   private dropMark(m: Mark): void { this.scene.remove(m.root); m.mat.dispose(); m.state = 'gone'; }
@@ -416,7 +422,8 @@ export class Vfx {
       // A bolt is light: it holds full, then gutters out in flickers.
       const u = a.life / a.max;
       const flicker = (u > 0.5 ? 1 : (Math.random() < 0.3 ? 0.25 : 1) * u * 2) * this.nearFade(a.from.clone().lerp(a.to, 0.5));
-      for (const l of a.layers) l.mat.opacity = l.peak * flicker;
+      a.bodyMat.opacity = flicker;
+      a.glowMat.opacity = GLOW_PEAK * flicker;
       if ((a.next -= dt) <= 0) { a.next = 0.045; this.redrawArc(a); }
     }
     for (let i = this.spikes.length - 1; i >= 0; i--) {
@@ -442,50 +449,80 @@ export class Vfx {
   }
 }
 
-const INK_ARC = 0x17110c;
+const INK = new THREE.Color(0x17110c);
+const WHITE = new THREE.Color(0xffffff);
+const GLOW_PEAK = 0.22;
+// Bolts alive at once, at most: a Closed Circuit through a crowd asks for many.
+const MAX_ARCS = 180;
+
+interface BoltPath { pts: THREE.Vector3[]; w: number }
 
 // The paths of one bolt: the main line from `a` to `b`, kinked at random
-// points off the straight line, and a fork or two off it that die out.
-function boltPaths(a: THREE.Vector3, b: THREE.Vector3, jag: number): THREE.Vector3[][] {
+// points off the straight line, and `forks` branches off it that die out,
+// some splitting once more.
+function boltPaths(a: THREE.Vector3, b: THREE.Vector3, jag: number, forks: number): BoltPath[] {
   const len = a.distanceTo(b);
-  const n = Math.max(3, Math.min(16, Math.round(len / 0.3)));
+  const n = Math.max(4, Math.min(28, Math.round(len / 0.16)));
   const dir = b.clone().sub(a).normalize();
   const side = new THREE.Vector3().crossVectors(dir, Math.abs(dir.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)).normalize();
   const up = new THREE.Vector3().crossVectors(side, dir).normalize();
   const kink = (p: THREE.Vector3, amount: number) => p.addScaledVector(side, (Math.random() - 0.5) * 2 * amount).addScaledVector(up, (Math.random() - 0.5) * 2 * amount);
   const main = [a.clone()];
-  for (let i = 1; i < n; i++) main.push(kink(a.clone().lerp(b, i / n), len * jag * Math.sin((i / n) * Math.PI) * 0.5));
+  // Lightning zigzags: each kink swings to the other side of the line from
+  // the last, by a random share of the most it may wander there.
+  let swing = Math.random() < 0.5 ? 1 : -1;
+  for (let i = 1; i < n; i++) {
+    const amount = len * jag * Math.sin((i / n) * Math.PI) * 0.5;
+    swing = -swing;
+    main.push(kink(a.clone().lerp(b, i / n), amount * 0.35).addScaledVector(side, swing * amount * (0.4 + Math.random() * 0.6)));
+  }
   main.push(b.clone());
-  const paths = [main];
-  for (let f = 0; f < (len > 1.5 ? 2 : len > 0.6 ? 1 : 0); f++) {
+  const paths: BoltPath[] = [{ pts: main, w: 1 }];
+  const branch = (from: THREE.Vector3, heading: THREE.Vector3, length: number, w: number, depth: number): void => {
+    const steps = 4;
+    const pts = [from.clone()];
+    for (let k = 1; k <= steps; k++) pts.push(kink(pts[k - 1]!.clone().addScaledVector(heading, length / steps), length * 0.18));
+    paths.push({ pts, w });
+    if (depth > 0 && Math.random() < 0.6) {
+      const turn = heading.clone().addScaledVector(side, (Math.random() - 0.5) * 1.8).addScaledVector(up, (Math.random() - 0.5) * 1.2).normalize();
+      branch(pts[2]!, turn, length * 0.5, w * 0.6, depth - 1);
+    }
+  };
+  for (let f = 0; f < forks; f++) {
     const at = 1 + Math.floor(Math.random() * (n - 2));
-    const fork = [main[at]!.clone()];
-    const heading = dir.clone().addScaledVector(side, (Math.random() - 0.5) * 1.6).addScaledVector(up, (Math.random() - 0.5) * 1.6).normalize();
-    for (let k = 1; k <= 3; k++) fork.push(kink(fork[k - 1]!.clone().addScaledVector(heading, len / n * 0.9), len * jag * 0.12));
-    paths.push(fork);
+    const heading = dir.clone().addScaledVector(side, (Math.random() - 0.5) * 2.2).addScaledVector(up, (Math.random() - 0.5) * 1.6).normalize();
+    branch(main[at]!, heading, len * (0.22 + Math.random() * 0.25), 0.55, 1);
   }
   return paths;
 }
 
-// Quads along each path, turned to face the eye, thinning toward a fork's end.
-function boltGeometry(paths: THREE.Vector3[][], width: number, eye: THREE.Vector3): THREE.BufferGeometry {
+// Quads along each path, turned to face the eye, thinning toward a fork's
+// end, once per layer in the order given (the last is drawn on top).
+function boltGeometry(paths: BoltPath[], layers: { width: number; color: THREE.Color; alpha: number }[], eye: THREE.Vector3): THREE.BufferGeometry {
   const pos: number[] = [];
+  const col: number[] = [];
   const idx: number[] = [];
-  paths.forEach((pts, pi) => {
-    const base = pos.length / 3;
-    for (let i = 0; i < pts.length; i++) {
-      const p = pts[i]!;
-      const d = (i < pts.length - 1 ? pts[i + 1]!.clone().sub(p) : p.clone().sub(pts[i - 1]!)).normalize();
-      // Seen from far off (the top-down camera) a bolt keeps a readable width.
-      const far = THREE.MathUtils.clamp(eye.distanceTo(p) / 6, 1, 3.2);
-      const w = width * 0.5 * far * (pi === 0 ? 1 : 0.6 * (1 - i / pts.length));
-      const s = new THREE.Vector3().crossVectors(d, eye.clone().sub(p)).normalize().multiplyScalar(w);
-      pos.push(p.x + s.x, p.y + s.y, p.z + s.z, p.x - s.x, p.y - s.y, p.z - s.z);
+  const s = new THREE.Vector3(), d = new THREE.Vector3(), to = new THREE.Vector3();
+  for (const layer of layers) {
+    for (const { pts, w: pw } of paths) {
+      const base = pos.length / 3;
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i]!;
+        if (i < pts.length - 1) d.subVectors(pts[i + 1]!, p); else d.subVectors(p, pts[i - 1]!);
+        d.normalize();
+        // Seen from far off (the top-down camera) a bolt keeps a readable width; up close (a cutscene) it thins.
+        const far = THREE.MathUtils.clamp(eye.distanceTo(p) / 6, 0.45, 2.6);
+        const w = layer.width * 0.5 * far * pw * (pw === 1 ? 1 - 0.35 * (i / pts.length) : 1 - i / pts.length);
+        s.crossVectors(d, to.subVectors(eye, p)).normalize().multiplyScalar(w);
+        pos.push(p.x + s.x, p.y + s.y, p.z + s.z, p.x - s.x, p.y - s.y, p.z - s.z);
+        for (let k = 0; k < 2; k++) col.push(layer.color.r, layer.color.g, layer.color.b, layer.alpha);
+      }
+      for (let i = 0; i < pts.length - 1; i++) { const k = base + i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
     }
-    for (let i = 0; i < pts.length - 1; i++) { const k = base + i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
-  });
+  }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
   g.setIndex(idx);
   return g;
 }

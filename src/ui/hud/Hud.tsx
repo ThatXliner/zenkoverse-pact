@@ -100,7 +100,8 @@ function Vitals({ game }: { game: Game }) {
       <Meter label="Health" jp="体" value={hp} cls={`health${hp < 0.3 ? ' low' : ''}${combatUi.mending.value ? ' mend' : ''}`} />
       <Meter label={kit.resource.name} jp={kit.glyph} value={techUi.resource.value} color={hex(kit.color)} cls="resource" />
       {strain > 0.02 && <Meter label="Strain" jp="疲" value={strain} cls="strain" />}
-      {kit.gauge && kit.gauge.value.value > 0.02 && <Meter label={kit.gauge.name} jp={kit.gauge.glyph} value={Math.min(1, kit.gauge.value.value)} cls={`gauge${kit.gauge.value.value >= 1 ? ' over' : ''}`} />}
+      {kit.gauge && kit.gauge.value.value > 0.02 && <Meter label={kit.gauge.name} jp={kit.gauge.glyph} value={Math.min(1, kit.gauge.value.value)} cls={`gauge gauge-${kit.id}${kit.gauge.value.value >= 1 ? ' over' : ''}`} />}
+      {kit.panel && <kit.panel game={game} />}
       <AuraMeter />
     </div>
   );

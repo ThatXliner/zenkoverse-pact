@@ -150,7 +150,7 @@ export function anchorPoint(g: Game, a: Anchor, out = new THREE.Vector3()): THRE
 
 // Whether an anchor has gone: a body dead, a prop broken.
 function gone(a: Anchor): boolean {
-  return (a.kind === 'body' && (!a.enemy.alive || a.enemy.disposed)) || (a.kind === 'prop' && !a.prop.alive);
+  return (a.kind === 'body' && (!a.enemy.alive || a.enemy.disposed)) || (a.kind === 'prop' && (!a.prop.alive || !!a.prop.sealed));
 }
 
 export const movable = (a: Anchor): a is Extract<Anchor, { kind: 'body' | 'prop' }> => a.kind === 'body' || a.kind === 'prop';

@@ -25,13 +25,14 @@ import { heat } from './kits/heat';
 import { tension } from './kits/tension';
 import { electro } from './kits/electro';
 import { friction } from './kits/friction';
+import { dark } from './kits/dark';
 import { GROUP_PROP, GROUP_WORLD, GROUP_ENEMY } from '../physics/world';
 import { playerActor, enemyActor } from '../cutscene/cutscene';
 import { RULES } from '../net/protocol';
 import { Wagers, darkUi } from './wagers';
 import { Declarations } from './declarations';
 
-export const KITS: Record<TechniqueId, TechniqueKit> = { recoil, shift, rime, blink, echo, heat, tension, electro, friction };
+export const KITS: Record<TechniqueId, TechniqueKit> = { recoil, shift, rime, blink, echo, heat, tension, electro, friction, dark };
 
 interface Cast { slot: KeySlot; ctx: AbilityContext; t: number; impactAt: number; duration: number; fired: boolean; held: boolean; result?: CastResult | void }
 
@@ -122,6 +123,10 @@ export class Techniques {
   reset(): void {
     this.cast_ = null;
     this.sign = SIGN_IDLE;
+    // A blow taken as the last scene ended (a defeat) is not one in the next:
+    // a Pact programmed to fire when struck would fire on the first frame.
+    this.struckNow = false;
+    this.struckRecently = 0;
     for (const k of Object.values(KITS)) k.effects.reset?.(this.game);
     this.wagers.clear();
     this.declarations.clear();

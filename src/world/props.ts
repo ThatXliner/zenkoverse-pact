@@ -55,6 +55,9 @@ export interface PropInstance {
   // heated so the glow is its alone.
   glow?: THREE.MeshToonMaterial[];
   alive: boolean;
+  // Sealed out of the world (Dark Dimension): the motion it went in with,
+  // kept unchanged until it comes back. Its heat and its ice wait with it.
+  sealed?: { vel: THREE.Vector3; spin: THREE.Vector3 } | null;
 }
 
 // The glow of hot metal by its heat: dull red, cherry, orange, straw, white.
@@ -76,6 +79,10 @@ export interface PropAuthority { touch(p: PropInstance): void }
 
 export class PropSystem {
   readonly instances: PropInstance[] = [];
+  // Props sealed out of the world: not drawn, not simulated, not in
+  // `instances`, so nothing in the world can touch them. Each is still the
+  // same prop, and comes back as itself.
+  readonly sealed: PropInstance[] = [];
   private nextId = 1;
   authority: PropAuthority | null = null;
   private cache = new Map<string, { template: THREE.Object3D; half: THREE.Vector3; center: THREE.Vector3 }>();
@@ -126,11 +133,48 @@ export class PropSystem {
   remove(inst: PropInstance): void {
     if (!inst.alive) return;
     inst.alive = false;
+    inst.sealed = null;
     this.scene.remove(inst.mesh);
     this.byBody.delete(inst.body.handle);
     this.physics.remove(inst.body);
     const i = this.instances.indexOf(inst);
     if (i >= 0) this.instances.splice(i, 1);
+    const j = this.sealed.indexOf(inst);
+    if (j >= 0) this.sealed.splice(j, 1);
+  }
+
+  // Out of the world, as it is: its motion is kept, the body stops
+  // simulating, the mesh leaves the scene. Nothing is copied.
+  seal(p: PropInstance, vel?: THREE.Vector3, spin?: THREE.Vector3): boolean {
+    if (!p.alive || p.sealed) return false;
+    const v = p.body.linvel(), w = p.body.angvel();
+    p.sealed = { vel: vel?.clone() ?? new THREE.Vector3(v.x, v.y, v.z), spin: spin?.clone() ?? new THREE.Vector3(w.x, w.y, w.z) };
+    p.resonance = 0;
+    this.scene.remove(p.mesh);
+    p.body.setEnabled(false);
+    const i = this.instances.indexOf(p);
+    if (i >= 0) this.instances.splice(i, 1);
+    this.sealed.push(p);
+    return true;
+  }
+
+  // Back into the world at `at`, moving as it went in (or as `vel` says).
+  // Still in Rime's ice, it comes back held where it appears.
+  unseal(p: PropInstance, at: THREE.Vector3, vel?: THREE.Vector3, spin?: THREE.Vector3): boolean {
+    if (!p.alive || !p.sealed) return false;
+    const v = vel ?? p.sealed.vel, w = spin ?? p.sealed.spin;
+    p.sealed = null;
+    const j = this.sealed.indexOf(p);
+    if (j >= 0) this.sealed.splice(j, 1);
+    p.body.setEnabled(true);
+    p.body.setBodyType(p.frozen > 0 ? RAPIER.RigidBodyType.Fixed : RAPIER.RigidBodyType.Dynamic, true);
+    p.body.setTranslation(at, true);
+    if (p.frozen <= 0) { p.body.setLinvel(v, true); p.body.setAngvel(w, true); }
+    p.mesh.position.copy(at);
+    this.scene.add(p.mesh);
+    this.instances.push(p);
+    p.body.wakeUp();
+    return true;
   }
 
   // Frees every frozen prop at once, when the effects that froze them end.
@@ -173,7 +217,7 @@ export class PropSystem {
 
   // Heats a prop by `amount`, up to a little past white.
   warm(p: PropInstance, amount: number): void {
-    if (!p.alive) return;
+    if (!p.alive || p.sealed) return;
     p.heat = THREE.MathUtils.clamp(p.heat + amount, 0, 1.25);
     if (!p.glow) {
       p.glow = [];
@@ -195,21 +239,21 @@ export class PropSystem {
 
   // Out of the ice now: the heat has melted it.
   unfreeze(p: PropInstance): boolean {
-    if (!p.alive || p.frozen <= 0) return false;
+    if (!p.alive || p.sealed || p.frozen <= 0) return false;
     p.frozen = 0;
     p.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
     return true;
   }
 
   find(body: RAPIER.RigidBody): PropInstance | undefined { return this.byBody.get(body.handle); }
-  byId(id: number): PropInstance | undefined { return this.instances.find((p) => p.id === id); }
+  byId(id: number): PropInstance | undefined { return this.instances.find((p) => p.id === id) ?? this.sealed.find((p) => p.id === id); }
 
-  // This screen is about to move the prop.
-  touch(p: PropInstance): void { this.authority?.touch(p); }
+  // This screen is about to move the prop. A sealed prop is out of reach.
+  touch(p: PropInstance): void { if (!p.sealed) this.authority?.touch(p); }
 
   // Every push a Technique or a blow gives a prop goes through here.
   push(p: PropInstance, impulse: THREE.Vector3, torque?: THREE.Vector3): void {
-    if (!p.alive) return;
+    if (!p.alive || p.sealed) return;
     this.touch(p);
     p.body.wakeUp();
     p.body.applyImpulse(impulse, true);
@@ -217,14 +261,14 @@ export class PropSystem {
   }
 
   launch(p: PropInstance, velocity: THREE.Vector3): void {
-    if (!p.alive) return;
+    if (!p.alive || p.sealed) return;
     this.touch(p);
     p.body.setLinvel(velocity, true);
   }
 
   // Frozen in place for `seconds`: the ice holds it, then lets it fall.
   freeze(p: PropInstance, seconds: number): void {
-    if (!p.alive) return;
+    if (!p.alive || p.sealed) return;
     this.touch(p);
     p.body.setBodyType(RAPIER.RigidBodyType.Fixed, true);
     p.frozen = seconds;

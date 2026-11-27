@@ -1,5 +1,6 @@
 import type * as THREE from 'three';
 import type { ReadonlySignal } from '@preact/signals';
+import type { FunctionComponent } from 'preact';
 import type { Pact, Param, TechniqueId } from '../pacts/schema';
 import type { AbilityKind, AbilitySlot } from '../pacts/slots';
 import type { PropTrait, PropInstance } from '../world/props';
@@ -52,6 +53,9 @@ export interface TechniqueKit {
   sign: Gesture;
   traits: Partial<Record<PropTrait, (prop: PropInstance, ctx: AbilityContext) => void>>;
   drill?: DrillDef;
+  // The kit's own corner of the HUD, under its resource, when it keeps
+  // something the player must read at a glance (Dark Dimension's storage).
+  panel?: FunctionComponent<{ game: Game }>;
   cutscene: CutsceneDef;
   effects: {
     cast(ctx: AbilityContext): CastResult | void;

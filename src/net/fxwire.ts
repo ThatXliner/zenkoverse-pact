@@ -8,7 +8,7 @@ import type { FxCall } from './protocol';
 // afterimages, from the same calls. The pool is wrapped, not changed, so a
 // kit never knows whether anyone is watching. The Techniques' sounds travel
 // the same way (`sfx`) and play on the other screens at the caster.
-const MIRRORED = ['ring', 'burst', 'flash', 'trail', 'patch', 'iceSpike', 'afterimage', 'steam', 'melt', 'flames', 'arc'] as const;
+const MIRRORED = ['ring', 'burst', 'flash', 'trail', 'patch', 'iceSpike', 'afterimage', 'steam', 'melt', 'flames', 'arc', 'seam'] as const;
 type Mirrored = (typeof MIRRORED)[number];
 
 type Wire = { v: [number, number, number] } | { self: 1 } | number | string | null | Wire[];

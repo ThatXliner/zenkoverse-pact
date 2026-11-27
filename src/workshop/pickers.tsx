@@ -22,16 +22,18 @@ export const PARAM_WORDS: Record<Param, { title: string; hint: string }> = {
   duration: { title: 'Duration', hint: 'how long it lasts' },
   resource: { title: 'Resource', hint: 'what each use costs' },
   body: { title: 'Body', hint: 'what you give of yourself' },
+  storage: { title: 'Storage', hint: 'what it may keep' },
 };
 
 export const PARAM_COLOR: Record<Param | 'clause', string> = {
-  direction: '#f2a65a', range: '#7dc4ff', target: '#c6a8ff', trigger: '#ffd34d', duration: '#7dffb2', resource: '#ff6b6b', body: '#ff8fb1', clause: '#d8d2c4',
+  direction: '#f2a65a', range: '#7dc4ff', target: '#c6a8ff', trigger: '#ffd34d', duration: '#7dffb2', resource: '#ff6b6b', body: '#ff8fb1', storage: '#9aa4ff', clause: '#d8d2c4',
 };
 
 const GLYPH: Record<string, string> = {
   'trigger:still': '静', 'trigger:grounded': '地', 'trigger:airborne': '空', 'trigger:struck': '被', 'trigger:eyesClosed': '閉', 'trigger:declared': '宣', 'trigger:lowHealth': '瀕', 'trigger:fullSign': '印',
   'target:single': '一', 'target:named': '名', 'target:resonant': '響', 'target:water': '水', 'target:conductive': '導', 'target:self': '己', 'target:props': '物', 'target:people': '人',
   'resource:all': '全', 'resource:half': '半', 'resource:health': '血', 'resource:strain': '疲',
+  'storage:one': '壱', 'storage:three': '参', 'storage:light': '軽', 'storage:still': '止',
 };
 
 export function Worth({ line }: { line: ResolveLine }) {
@@ -164,6 +166,7 @@ export const PICKERS: Record<Param, (p: PickerProps) => ComponentChildren> = {
   duration: DurationTimeline,
   resource: GlyphTiles,
   body: BodyDiagram,
+  storage: GlyphTiles,
 };
 
 export function TermPicker(props: PickerProps) {

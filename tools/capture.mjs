@@ -14,7 +14,7 @@ const { url, args, stop } = await resolveTarget();
 
 const out = args.out ?? 'captures';
 const only = args.only ? new Set(args.only.split(',')) : null;
-const TECHS = ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension', 'electro', 'friction'];
+const TECHS = ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension', 'electro', 'friction', 'dark'];
 const MODAL_SIZES = [[1280, 720], [1920, 1080]];
 const HUD_SIZES = [[1280, 720], [1920, 1080], [2000, 1000], [2560, 1440]];
 mkdirSync(out, { recursive: true });
@@ -507,6 +507,44 @@ if (run('electro')) {
   await startRun('friction');
   await api((g) => { g.teleport([-11.4, 0.3, -7.4]); g.camera('top'); g.drill('friction-suriashi'); });
   for (const f of [70, 130]) { await step(f === 70 ? 70 : 60); await shot('drill', `friction-suriashi-f${f}`); }
+}
+
+// Dark Dimension in the sandbox (issue #21), top-down and over the shoulder:
+// a crate pitched out of the storehouse door in the Kaeshi drill, sealed in
+// the air, and let out again up its own heading from the straw figure.
+// `npm run check:dark` proves the rules; this is for the critic's eye.
+if (run('dark')) {
+  for (const view of ['top', 'third']) {
+    await startRun('dark');
+    await api((g, v) => { g.god(true); g.teleport([12.6, 0, -0.6]); g.camera(v); g.look(-2.4, -0.15); g.game.drills.progress['dark-kaeshi'] = 1; g.drill('dark-kaeshi'); g.step(2); g.game.input.inject('interact', true); g.step(1); g.game.input.inject('interact', false); }, view);
+    // Wait for the pitch, then seal it near the top of its arc.
+    await api((g) => {
+      const G = g.game, T = G.techniques;
+      for (let i = 0; i < 400; i++) { const v = g.kaeshi(); const p = v.crates.length && G.props.byId(v.crates.at(-1)); if (p && p.body.linvel().y < 2.4 && p.body.linvel().y > 0) break; g.step(1); }
+      const p = G.props.byId(g.kaeshi().crates.at(-1));
+      const V = G.player.position.constructor;
+      const aim = p.mesh.position.clone().addScaledVector(new V(p.body.linvel().x, 0, p.body.linvel().z), 0.25);
+      const d = aim.clone().sub(G.player.position);
+      g.look(Math.atan2(-d.x, -d.z), -0.05);
+      const n = aim.project(G.renderer.camera); G.input.mouse.x = n.x; G.input.mouse.y = n.y; g.step(2);
+      T.cast('primary', true);
+    });
+    for (const f of [8, 14, 20]) { await step(f === 8 ? 8 : 6); await shot('dark', `seal-${view}-f${f}`); }
+    await api((g) => {
+      const G = g.game, T = G.techniques, V = G.player.position.constructor;
+      for (let i = 0; i < 120 && (T.casting || g.dark().gate > 0); i++) g.step(1);
+      const k = g.dark().stored.at(-1), fig = g.kaeshi().figure;
+      if (!k || !fig) return;
+      const f = Math.hypot(k.vel[0], k.vel[2]) || 1;
+      const at = new V(fig[0] - (k.vel[0] / f) * 1.8, 0, fig[2] - (k.vel[2] / f) * 1.8);
+      const d = at.clone().sub(G.player.position);
+      g.look(Math.atan2(-d.x, -d.z), -0.3);
+      const n = at.project(G.renderer.camera); G.input.mouse.x = n.x; G.input.mouse.y = n.y; g.step(2);
+      T.cast('secondary', true);
+    });
+    for (const f of [16, 24, 32, 40]) { await step(f === 16 ? 16 : 8); await shot('dark', `summon-${view}-f${f}`); }
+    await api((g) => g.quitDrill());
+  }
 }
 
 // Fight direction (issues #10 and #11), from the top-down camera the game is

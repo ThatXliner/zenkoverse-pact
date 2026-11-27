@@ -25,6 +25,8 @@ import { lanesView } from '../drills/snareLanes';
 import { tensionView } from '../techniques/kits/tension';
 import { wetStoneView } from '../drills/wetStone';
 import { electroView } from '../techniques/kits/electro';
+import { darkView } from '../techniques/kits/dark';
+import { kaeshiView } from '../drills/kaeshi';
 import { netUi } from '../net/net';
 import { clashUi } from '../combat/clash';
 import { setSetting, type Settings } from './settings';
@@ -61,6 +63,9 @@ export interface DebugApi {
   // Electro's pond drill and the kit's own state, as the checks read them.
   wetStone(): ReturnType<typeof wetStoneView>;
   electro(): ReturnType<typeof electroView>;
+  // Dark Dimension's storage and its drill, as the checks read them.
+  dark(): ReturnType<typeof darkView>;
+  kaeshi(): ReturnType<typeof kaeshiView>;
   // Ends a running drill without judging it, back to explore.
   quitDrill(): void;
   // Heat's body heat and what it has burning, as the checks read them; `body`
@@ -223,6 +228,8 @@ export function installDebug(game: Game): void {
     lanes() { return lanesView(); },
     wetStone() { return wetStoneView(); },
     electro() { return electroView(game); },
+    dark() { return darkView(game); },
+    kaeshi() { return kaeshiView(); },
     quitDrill() { game.drills.abandon(); if (appState.value.kind === 'drill') setState({ kind: 'explore' }); },
     training() { return { passiveCeiling: MASTERY_CONFIG.passiveCeiling, regen: RULES.regen, quiet: game.combat.quiet, mending: combatUi.mending.value }; },
     workshop(open) { if (open) game.openWorkshop(); else game.closeWorkshop(); },

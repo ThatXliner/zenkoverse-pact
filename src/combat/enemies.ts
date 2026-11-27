@@ -344,6 +344,8 @@ export class Enemy {
   // Lights the Kuroda's fuel lying near `at` before his snap: fire is fire,
   // whoever's heat starts it.
   igniteFuel(at: THREE.Vector3, radius: number): number { return this.fuse?.light(at, radius) ?? 0; }
+  // Dark Dimension takes the pour (or its fresh fire) out of the world.
+  takeFuel(at: THREE.Vector3, radius: number): ('fuel' | 'fire')[] { return this.fuse?.take(at, radius) ?? []; }
 
   protected tickFrost(dt: number): void {
     if ((this.frozen > 0 && this.frozen <= dt) || (this.gripped > 0 && this.gripped <= dt)) this.thaw = THAW;

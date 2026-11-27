@@ -57,6 +57,8 @@ const cradle = f([0.05, 0.05, 0.12], [0.02, 0.06, 0.18], [0.02, 0.06, 0.18], [0.
 const clutch = f([0.55, 0.6, 0.45], [0.7, 0.85, 0.6], [0.72, 0.88, 0.62], [0.74, 0.9, 0.62], [0.78, 0.9, 0.6]);
 // Fingers pressed out flat and wide, as on a wall: the whole palm and every pad in contact.
 const flatSplay = f([0.0, -0.05, -0.05], [-0.05, 0, 0], [-0.05, 0, 0], [-0.05, 0, 0], [-0.05, 0, 0]);
+// Thumb and index out at a right angle, the rest curled: one corner of a frame.
+const corner = f([0, 0, 0], [0, 0, 0], [1, 1, 0.9], [1, 1, 0.9], [1, 1, 0.95]);
 
 export const POSES = {
   // Idle: low in the corners, thumb side up and turned in a little, the
@@ -171,6 +173,26 @@ export const POSES = {
   heave: { pos: [0.17, -0.02, -0.33], rot: [1.1, 0.5, -0.85], fingers: clutch, spread: 0.05 },
   hookLock: { pos: [0.03, -0.24, -0.38], rot: [1.3, 0.1, -1.55], fingers: clutch, spread: 0.02 },
   hookPull: { pos: [0.075, -0.235, -0.38], rot: [1.25, 0.2, -1.5], fingers: clutch, spread: 0.02 },
+  // Dark Dimension. `seamDraw` raises the sword seal high and out to the
+  // right; `seamCut` draws it down and across, cutting a seam in the air;
+  // `keyTurn` closes the fist on it and turns it palm up, as a key turns.
+  // `pocketReach` pinches at nothing beside the head; `unveil` throws the
+  // hand out palm down and open, letting go. `ledger` holds the left palm up
+  // like an open book and `tally` points down into it. `doorsGrip` sets the
+  // backs of the curled hands together at the sternum; `doorsWide` throws
+  // them apart, palms out, as double doors open. The sign makes a frame of
+  // thumbs and forefingers (`frame`), and turns it a quarter (`frameTurn`).
+  seamDraw: { pos: [0.24, -0.04, -0.42], rot: [0.95, 0.15, -1.45], fingers: point2, spread: 0 },
+  seamCut: { pos: [-0.02, -0.31, -0.45], rot: [0.25, 0.65, -1.3], fingers: point2, spread: 0 },
+  keyTurn: { pos: [0.07, -0.21, -0.48], rot: [0.2, 0.3, -3.0], fingers: fist, spread: 0 },
+  pocketReach: { pos: [0.26, -0.07, -0.29], rot: [1.0, -0.2, -1.0], fingers: pinch, spread: 0.05 },
+  unveil: { pos: [0.1, -0.2, -0.5], rot: [-0.25, 0.25, 0.1], fingers: open, spread: 0.55 },
+  ledger: { pos: [0.13, -0.28, -0.38], rot: [0.25, 0.35, -2.95], fingers: open, spread: 0.15 },
+  tally: { pos: [0.06, -0.2, -0.4], rot: [-0.9, 0.4, -1.5], fingers: point1, spread: 0 },
+  doorsGrip: { pos: [0.05, -0.23, -0.4], rot: [1.2, -0.35, -0.1], fingers: claw, spread: 0.2 },
+  doorsWide: { pos: [0.36, -0.13, -0.37], rot: [1.3, -0.5, 0.3], fingers: open, spread: 0.5 },
+  frame: { pos: [0.08, -0.17, -0.42], rot: [1.3, 0.1, -0.3], fingers: corner, spread: 0.6 },
+  frameTurn: { pos: [0.09, -0.2, -0.42], rot: [1.3, 0.1, -1.6], fingers: corner, spread: 0.6 },
 } satisfies Record<string, HandPose>;
 
 export type PoseName = keyof typeof POSES;

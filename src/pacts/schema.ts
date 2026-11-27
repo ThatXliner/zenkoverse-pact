@@ -6,8 +6,8 @@
 import { SLOTS, slotAccepts, slotDef, type AbilitySlot, type AbilityKind } from './slots';
 import { DECLARATIONS, DECLARE, REWARDS, FORFEITS, FORFEIT, MAX_PARTS, wagerError, upgradeWager, type WagerTerms } from './wager';
 
-export type TechniqueId = 'recoil' | 'shift' | 'rime' | 'blink' | 'echo' | 'heat' | 'tension' | 'electro' | 'friction';
-export type Param = 'direction' | 'range' | 'target' | 'trigger' | 'duration' | 'resource' | 'body';
+export type TechniqueId = 'recoil' | 'shift' | 'rime' | 'blink' | 'echo' | 'heat' | 'tension' | 'electro' | 'friction' | 'dark';
+export type Param = 'direction' | 'range' | 'target' | 'trigger' | 'duration' | 'resource' | 'body' | 'storage';
 
 export type Direction = 'front' | 'declared' | 'ground' | 'line' | 'behind' | 'loosen';
 export type RangeValue = 'touch' | 'short' | 'medium' | 'long';
@@ -16,6 +16,8 @@ export type TriggerValue = 'still' | 'grounded' | 'airborne' | 'struck' | 'eyesC
 export type DurationValue = 'instant' | 'brief' | 'held' | 'sustained';
 export type ResourceValue = 'all' | 'half' | 'health' | 'strain';
 export type BodyValue = 'bothHands' | 'noMove' | 'noDash' | 'eyes' | 'palmContact' | 'maxHealth' | 'barefoot' | 'voice';
+// What a Technique that keeps things may keep (Dark Dimension): how many, how heavy, and only what is at rest.
+export type StorageValue = 'one' | 'three' | 'light' | 'still';
 
 export type Restriction =
   | { param: 'direction'; value: Direction }
@@ -24,7 +26,8 @@ export type Restriction =
   | { param: 'trigger'; value: TriggerValue }
   | { param: 'duration'; value: DurationValue }
   | { param: 'resource'; value: ResourceValue }
-  | { param: 'body'; value: BodyValue };
+  | { param: 'body'; value: BodyValue }
+  | { param: 'storage'; value: StorageValue };
 
 export type RiskCost = 'health' | 'exhaustion' | 'seal';
 export type ProgramThen = 'activate' | 'suppress' | 'prefer';
@@ -61,6 +64,7 @@ export const PARAM_VALUES: Record<Param, readonly string[]> = {
   duration: ['instant', 'brief', 'held', 'sustained'],
   resource: ['all', 'half', 'health', 'strain'],
   body: ['bothHands', 'noMove', 'noDash', 'eyes', 'palmContact', 'maxHealth', 'barefoot', 'voice'],
+  storage: ['one', 'three', 'light', 'still'],
 };
 // Values that only make sense for one Technique's mechanism. Every other value
 // is a sacrifice any fighter can make.
@@ -70,6 +74,8 @@ const VALUE_OWNERS: Partial<Record<`${Param}:${string}`, readonly TechniqueId[]>
   // Tension's one-direction vow: it may let a fiber go, never draw it tighter.
   'direction:loosen': ['tension'],
   'target:conductive': ['electro'],
+  // Only a Technique that keeps things has anything to limit.
+  'storage:one': ['dark'], 'storage:three': ['dark'], 'storage:light': ['dark'], 'storage:still': ['dark'],
 };
 
 export function valuesFor(param: Param, technique: TechniqueId): readonly string[] {
@@ -77,7 +83,7 @@ export function valuesFor(param: Param, technique: TechniqueId): readonly string
 }
 
 export const RISK_COSTS: readonly RiskCost[] = ['health', 'exhaustion', 'seal'];
-export const TECHNIQUE_IDS: readonly TechniqueId[] = ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension', 'electro', 'friction'];
+export const TECHNIQUE_IDS: readonly TechniqueId[] = ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension', 'electro', 'friction', 'dark'];
 
 export interface Validation { ok: boolean; errors: string[] }
 

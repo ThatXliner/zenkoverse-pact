@@ -6,7 +6,7 @@ A proof of concept of the Zenkoverse power system as a game: one dojo compound a
 
 ## What is in it
 
-- **Nine Techniques**: Recoil, Shift, Rime, Blink, Echo, Heat, Tension, Electro, Friction. Each starts raw: one imprecise primitive and the baseline conscious-activation Pact.
+- **Ten Techniques**: Recoil, Shift, Rime, Blink, Echo, Heat, Tension, Electro, Friction, Dark Dimension. Each starts raw: one imprecise primitive and the baseline conscious-activation Pact.
 - **Pacts** are authored in the Workshop against the Technique's parameters (direction, range, target, trigger, duration, resource, body). The grant is a qualitative change to the Ability. Resolve is estimated by the engine from the real capability surrendered, your other Pacts, and how you play. Risk, Wager, Sunset and Programming are clause types. A Wager is tuned, not just picked: how hard the call is, which rewards it pays and how the stake splits between them, and what it puts up and how much. Its stake comes only from real doubt, measured from your own casts at that setting, and real loss. Inscribing is permanent, behind a hold-to-confirm.
 - **Training** is gameplay. Drills refine mastery stats; as Activation rises the hand sign shortens until activation is silent. Alt performs the full sign deliberately for a boost. Ordinary play fills a stat to 40 at most; the drills take it the rest of the way, so a skilled newcomer can catch up in minutes. The Striking Posts east of the sparring ring train landing signed blows, for any Technique, in four short tiers.
 - **Health comes back** a few seconds after a fight, away from enemies. Not during an encounter or the rooftop trial.

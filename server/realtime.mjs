@@ -37,7 +37,7 @@ const MAX_PROP_ID = 4095;
 const PROP_ENTRIES = 64;
 const PROP_HITS_PER_SECOND = 40;
 const ICE_EVERY_MS = 500;
-const PROP_REST = 1, PROP_CLAIM = 4;
+const PROP_REST = 1, PROP_SEALED = 2, PROP_CLAIM = 4;
 // The kits' own world (src/net/kitsync.ts): heat in props and bodies, and
 // Tension's standing lines. Each is a snapshot a client sends a few times a
 // second at most; anything faster is dropped.
@@ -75,7 +75,7 @@ function lineWire(l) {
 // One prop pose as src/net/protocol.ts describes it, bounded, or null.
 function propWire(e) {
   if (!Array.isArray(e) || e.length !== 13 || !e.every(Number.isFinite) || propId(e[0]) === null) return null;
-  return [e[0], num(e[1], -500, 500), num(e[2], -500, 500), num(e[3], -500, 500), num(e[4], -1, 1), num(e[5], -1, 1), num(e[6], -1, 1), num(e[7], -1, 1), num(e[8], -60, 60), num(e[9], -60, 60), num(e[10], -60, 60), e[11] & (PROP_REST | PROP_CLAIM), num(e[12], 0, 30)];
+  return [e[0], num(e[1], -500, 500), num(e[2], -500, 500), num(e[3], -500, 500), num(e[4], -1, 1), num(e[5], -1, 1), num(e[6], -1, 1), num(e[7], -1, 1), num(e[8], -60, 60), num(e[9], -60, 60), num(e[10], -60, 60), e[11] & (PROP_REST | PROP_SEALED | PROP_CLAIM), num(e[12], 0, 30)];
 }
 
 export function attachRealtime(httpServer, { latency = 0, log = console.log } = {}) {
@@ -107,7 +107,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
     let room = rooms.get(code);
     if (!room) {
       if (rooms.size >= MAX_ROOMS) return null;
-      room = { code, players: new Map(), pending: new Map(), clashes: new Map(), timer: null, propOwner: new Map(), propRest: new Map(), propHp: new Map(), broken: new Set() };
+      room = { code, players: new Map(), pending: new Map(), clashes: new Map(), timer: null, propOwner: new Map(), propRest: new Map(), propHp: new Map(), broken: new Set(), propSealed: new Set() };
       room.timer = setInterval(() => tick(room), TICK_MS);
       rooms.set(code, room);
     }
@@ -265,14 +265,20 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
   // A client that left or went quiet (a background tab sends nothing) hands
   // its props to someone still playing, who carries on simulating them from
   // the poses everyone last saw, so they still come to rest as one. With
-  // nobody else playing, they fall where they are.
+  // nobody else playing, they fall where they are. What a player holds sealed
+  // (Dark Dimension) stays theirs while the tab only sleeps; once they are
+  // gone it is handed on too, and comes back into the world where they stood.
   function releaseProps(room, p) {
     const now = Date.now();
     let heir = null;
     for (const q of present(room)) if (q !== p && now - q.stateAt <= AWAY_MS && (!heir || q.id < heir.id)) heir = q;
-    for (const [prop, o] of room.propOwner) if (o === p.id) setOwner(room, prop, heir?.id ?? null);
+    for (const [prop, o] of room.propOwner) {
+      if (o !== p.id) continue;
+      if (room.propSealed.has(prop)) { if (p.ws) continue; room.propSealed.delete(prop); }
+      setOwner(room, prop, heir?.id ?? null);
+    }
   }
-  const propSnapshot = (room) => ({ rest: [...room.propRest.values()], broken: [...room.broken], owners: [...room.propOwner] });
+  const propSnapshot = (room) => ({ rest: [...room.propRest.values()], broken: [...room.broken], owners: [...room.propOwner], sealed: [...room.propSealed] });
 
   function tick(room) {
     const now = Date.now();
@@ -444,6 +450,8 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
             if (!(w[11] & PROP_CLAIM) || (!room.propOwner.has(id) && room.propOwner.size >= MAX_PROPS)) continue;
             setOwner(room, id, p.id);
           }
+          // Sealed by its owner, or back out in the world.
+          if (w[11] & PROP_SEALED) room.propSealed.add(id); else room.propSealed.delete(id);
           if (w[11] & PROP_REST) {
             setOwner(room, id, null);
             if (room.propRest.has(id) || room.propRest.size < MAX_PROPS) room.propRest.set(id, w);
@@ -467,6 +475,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
         room.propHp.delete(id);
         room.propRest.delete(id);
         room.propOwner.delete(id);
+        room.propSealed.delete(id);
         if (room.broken.size < MAX_PROPS) room.broken.add(id);
         broadcast(room, { type: 'prop-break', prop: id, by: p.id, from: vec(m.from) ?? p.state?.p ?? [0, 0, 0] });
         return;

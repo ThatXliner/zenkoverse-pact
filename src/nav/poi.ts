@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SPAWN, HALL, STORE, GATE } from '../world/compound';
 import { FIELD, FALLS, GROUNDS, GINKGO, TERRACES, SHRINE, STONE_AT, heightAt, tierY } from '../world/valleyPlan';
 import type { TutorialStepId } from '../app/state';
+import { ZONES as CITY_ZONES } from '../world/city/plan';
 
 export type PoiId = keyof typeof SPAWN;
 
@@ -73,4 +74,5 @@ export const GOALS: readonly Goal[] = [
 export const ZONE_JP: Record<string, string> = {
   hall: '道場', courtyard: '中庭', ring: '稽古場', storehouse: '蔵', gate: '門', roof: '屋上',
   valley: '谷', field: '巻藁', bridge: '橋', grounds: '鍛錬場', ginkgo: '大銀杏', falls: '滝', terraces: '棚田', meadow: '芒原', shrine: '祠',
+  ...Object.fromEntries(CITY_ZONES.map((z) => [z.id, z.jp])),
 };

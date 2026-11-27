@@ -11,6 +11,8 @@ import { dressCompound } from './dressing';
 import { buildValley } from './valley';
 import { heightAt, openness, FIELD, GROUNDS, GINKGO, FALLS, SHRINE, BRIDGE, TERRACES, tierY } from './valleyPlan';
 import { waterMaterial } from './water';
+import type { CityZoneId } from './city/plan';
+import type { FreezableWater } from './city/region';
 
 // One walled dojo compound, 48 by 40 metres inside the walls, every surface
 // hand placed. North is -z. The training hall fills the north side and its
@@ -22,7 +24,7 @@ import { waterMaterial } from './water';
 // The gate stands open onto the valley around the walls (src/world/valley.ts).
 
 export type ZoneId = 'hall' | 'courtyard' | 'ring' | 'storehouse' | 'gate' | 'roof'
-  | 'valley' | 'field' | 'bridge' | 'grounds' | 'ginkgo' | 'falls' | 'terraces' | 'meadow' | 'shrine';
+  | 'valley' | 'field' | 'bridge' | 'grounds' | 'ginkgo' | 'falls' | 'terraces' | 'meadow' | 'shrine' | CityZoneId;
 export interface Zone { id: ZoneId; min: THREE.Vector3; max: THREE.Vector3; indoors?: boolean; label: string }
 export interface Footprint { x: number; z: number; w: number; d: number; y: number }
 export interface Plaque { id: string; title: string; body: string; position: THREE.Vector3; mesh: THREE.Object3D; found: boolean }
@@ -68,6 +70,8 @@ export interface World {
   plaques: Plaque[];
   craneHook: THREE.Object3D;
   pond: { center: THREE.Vector3; radius: number; surfaceY: number };
+  // Water beyond the pond that Rime can freeze into a floor (a region's canal).
+  waters: FreezableWater[];
   // Meshes that may stand between the top-down camera and the player. A
   // mesh's `userData.cutaway` names the roof it belongs to: when one piece
   // is in the way the whole roof and what stands on it fade together.
@@ -674,6 +678,7 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   return {
     group: g, zones, footprints, plaques, craneHook: hook, occluders, onRoof,
     pond: { center: P.center, radius: P.radius, surfaceY: P.surfaceY },
+    waters: [],
     zoneAt(p) {
       // Specific places first, the roofs by height, the courtyard as the
       // ground floor's default inside the walls, the valley outside them.

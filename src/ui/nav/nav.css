@@ -55,6 +55,10 @@
 .nav-map .m-ring { fill: rgba(255,211,160,0.1); stroke: rgba(255,211,160,0.5); stroke-width: 0.3; stroke-dasharray: 0.8 0.6; }
 .nav-map .m-water { fill: url(#water); stroke: rgba(111,211,255,0.4); stroke-width: 0.3; }
 .nav-map .m-walk { fill: rgba(243,238,228,0.14); stroke: rgba(243,238,228,0.4); stroke-width: 0.2; }
+.nav-map .m-city-street { fill: rgba(30,32,40,0.38); }
+.nav-map .m-city-paving { fill: rgba(222,196,150,0.14); }
+.nav-map .m-city-rail { fill: rgba(243,238,228,0.08); stroke: rgba(243,238,228,0.35); stroke-width: 0.3; stroke-dasharray: 1.2 0.8; }
+.nav-map .m-city-stair { fill: rgba(243,238,228,0.3); }
 .nav-map .m-building { fill: rgba(243,238,228,0.12); stroke: rgba(243,238,228,0.4); stroke-width: 0.3; }
 .nav-map .m-street { font-family: var(--sans); font-size: 1.6px; letter-spacing: 0.5em; fill: rgba(243,238,228,0.45); }
 .nav-map .m-ground { fill: rgba(95,132,73,0.16); }

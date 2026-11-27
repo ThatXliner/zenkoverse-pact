@@ -77,6 +77,8 @@ export class PlayerController {
     this.position.copy(p);
     this.velocity.set(0, 0, 0);
     this.push.set(0, 0, 0);
+    // A mantle under way would carry the body back to its ledge.
+    this.mantleT = 0;
     this.body.setNextKinematicTranslation({ x: p.x, y: p.y + PLAYER_HEIGHT / 2, z: p.z });
     this.body.setTranslation({ x: p.x, y: p.y + PLAYER_HEIGHT / 2, z: p.z }, true);
   }

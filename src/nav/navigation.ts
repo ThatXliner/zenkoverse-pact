@@ -77,7 +77,8 @@ export class Navigation {
       if ('poi' in t) { const p = poiById(t.poi); return { source: 'tutorial', title: p.name, subtitle: p.jp, glyph: p.glyph, position: p.at, poi: p.id }; }
       return { source: 'tutorial', title: t.title, subtitle: t.jp, glyph: '標', position: t.at };
     }
-    const goal = GOALS.find((g) => !this.unlocked.value.has(g.poi));
+    // The goals are the compound's; in the city ward on its own there are none.
+    const goal = this.game.city ? undefined : GOALS.find((g) => !this.unlocked.value.has(g.poi));
     if (!goal) return null;
     const p = poiById(goal.poi);
     return { source: 'goal', title: goal.title, subtitle: `${p.jp} · ${p.name}`, glyph: p.glyph, position: p.at, poi: p.id };

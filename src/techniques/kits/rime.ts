@@ -4,6 +4,7 @@ import { signGesture, gestureSet, rangeFor, hitCone, propsInCone } from './share
 import type { Pact } from '../../pacts/schema';
 import { opening, blow, type CutsceneDef } from '../../cutscene/cutscene';
 import { RAPIER } from '../../physics/world';
+import type { FreezableWater } from '../../world/city/region';
 import { toon } from '../../render/materials';
 
 const COLOR = 0x9fe8ff;
@@ -77,6 +78,25 @@ export function meltPond(): boolean {
   return true;
 }
 
+// A canal freezes where the frost lands: a block of ice across the channel,
+// wall to wall, heaped up to a step below the walk so a body can climb on
+// from the water or off onto the walk. Each freeze lays its own block.
+function freezeChannel(g: import('../../app/game').Game, w: Extract<FreezableWater, { kind: 'channel' }>, x: number, radius: number, seconds: number): void {
+  const half = radius + 1.5, top = w.surfaceY + 0.6, bottom = w.surfaceY - 0.25;
+  const cx = THREE.MathUtils.clamp(x, w.x0 + half, w.x1 - half), cz = (w.z0 + w.z1) / 2, depth = w.z1 - w.z0;
+  const body = g.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(cx, (top + bottom) / 2, cz));
+  g.physics.world.createCollider(RAPIER.ColliderDesc.cuboid(half, (top - bottom) / 2, depth / 2), body);
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(half * 2, top - bottom, depth), toon(0xdff6ff, { transparent: true, opacity: 0.92 }));
+  slab.position.set(cx, (top + bottom) / 2, cz);
+  g.renderer.scene.add(slab);
+  g.vfx.until(seconds, () => {
+    slab.removeFromParent();
+    slab.geometry.dispose();
+    (slab.material as THREE.Material).dispose();
+    g.physics.world.removeRigidBody(body);
+  });
+}
+
 function freezeArea(g: import('../../app/game').Game, center: THREE.Vector3, radius: number, potency: number, pin: boolean, seconds: number): number {
   let hits = 0;
   // The frost lies on the floor it hits; over the pond, on the water's level, not its bed.
@@ -100,6 +120,11 @@ function freezeArea(g: import('../../app/game').Game, center: THREE.Vector3, rad
     g.audio.play('rime.freeze', { at: center });
     // Online the floor is in everyone's world, so anyone can stand on it.
     g.net?.ice(seconds + 4);
+  }
+  for (const w of g.world.waters) {
+    if (w.kind !== 'channel' || center.x < w.x0 || center.x > w.x1 || center.z < w.z0 - radius * 0.5 || center.z > w.z1 + radius * 0.5 || center.y > w.surfaceY + 3) continue;
+    freezeChannel(g, w, center.x, radius, seconds + 4);
+    g.audio.play('rime.freeze', { at: center });
   }
   g.vfx.burst(center.clone().add(new THREE.Vector3(0, 0.3, 0)), 12, 'shard', 5);
   g.audio.play('rime.stitch', { at: center });

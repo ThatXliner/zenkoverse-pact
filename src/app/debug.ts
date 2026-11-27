@@ -29,7 +29,8 @@ import { eyeUi } from '../eyes/ui';
 
 export interface DebugApi {
   game: Game;
-  teleport(where: keyof typeof SPAWN | [number, number, number]): void;
+  // A compound spawn, `city:<spawn>` when the city is loaded, or a point.
+  teleport(where: keyof typeof SPAWN | `city:${string}` | [number, number, number]): void;
   skipTutorial(): void;
   god(on?: boolean): void;
   technique(id: TechniqueId): void;
@@ -145,7 +146,9 @@ export function installDebug(game: Game): void {
     game,
     errors,
     teleport(where) {
-      const p = Array.isArray(where) ? new THREE.Vector3(...where) : SPAWN[where].clone();
+      const city = typeof where === 'string' && where.startsWith('city:') ? game.city?.spawns[where.slice(5)] : null;
+      if (typeof where === 'string' && where.startsWith('city:') && !city) throw new Error(`no city spawn ${where}`);
+      const p = Array.isArray(where) ? new THREE.Vector3(...where) : city ? city.clone() : SPAWN[where as keyof typeof SPAWN].clone();
       game.player.teleport(p);
     },
     skipTutorial() { game.tutorial.skip(); },

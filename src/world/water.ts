@@ -14,7 +14,10 @@ const surfaceFrag = /* glsl */ `uniform float time; uniform vec3 deep; uniform v
   void main(){
     float n = n2(vW * 1.6 + vec2(time * 0.12, time * 0.07)) * 0.6 + n2(vW * 3.3 - vec2(time * 0.09, 0.0)) * 0.4;
     float band = step(0.58, n) * 0.55 + step(0.68, n) * 0.45;
-    gl_FragColor = vec4(mix(deep, light, band), 0.9);
+    // Far off, where one pixel spans a band or more, the bands settle into
+    // one even tint instead of breaking into speckle.
+    float far = smoothstep(0.1, 0.4, length(fwidth(vW)));
+    gl_FragColor = vec4(mix(mix(deep, light, band), mix(deep, light, 0.28), far), 0.9);
   }`;
 
 export function waterMaterial(deep: number, light: number): THREE.ShaderMaterial {

@@ -36,6 +36,9 @@ const VIEW = {
   eye: new THREE.Vector3(0, -0.06, -0.18),
 };
 const FLIP = new THREE.Quaternion(0, 1, 0, 0);
+const WHITE = new THREE.Color(0xffffff);
+// The string figure's threads, right fingertip to left, crossed.
+const STRING_PAIRS: readonly [Finger, Finger][] = [['thumb', 'index'], ['index', 'thumb'], ['middle', 'middle'], ['ring', 'pinky'], ['pinky', 'ring']];
 
 // The sleeve shell stops a few centimetres short of the wrist with a bare
 // cut. A cuff finishes it: a hem turned back over the shell's end, covering
@@ -90,6 +93,10 @@ export class Hands {
   // Heat's body heat, 0 to 1: the skin flushes and the palms glow with it.
   heat = 0;
   private skin: THREE.MeshToonMaterial;
+  // Threads strung between the two hands' fingertips, a string figure in
+  // the Technique's colour (Tension). A kit asks for them each frame it
+  // wants them (`string`); they ease in and out on their own.
+  private strings = { want: 0, now: 0, mesh: null as THREE.Mesh | null };
   // A beat of Technique-coloured light on the hands, set by
   // the full sign on its seal and release keys and decaying over a few frames.
   private pulseT = 0;
@@ -152,6 +159,48 @@ export class Hands {
       claws.push(claw);
     }
     return claws;
+  }
+
+  // Shows the string figure for this frame, at `amount` (0 to 1).
+  string(amount: number): void { this.strings.want = Math.max(this.strings.want, amount); }
+
+  // Each thread runs from a right fingertip to a left one, crossed as a
+  // cat's cradle is, drawn as a flat ribbon turned to the eye.
+  private drawStrings(dtc: number): void {
+    const st = this.strings;
+    st.now += (st.want - st.now) * (1 - Math.exp(-(st.want > st.now ? 14 : 6) * dtc));
+    st.want = 0;
+    if (st.now < 0.02) { if (st.mesh) st.mesh.visible = false; return; }
+    if (!st.mesh) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(STRING_PAIRS.length * 4 * 3), 3));
+      const idx: number[] = [];
+      for (let i = 0; i < STRING_PAIRS.length; i++) idx.push(i * 4, i * 4 + 1, i * 4 + 2, i * 4 + 2, i * 4 + 1, i * 4 + 3);
+      geo.setIndex(idx);
+      st.mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: this.color, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+      st.mesh.frustumCulled = false;
+      this.root.add(st.mesh);
+    }
+    const mesh = st.mesh;
+    mesh.visible = true;
+    const mat = mesh.material as THREE.MeshBasicMaterial;
+    mat.color.copy(this.color).lerp(WHITE, 0.25);
+    mat.opacity = Math.min(1, st.now);
+    this.root.updateMatrixWorld(true);
+    const [r, l] = [this.rig.arms.r, this.rig.arms.l];
+    const pos = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), side = new THREE.Vector3(), mid = new THREE.Vector3();
+    STRING_PAIRS.forEach(([fr, fl], i) => {
+      this.root.worldToLocal(r.tips[fr].getWorldPosition(a));
+      this.root.worldToLocal(l.tips[fl].getWorldPosition(b));
+      mid.addVectors(a, b).multiplyScalar(0.5);
+      side.subVectors(b, a).cross(mid).normalize().multiplyScalar(0.0016 * (0.6 + 0.4 * st.now));
+      pos.setXYZ(i * 4, a.x - side.x, a.y - side.y, a.z - side.z);
+      pos.setXYZ(i * 4 + 1, a.x + side.x, a.y + side.y, a.z + side.z);
+      pos.setXYZ(i * 4 + 2, b.x - side.x, b.y - side.y, b.z - side.z);
+      pos.setXYZ(i * 4 + 3, b.x + side.x, b.y + side.y, b.z + side.z);
+    });
+    pos.needsUpdate = true;
   }
 
   setTechnique(def: TechniqueKit): void {
@@ -238,6 +287,8 @@ export class Hands {
       this.root.quaternion.setFromEuler(new THREE.Euler(this.inspect.pitch, this.inspect.yaw, 0, 'YXZ')).invert();
       this.root.position.set(0, 0, -0.5).sub(pivot.applyQuaternion(this.root.quaternion));
     } else { this.root.quaternion.identity(); this.root.position.set(0, 0, 0); }
+
+    this.drawStrings(dtc);
 
     const glowTarget = this.playing ? 1 : 0;
     this.glow += (glowTarget - this.glow) * (1 - Math.exp(-8 * dtc));

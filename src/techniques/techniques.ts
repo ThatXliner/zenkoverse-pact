@@ -22,13 +22,14 @@ import { rime } from './kits/rime';
 import { blink } from './kits/blink';
 import { echo } from './kits/echo';
 import { heat } from './kits/heat';
+import { tension } from './kits/tension';
 import { GROUP_PROP, GROUP_WORLD, GROUP_ENEMY } from '../physics/world';
 import { playerActor, enemyActor } from '../cutscene/cutscene';
 import { RULES } from '../net/protocol';
 import { Wagers, darkUi } from './wagers';
 import { Declarations } from './declarations';
 
-export const KITS: Record<TechniqueId, TechniqueKit> = { recoil, shift, rime, blink, echo, heat };
+export const KITS: Record<TechniqueId, TechniqueKit> = { recoil, shift, rime, blink, echo, heat, tension };
 
 interface Cast { slot: KeySlot; ctx: AbilityContext; t: number; impactAt: number; duration: number; fired: boolean; held: boolean; result?: CastResult | void }
 
@@ -297,7 +298,8 @@ export class Techniques {
     this.resource = Math.max(0, this.resource - cost.resource);
     if (cost.health > 0) g.combat.hurtPlayer(cost.health, { self: true });
     this.strain = Math.min(1, this.strain + cost.strain);
-    const gestureSet = this.def.gestures[kind] ?? this.def.gestures.primary!;
+    // A shape with a gesture or a wind-up cue of its own plays it; the rest play their kind's.
+    const gestureSet = this.def.gestures[shape] ?? this.def.gestures[kind] ?? this.def.gestures.primary!;
     const gesture = pick(gestureSet, variant);
     // Inside an open aura field the player senses and acts faster (issue #4).
     const speed = (1 + g.mastery.get(this.def.id, 'speed') * 0.7) * (variant === 'long' ? 1 : 1.15) * g.aura.castSpeed;
@@ -306,13 +308,14 @@ export class Techniques {
     const cut = kind === 'max' && g.cutscenes.active;
     if (!cut) this.perform(gesture, speed);
     this.cast_ = { slot, ctx, t: 0, impactAt: gesture.impactAt / speed, duration: gesture.duration / speed, fired: false, held };
-    if (!cut) g.audio.play(this.def.audio[kind], { pitch: variant === 'none' ? 1.15 : 1 });
+    if (!cut) g.audio.play(this.def.audio[shape] ?? this.def.audio[kind], { pitch: variant === 'none' ? 1.15 : 1 });
     this.cooldown[slot] = KIND_DEFS[kind].cooldown;
     if (kind === 'max') this.charge = 0;
     ctx.wagered = this.wagers.declare(pact, ctx);
     // A Maximum Output's cutscene letters its own title.
     const shout = kind !== 'max' && this.declarations.cast(pact, ctx.wagered);
-    g.net?.cast(kind, kind === 'max' ? this.def.cutscene.title.en : pact?.name ?? `Raw ${this.def.primitive.name}`, variant, speed, shout);
+    // The others play the gesture by its key: the shape's own, else the kind's.
+    g.net?.cast(kind !== 'max' && this.def.gestures[shape] ? shape : kind, kind === 'max' ? this.def.cutscene.title.en : pact?.name ?? `Raw ${this.def.primitive.name}`, variant, speed, shout);
     g.book.observe('movingWhileCasting', g.player.planarSpeed.value > 0.5 ? 1 : 0);
     g.book.observe('airborneFraction', g.player.grounded ? 0 : 1);
     g.book.observe('auraReliance', g.aura.open ? 1 : 0);

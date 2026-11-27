@@ -403,7 +403,7 @@ button.ph.on { background: var(--c); color: var(--ink); border-bottom-color: tra
   .sheet > footer .kbd-hint { display: none; }
   .pause-menu button { font-size: 17px; padding: 4px 14px 4px 10px; }
 }
-@media (max-width: 1100px) { .ws { grid-template-columns: 1fr; } .ws-sheet > header { grid-template-columns: 1fr; } .ws-sheet > header .lede { justify-self: start; text-align: left; } .cards { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); } }
+@media (max-width: 1100px) { .ws { grid-template-columns: 1fr; } .ws-sheet > header { grid-template-columns: 1fr; } .ws-sheet > header .lede { justify-self: start; text-align: left; } .cards { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); } .card { min-height: 0; padding: 16px 14px 14px; } .card p { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; } }
 /* The Workshop on a phone: the Pact list becomes one scrolling row of tabs
    above the editor, the choices fall into two columns, and the footer wraps. */
 @media (max-width: 760px) {

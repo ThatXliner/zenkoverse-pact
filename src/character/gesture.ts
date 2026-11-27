@@ -61,6 +61,16 @@ const STAGED: Partial<Record<PoseName, { pos: [number, number, number]; rot?: [n
   twinPalm: { pos: [0.07, -0.26, -0.78] },
   sealRubUp: { pos: [0.03, -0.22, -0.3] },
   sealRubDown: { pos: [0.03, -0.31, -0.3] },
+  threadPinch: { pos: [0.22, -0.3, -0.32] },
+  threadWind: { pos: [0.34, -0.12, 0.02] },
+  threadCast: { pos: [0.1, -0.24, -0.82] },
+  drawFront: { pos: [0.08, -0.22, -0.8] },
+  drawBack: { pos: [0.3, -0.18, 0.08] },
+  drawRelease: { pos: [0.5, -0.12, 0.18] },
+  slackDrop: { pos: [0.34, -0.62, -0.4] },
+  cradle: { pos: [0.1, -0.3, -0.36] },
+  cradleWide: { pos: [0.5, -0.28, -0.32] },
+  drawYank: { pos: [0.28, -0.56, 0.08] },
 };
 const BODY_POSES = Object.fromEntries(Object.entries(POSES).map(([name, pose]) => {
   const st = STAGED[name as PoseName];

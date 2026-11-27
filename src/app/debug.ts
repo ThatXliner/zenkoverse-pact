@@ -16,6 +16,8 @@ import { MASTERY_CONFIG } from '../mastery/mastery';
 import { postsView } from '../drills/strikingPosts';
 import { heatState, setBodyHeat, quenchView } from '../techniques/kits/heat';
 import { freezePond } from '../techniques/kits/rime';
+import { lanesView } from '../drills/snareLanes';
+import { tensionView } from '../techniques/kits/tension';
 import { netUi } from '../net/net';
 import { clashUi } from '../combat/clash';
 import { setSetting, type Settings } from './settings';
@@ -44,6 +46,9 @@ export interface DebugApi {
   drill(id: DrillId): void;
   // The striking posts as the checks read them: which post is lit, how long it has been, where they stand.
   posts(): ReturnType<typeof postsView>;
+  // Tension's lines as the checks read them, and the Snare Lanes' runners.
+  tension(): ReturnType<typeof tensionView>;
+  lanes(): ReturnType<typeof lanesView>;
   // Ends a running drill without judging it, back to explore.
   quitDrill(): void;
   // Heat's body heat and what it has burning, as the checks read them; `body`
@@ -171,6 +176,8 @@ export function installDebug(game: Game): void {
     posts() { return postsView(); },
     ice(seconds) { freezePond(game, seconds); },
     heat(body) { if (body !== undefined) setBodyHeat(body); return { ...heatState(), quench: quenchView() }; },
+    tension() { return tensionView(game); },
+    lanes() { return lanesView(); },
     quitDrill() { game.drills.abandon(); if (appState.value.kind === 'drill') setState({ kind: 'explore' }); },
     training() { return { passiveCeiling: MASTERY_CONFIG.passiveCeiling, regen: RULES.regen, quiet: game.combat.quiet, mending: combatUi.mending.value }; },
     workshop(open) { if (open) game.openWorkshop(); else game.closeWorkshop(); },

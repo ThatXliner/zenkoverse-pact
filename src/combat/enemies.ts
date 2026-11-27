@@ -279,15 +279,18 @@ export class Enemy {
     this.yaw += diff * (1 - Math.exp(-rate * dt));
   }
 
-  // Holds this body in ice for up to `seconds`. A freeze doesn't stack on
-  // one still holding, and a chain of them runs out: see `chill`.
-  freeze(seconds: number): void {
-    if (this.frozen > 0 || this.thaw > 0) return;
+  // Holds this body in place for up to `seconds`: ice, or a line round its
+  // legs. Every hold goes through here. A hold doesn't stack on one still
+  // holding, and a chain of them runs out: see `chill`. Returns the seconds
+  // it actually holds, 0 when it doesn't take.
+  freeze(seconds: number): number {
+    if (this.frozen > 0 || this.thaw > 0) return 0;
     const n = this.chill + (this.def.boss ? 1 : 0);
-    if (n >= FREEZE_CHAIN) return;
+    if (n >= FREEZE_CHAIN) return 0;
     this.frozen = seconds * 0.5 ** n;
     this.chill++;
     this.sinceChill = 0;
+    return this.frozen;
   }
 
   // Heat melts the ice early. The body counts as just thawed, so the heat

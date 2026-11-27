@@ -82,10 +82,13 @@ function DirectionTiles({ param, technique, value, weigh, onPick }: PickerProps)
     ground: <g><ellipse cx="40" cy="44" rx="34" ry="12" class="zone" /><path d="M6 44 L74 44" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" /></g>,
     line: <path d="M37 40 L37 4 L43 4 L43 40 Z" class="zone" />,
     declared: <g><path d="M40 40 L64 14" stroke="currentColor" stroke-width="2" stroke-dasharray="4 3" /><path d="M64 14 L52 16 M64 14 L62 26" stroke="currentColor" stroke-width="2" /><text x="10" y="20" font-size="14" fill="currentColor" font-family="var(--serif)">?</text></g>,
+    // A line between two pins, let sag: it can go loose, never taut.
+    loosen: <g><path d="M10 22 Q40 70 70 22" class="zone" style={{ fill: 'none', strokeWidth: 4 }} /><path d="M10 16 L10 28 M70 16 L70 28" stroke="currentColor" stroke-width="3" stroke-linecap="round" /></g>,
   };
+  const values = valuesFor(param, technique);
   return (
-    <div class="opts tiles five">
-      {valuesFor(param, technique).map((v) => (
+    <div class={`opts tiles ${values.length > 5 ? 'six' : 'five'}`}>
+      {values.map((v) => (
         <Option key={v} on={v === value} onClick={() => onPick(v)} cls="art">
           <svg viewBox="0 0 80 80" width="64" height="64" aria-hidden="true">{art[v]}{figure}</svg>
           <span class="l">{words(param, v)}</span>

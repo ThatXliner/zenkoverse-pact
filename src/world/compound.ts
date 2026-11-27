@@ -183,7 +183,7 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
     m.userData.cutaway = roof; m.userData.ghost = ghost; occluders.push(m);
   };
   // Collision only: the tall rails that keep everyone on the roofs and inside the walls.
-  const rail = (x: number, y: number, z: number, w: number, h: number, d: number): void => { physics.staticBox(new THREE.Vector3(x, y, z), new THREE.Vector3(w / 2, h / 2, d / 2)); };
+  const rail = (x: number, y: number, z: number, w: number, h: number, d: number): void => { physics.unseen.add(physics.staticBox(new THREE.Vector3(x, y, z), new THREE.Vector3(w / 2, h / 2, d / 2)).handle); };
   // A box spanning two corners.
   const span = (mat: THREE.Material, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, opts: Parameters<typeof slab>[7] = {}): THREE.Mesh => slab(mat, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0), opts);
   const point = (color: number, intensity: number, distance: number, x: number, y: number, z: number): void => { lights.add({ kind: 'point', position: new THREE.Vector3(x, y, z), color: new THREE.Color(color), intensity, distance, decay: 2 }); };

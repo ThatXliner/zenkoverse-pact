@@ -172,6 +172,25 @@ export const CUES = {
   'tension.max.blow': sfx([Y('crack', { dur: 0.12, hp: 1200 }, { gain: 0.8 }), Y('twang', { f: 110, bend: 2.5, bendDur: 0.06, dur: 1.6 }, { gain: 0.8 }), Y('boom', { f0: 110, f1: 30, dur: 1.6 }, { gain: 1.0 }), S(['knifeSlice', 'knifeSlice2'], 0.7, { pitch: 0.8 }), Y('rumble', { dur: 1.8, lp: 260 }, { gain: 0.6 })], { wet: 0.6, duck: 1 }),
   'tension.max.tail': net([Y('twang', { f: 147, bend: 1.4, bendDur: 0.2, dur: 1.8, bright: 0.6 }, { gain: 0.45 }), S(MINING, 0.4, { pitch: 0.8 }), Y('rumble', { dur: 1.4, lp: 360 }, { gain: 0.5 })], { wet: 0.5 }),
 
+  // ------------------------------------------------------------ Dark Dimension: a seam opened in space, things put away and let out
+  'dark.cast': net([S(CLOTH, 0.32, { pitch: 1.15 }), Y('tear', { dur: 0.16 }, { gain: 0.22 })]),
+  'dark.summon.cast': net([S(CLOTH, 0.3, { pitch: 0.95 }), Y('inhale', { dur: 0.2, f1: 1600 }, { gain: 0.16 })]),
+  'dark.arsenal.cast': net([S(CLOTH, 0.25, { pitch: 1.3 }), S('tick_002', 0.3, { pitch: 1.4 }), S('tick_002', 0.25, { pitch: 1.6, at: 0.07 })]),
+  'dark.seal': net([Y('hollow', { dur: 0.3 }, { gain: 0.9 }), Y('tear', { dur: 0.1 }, { gain: 0.25 }), S(SOFT_M, 0.3, { pitch: 0.6, at: 0.29 })], { wet: 0.15 }),
+  'dark.summon': net([Y('hollow', { dur: 0.36, out: 1 }, { gain: 0.9 }), Y('whoosh', { dur: 0.3, f0: 1400, f1: 260, peak: 0.1 }, { gain: 0.35 })], { wet: 0.3 }),
+  'dark.fizzle': net([Y('tear', { dur: 0.08 }, { gain: 0.18, pitch: 0.7 }), Y('hollow', { dur: 0.12, thump: 0.15 }, { gain: 0.25, pitch: 1.5 })]),
+  'dark.refuse': net([Y('hollow', { dur: 0.16, out: 1, thump: 0.3 }, { gain: 0.5, pitch: 1.3 }), S(SOFT_M, 0.3, { pitch: 1.4 })]),
+  'dark.strike': net([S(v('impactWood_heavy_', 2), 0.55, { pitch: 0.9 }), S(PUNCH_H, 0.45, { pitch: 0.85 }), Y('boom', { f0: 120, f1: 40, dur: 0.45 }, { gain: 0.5 })], { wet: 0.3, every: 0.05 }),
+  'dark.water': net([Y('splash', { size: 2.2, bubbles: 6 }, { gain: 0.9 }), Y('thud', { f: 70, dur: 0.25 }, { gain: 0.4 })], { wet: 0.35 }),
+  'dark.fire': net([Y('sizzle', { dur: 1.1, hp: 900, pops: 30 }, { gain: 0.45 }), Y('boom', { f0: 90, f1: 40, dur: 0.6 }, { gain: 0.5 }), Y('whoosh', { dur: 0.5, f0: 200, f1: 1200, peak: 0.2 }, { gain: 0.45 })], { wet: 0.35 }),
+  'dark.fuel': net([Y('splash', { size: 1.2, bubbles: 2 }, { gain: 0.5, pitch: 0.7 })]),
+  'dark.release': net([Y('hollow', { dur: 0.6, out: 1, thump: 0.9 }, { gain: 1, pitch: 0.7 }), Y('rumble', { dur: 1.0, lp: 420 }, { gain: 0.6 })], { wet: 0.45, duck: 0.4 }),
+  'dark.max.cast': sfx([Y('riser', { dur: 1.2, f0: 70, f1: 900, tone: 0.6 }, { gain: 0.4 }), Y('hollow', { dur: 1.1, thump: 0.2 }, { gain: 0.25, pitch: 0.6 })]),
+  'dark.max.charge': sfx([Y('riser', { dur: 1.0, f0: 60, f1: 1200, tone: 0.6 }, { gain: 0.45 }), Y('hollow', { dur: 1.0, thump: 0.4 }, { gain: 0.4, pitch: 0.5 })], { duck: 0.7 }),
+  'dark.max.inhale': sfx([Y('hollow', { dur: 0.45, thump: 0 }, { gain: 0.8, pitch: 0.8 }), Y('inhale', { dur: 0.4, f1: 2200 }, { gain: 0.3 })]),
+  'dark.max.blow': sfx([Y('hollow', { dur: 0.7, out: 1, thump: 1 }, { gain: 1.1, pitch: 0.6 }), S(PUNCH_H, 0.8, { pitch: 0.65 }), Y('boom', { f0: 90, f1: 28, dur: 1.6 }, { gain: 1 })], { wet: 0.55, duck: 1 }),
+  'dark.max.tail': net([Y('hollow', { dur: 0.5, out: 1, thump: 0.5 }, { gain: 0.7, pitch: 0.8 }), Y('rumble', { dur: 1.4, lp: 400 }, { gain: 0.6 })], { wet: 0.5 }),
+
   // ------------------------------------------------------------ Friction: the grip of the skin, raised or let go
   'friction.cast': net([S(CLOTH, 0.35, { pitch: 1.05 }), Y('squeak', { f: 1500, glide: 2100, dur: 0.09, rate: 52 }, { gain: 0.16 })]),
   'friction.grip': net([S(SOFT_H, 0.5, { pitch: 1.1 }), Y('squeak', { f: 2300, glide: 1700, dur: 0.12, rate: 60 }, { gain: 0.3 }), Y('thud', { f: 110, dur: 0.1 }, { gain: 0.35 }), S(CLOTH, 0.4, { pitch: 0.8 })], { wet: 0.2 }),

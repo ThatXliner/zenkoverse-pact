@@ -78,10 +78,13 @@ export type HitOpts = { from: Vec3; knock: number; lift: number };
 // One physics prop as its owner simulates it (src/net/propsync.ts):
 // [id, x, y, z, qx, qy, qz, qw, vx, vy, vz, flags, frozen seconds left].
 export type PropWire = [id: number, x: number, y: number, z: number, qx: number, qy: number, qz: number, qw: number, vx: number, vy: number, vz: number, flags: number, frozen: number];
-export const PROP_FLAG = { rest: 1, claim: 4 } as const;
+// `sealed`: the owner holds it in Dark Dimension's storage. Its entry carries
+// the bearer's position and the motion it went in with, and nobody draws it.
+export const PROP_FLAG = { rest: 1, sealed: 2, claim: 4 } as const;
 // The props as the room holds them, for a screen that joins: where the
-// props that have moved came to rest, which are broken, and who owns which.
-export interface PropSnapshot { rest: PropWire[]; broken: number[]; owners: [number, number][] }
+// props that have moved came to rest, which are broken, which are sealed
+// away, and who owns which.
+export interface PropSnapshot { rest: PropWire[]; broken: number[]; owners: [number, number][]; sealed?: number[] }
 
 // Heat a player put into the world (src/net/kitsync.ts): props as
 // [id, heat 0..1.25, seconds left on fire], bodies burning as [player id, seconds].

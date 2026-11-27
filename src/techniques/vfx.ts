@@ -17,6 +17,10 @@ interface Timer { left: number; fire(): void }
 // edge, the colour and a white-hot core drawn over each other in one mesh.
 interface Arc { glow: THREE.Mesh; body: THREE.Mesh; glowMat: THREE.MeshBasicMaterial; bodyMat: THREE.MeshBasicMaterial; color: THREE.Color; from: THREE.Vector3; to: THREE.Vector3; life: number; max: number; width: number; jag: number; forks: number; next: number }
 interface Held { left: number; end(): void }
+// A seam in space (Dark Dimension): an almond of black with a rim of colour,
+// cut open from a slit, held, and pinched shut. It faces the camera unless
+// it is given a face of its own.
+interface Seam { root: THREE.Group; mats: THREE.MeshBasicMaterial[]; life: number; max: number; w: number; h: number; normal: THREE.Vector3 | null }
 
 // The one owner of every effect's lifetime. It holds the pooled effects every
 // Technique and enemy shares (shock rings, debris, sparks, ice shards, smear
@@ -34,6 +38,8 @@ export class Vfx {
   private marks: Mark[] = [];
   private glints: Glint[] = [];
   private arcs: Arc[] = [];
+  private seams: Seam[] = [];
+  private seamGeo = almond();
   private markGeo = new THREE.PlaneGeometry(1, 1);
   private flameGeo = new THREE.ConeGeometry(0.16, 0.7, 5).translate(0, 0.35, 0);
   // Steam is drawn as a manga panel draws it: solid puffs the brush inks round,
@@ -73,7 +79,7 @@ export class Vfx {
 
   // How many effects are alive, for the checks that prove a restart leaves none.
   get live(): number {
-    return this.particles.length + this.rings.length + this.trails.length + this.flashes.length + this.patches.length + this.spikes.length + this.timers.length + this.held.length + this.marks.length + this.glints.length + this.arcs.length;
+    return this.particles.length + this.rings.length + this.trails.length + this.flashes.length + this.patches.length + this.spikes.length + this.timers.length + this.held.length + this.marks.length + this.glints.length + this.arcs.length + this.seams.length;
   }
 
   // Ends every effect now: a new run, a new Technique, or leaving a scene
@@ -90,6 +96,40 @@ export class Vfx {
     for (const m of this.marks.splice(0)) this.dropMark(m);
     for (const g of this.glints.splice(0)) { this.scene.remove(g.sprite); g.sprite.material.dispose(); }
     for (const a of this.arcs.splice(0)) this.dropArc(a);
+    for (const s of this.seams.splice(0)) this.dropSeam(s);
+  }
+
+  private dropSeam(s: Seam): void { this.scene.remove(s.root); for (const m of s.mats) m.dispose(); }
+
+  // A seam cut in space, `width` by `height` metres at its widest: the rim
+  // in `color`, the inside black. It opens from a slit in the first fifth of
+  // its life and pinches shut in the last quarter.
+  seam(center: THREE.Vector3, width: number, height: number, color: number, life = 0.5, normal?: THREE.Vector3): void {
+    const root = new THREE.Group();
+    root.position.copy(center);
+    const mats = ([[color, 1.22, 0.95, 21], [0x17110c, 1, 1, 22], [0x000000, 0.8, 1, 23]] as const).map(([c, k, peak, order]) => {
+      const mat = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: peak, side: THREE.DoubleSide, depthWrite: false, toneMapped: false });
+      const m = new THREE.Mesh(this.seamGeo, mat);
+      m.scale.set(k, k, 1);
+      m.position.z = (order - 21) * 0.004;
+      m.renderOrder = order;
+      root.add(m);
+      return mat;
+    });
+    this.scene.add(root);
+    const s: Seam = { root, mats, life, max: life, w: width, h: height, normal: normal ? normal.clone().normalize() : null };
+    this.placeSeam(s, 0);
+    this.seams.push(s);
+  }
+
+  private placeSeam(s: Seam, u: number): void {
+    const open = u < 0.2 ? 1 - Math.pow(1 - u / 0.2, 3) : u > 0.75 ? Math.pow((1 - u) / 0.25, 1.5) : 1;
+    // Cut as a line first: the length leads, the width follows.
+    s.root.scale.set(Math.max(0.01, s.h * Math.min(1, open * 1.6)), Math.max(0.01, s.w * open), 1);
+    if (s.normal) s.root.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), s.normal);
+    else if (this.viewer) s.root.quaternion.copy(this.viewer.camera.quaternion);
+    // Upright: the length of the seam runs up and down the frame.
+    s.root.rotateZ(Math.PI / 2);
   }
 
   private dropArc(a: Arc): void {
@@ -426,6 +466,14 @@ export class Vfx {
       a.glowMat.opacity = GLOW_PEAK * flicker;
       if ((a.next -= dt) <= 0) { a.next = 0.045; this.redrawArc(a); }
     }
+    for (let i = this.seams.length - 1; i >= 0; i--) {
+      const s = this.seams[i]!;
+      s.life -= dt;
+      if (s.life <= 0) { this.dropSeam(s); this.seams.splice(i, 1); continue; }
+      this.placeSeam(s, 1 - s.life / s.max);
+      const fade = this.nearFade(s.root.position);
+      s.mats.forEach((m, k) => { m.opacity = (k === 0 ? 0.95 : 1) * fade; });
+    }
     for (let i = this.spikes.length - 1; i >= 0; i--) {
       const s = this.spikes[i]!;
       s.life -= dt;
@@ -456,6 +504,15 @@ const GLOW_PEAK = 0.22;
 const MAX_ARCS = 180;
 
 interface BoltPath { pts: THREE.Vector3[]; w: number }
+
+// A unit almond (vesica), long along x: the shape of a seam cut in space.
+function almond(): THREE.BufferGeometry {
+  const shape = new THREE.Shape();
+  const n = 18;
+  for (let i = 0; i <= n; i++) { const t = (i / n) * Math.PI; shape[i === 0 ? 'moveTo' : 'lineTo'](-Math.cos(t) * 0.5, Math.sin(t) * 0.5 * Math.pow(Math.sin(t), 0.35)); }
+  for (let i = 1; i < n; i++) { const t = Math.PI - (i / n) * Math.PI; shape.lineTo(-Math.cos(t) * 0.5, -Math.sin(t) * 0.5 * Math.pow(Math.sin(t), 0.35)); }
+  return new THREE.ShapeGeometry(shape);
+}
 
 // The paths of one bolt: the main line from `a` to `b`, kinked at random
 // points off the straight line, and `forks` branches off it that die out,

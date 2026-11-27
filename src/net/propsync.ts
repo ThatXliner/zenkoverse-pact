@@ -25,6 +25,14 @@ const STIRRED = 0.25;
 
 interface Follow { pos: THREE.Vector3; quat: THREE.Quaternion; vel: THREE.Vector3; frozen: number; at: number }
 
+// A prop sealed into Dark Dimension's storage is still one prop with one
+// owner, the bearer. The bearer streams it as sealed, carried at their own
+// position with the motion it went in with; every other screen takes it out
+// of its world too. Summoned, it streams as any moving prop. If the bearer
+// leaves, it passes on like any other prop, and whoever takes it over brings
+// it back where the bearer last stood, still moving: nothing sealed is lost
+// and nothing is copied.
+
 const r3 = (x: number) => Math.round(x * 1000) / 1000;
 
 export class PropSync implements PropAuthority {
@@ -60,6 +68,8 @@ export class PropSync implements PropAuthority {
     this.follow.delete(p.id);
     this.mine.add(p.id);
     if (!f) return;
+    // Handed a prop its bearer had sealed: it comes back where they stood.
+    if (p.sealed) { p.frozen = f.frozen; this.game.props.unseal(p, f.pos, f.vel); }
     if (f.frozen > 0) { p.body.setBodyType(RAPIER.RigidBodyType.Fixed, true); p.frozen = f.frozen; return; }
     p.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
     p.body.setLinvel(f.vel, true);
@@ -69,6 +79,8 @@ export class PropSync implements PropAuthority {
   private yieldTo(p: PropInstance): void {
     this.mine.delete(p.id);
     this.claiming.delete(p.id);
+    // Sealed here but taken by someone else first: it was never ours to keep.
+    if (p.sealed) { const t = p.body.translation(); this.game.props.unseal(p, new THREE.Vector3(t.x, t.y, t.z), new THREE.Vector3()); }
     p.frozen = 0;
     if (!this.follow.has(p.id)) {
       const t = p.body.translation(), q = p.body.rotation();
@@ -82,6 +94,7 @@ export class PropSync implements PropAuthority {
     const f = this.follow.get(p.id);
     this.follow.delete(p.id);
     if (!f) return;
+    if (p.sealed) { p.frozen = f.frozen; this.game.props.unseal(p, f.pos, f.vel); return; }
     p.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
     p.body.setLinvel(f.vel, true);
   }
@@ -127,6 +140,16 @@ export class PropSync implements PropAuthority {
     for (const w of entries) {
       const p = this.game.props.byId(w[0]);
       if (!p || this.mine.has(p.id)) continue;
+      if (w[11] & PROP_FLAG.sealed) {
+        // Out of this world too, carried by its bearer.
+        if (!p.sealed) this.game.props.seal(p);
+        const f = this.follow.get(p.id) ?? { pos: new THREE.Vector3(), quat: new THREE.Quaternion(), vel: new THREE.Vector3(), frozen: 0, at: now };
+        this.follow.set(p.id, f);
+        f.pos.set(w[1], w[2], w[3]); f.quat.set(w[4], w[5], w[6], w[7]); f.vel.set(w[8], w[9], w[10]); f.frozen = w[12]; f.at = now;
+        continue;
+      }
+      // Summoned: back in the world where its bearer let it out.
+      if (p.sealed) { this.game.props.unseal(p, new THREE.Vector3(w[1], w[2], w[3]), new THREE.Vector3(w[8], w[9], w[10])); p.body.setBodyType(RAPIER.RigidBodyType.KinematicPositionBased, true); }
       if (w[11] & PROP_FLAG.rest) { this.settle(p, w); continue; }
       let f = this.follow.get(p.id);
       if (!f) {
@@ -156,6 +179,9 @@ export class PropSync implements PropAuthority {
     for (const [id] of this.follow) if (!owned.has(id)) { const p = this.game.props.byId(id); if (p) this.release(p); }
     if (!s) return;
     for (const id of s.broken) { const p = this.game.props.byId(id); this.forget(id); if (p) this.game.props.remove(p); }
+    // What another player holds sealed is out of this world from the start.
+    const sealedBy = new Set(s.sealed ?? []);
+    for (const id of sealedBy) { const p = this.game.props.byId(id); if (p && owned.get(id) !== me) this.game.props.seal(p); }
     for (const w of s.rest) { const p = this.game.props.byId(w[0]); if (p && !this.mine.has(p.id) && !owned.has(p.id)) this.settle(p, w); }
     for (const [id, o] of s.owners) this.owner(id, o, me);
   }
@@ -192,6 +218,13 @@ export class PropSync implements PropAuthority {
     for (const id of [...this.mine]) {
       const p = props.byId(id);
       if (!p) { this.forget(id); continue; }
+      if (p.sealed) {
+        // Carried with its bearer, and never at rest.
+        const at = this.game.player.position, v = p.sealed.vel;
+        out.push([id, r3(at.x), r3(at.y + 1.1), r3(at.z), 0, 0, 0, 1, r3(v.x), r3(v.y), r3(v.z), PROP_FLAG.sealed | (this.claiming.has(id) ? PROP_FLAG.claim : 0), r3(Math.max(0, p.frozen))]);
+        if (out.length >= 64) break;
+        continue;
+      }
       const dynamic = p.body.bodyType() === RAPIER.RigidBodyType.Dynamic;
       // Asleep, not just slow: a crate at the top of its arc is slow too.
       const resting = dynamic && p.body.isSleeping();
@@ -207,7 +240,13 @@ export class PropSync implements PropAuthority {
 
   // Offline again: every prop is this screen's alone.
   dispose(): void {
-    for (const id of this.follow.keys()) { const p = this.game.props.byId(id); if (p) p.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true); }
+    for (const [id, f] of this.follow) {
+      const p = this.game.props.byId(id);
+      if (!p) continue;
+      // Someone else's sealed prop comes back into this world as it was last seen.
+      if (p.sealed) this.game.props.unseal(p, f.pos, new THREE.Vector3());
+      p.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+    }
     this.follow.clear();
     this.mine.clear();
     this.claiming.clear();

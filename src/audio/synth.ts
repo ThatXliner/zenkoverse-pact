@@ -367,6 +367,22 @@ export const SYNTHS = {
     s.start(v.t);
     return dur;
   },
+  // Space closing over something (Dark Dimension): air rushing into a hole,
+  // dark noise drawn down and up in pitch, cut dead at the end with a low
+  // thump under the cut, the sound of a door shutting on a vacuum. `out` set
+  // plays it the other way: the thump first, then the air spilling out.
+  hollow(v: Voice, p: SynthParams): number {
+    const dur = n(p, 'dur', 0.32), out = n(p, 'out', 0) > 0;
+    const src = noiseSource(v, 'pink', dur);
+    const lp = filter(v, 'bandpass', (out ? 2600 : 380) * v.pitch, 1.6);
+    lp.frequency.exponentialRampToValueAtTime((out ? 300 : 3200) * v.pitch, v.t + dur);
+    if (out) src.connect(lp).connect(hit(v, n(p, 'gain', 0.45), 0.006, dur));
+    else src.connect(lp).connect(swell(v, n(p, 'gain', 0.45), dur, 0.008));
+    const thump = osc({ ...v, t: out ? v.t : v.t + dur - 0.01 }, 'sine', 70 * v.pitch, 0.22);
+    thump.frequency.exponentialRampToValueAtTime(34 * v.pitch, (out ? v.t : v.t + dur) + 0.2);
+    thump.connect(hit({ ...v, t: out ? v.t : v.t + dur - 0.01 }, n(p, 'thump', 0.6), 0.004, 0.22));
+    return dur + 0.22;
+  },
 } satisfies Record<string, (v: Voice, p: SynthParams) => number>;
 
 const plucks = new Map<string, AudioBuffer>();

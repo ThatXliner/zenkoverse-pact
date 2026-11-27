@@ -15,6 +15,7 @@
     "check:casts": "node tools/check-casts.mjs",
     "check:controls": "node tools/check-controls.mjs",
     "check:cutscenes": "node tools/check-cutscenes.mjs",
+    "check:dark": "node tools/check-dark.mjs",
     "check:effects": "node tools/check-effects.mjs",
     "check:electro": "node tools/check-electro.mjs",
     "check:online-kits": "node tools/check-online-kits.mjs",

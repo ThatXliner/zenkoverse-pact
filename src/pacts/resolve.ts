@@ -92,6 +92,10 @@ const WEIGHTS: Record<string, { base: number; usage: (t: Telemetry) => number; w
   'body:maxHealth': { base: 3.2, usage: () => 1, why: 'a piece of your body, permanently' },
   'body:barefoot': { base: 0.6, usage: () => 1, why: 'small, unless you fight in boots' },
   'body:voice': { base: 1.0, usage: () => 1, why: 'you say the words' },
+  'storage:one': { base: 2.2, usage: () => 1, why: 'one thing kept at a time' },
+  'storage:three': { base: 1.0, usage: () => 1, why: 'three things kept at most' },
+  'storage:light': { base: 1.6, usage: (t) => 0.5 + t.propUse, why: 'nothing heavier than one hand lifts' },
+  'storage:still': { base: 1.8, usage: () => 1, why: 'nothing that is still moving' },
 };
 
 // A sacrifice counts once, for the Pact that paid it first. Pacts inscribed
@@ -149,6 +153,7 @@ export function describe(r: Restriction): string {
     'duration:instant': 'for an instant', 'duration:brief': 'for a breath', 'duration:held': 'while held', 'duration:sustained': 'for as long as it lasts',
     'resource:all': 'spending everything', 'resource:half': 'spending half', 'resource:health': 'paid in health', 'resource:strain': 'paid in strain',
     'body:bothHands': 'with both hands', 'body:noMove': 'never moving', 'body:noDash': 'never dashing again', 'body:eyes': 'with eyes closed', 'body:palmContact': 'palm against the surface', 'body:maxHealth': 'a permanent piece of your health', 'body:barefoot': 'barefoot', 'body:voice': 'spoken aloud',
+    'storage:one': 'keeping one thing at a time', 'storage:three': 'keeping three things at most', 'storage:light': 'keeping only what one hand lifts', 'storage:still': 'taking only what is at rest',
   };
   return map[sacrificeTag(r)] ?? sacrificeTag(r);
 }

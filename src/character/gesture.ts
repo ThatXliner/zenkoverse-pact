@@ -88,6 +88,17 @@ const STAGED: Partial<Record<PoseName, { pos: [number, number, number]; rot?: [n
   heave: { pos: [0.22, 0.28, 0.04] },
   hookLock: { pos: [0.035, -0.26, -0.3] },
   hookPull: { pos: [0.12, -0.25, -0.3] },
+  seamDraw: { pos: [0.46, 0.12, -0.5] },
+  seamCut: { pos: [-0.18, -0.58, -0.62] },
+  keyTurn: { pos: [0.08, -0.3, -0.78] },
+  pocketReach: { pos: [0.34, 0.14, 0.02] },
+  unveil: { pos: [0.1, -0.3, -0.82] },
+  ledger: { pos: [0.14, -0.38, -0.42] },
+  tally: { pos: [0.06, -0.3, -0.44] },
+  doorsGrip: { pos: [0.04, -0.26, -0.34] },
+  doorsWide: { pos: [0.74, -0.08, -0.42] },
+  frame: { pos: [0.12, -0.2, -0.46] },
+  frameTurn: { pos: [0.13, -0.24, -0.46] },
 };
 const BODY_POSES = Object.fromEntries(Object.entries(POSES).map(([name, pose]) => {
   const st = STAGED[name as PoseName];

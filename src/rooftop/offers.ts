@@ -10,7 +10,7 @@ import type { ResolveEstimate, ResolveRead } from '../pacts/resolve';
 // the Workshop uses. Only restrictions the engine enforces are offered, so a
 // sacrifice on a card is a sacrifice the player will feel.
 
-type R = `${'direction' | 'range' | 'target' | 'trigger' | 'duration' | 'resource' | 'body'}:${string}`;
+type R = `${'direction' | 'range' | 'target' | 'trigger' | 'duration' | 'resource' | 'body' | 'storage'}:${string}`;
 
 interface Template {
   id: string;
@@ -67,6 +67,9 @@ const SPECIFIC: Template[] = [
   { id: 'clinch', name: 'Clinch', only: 'friction', kinds: ['primary'], shape: 'grip', behaviors: ['carry'], restrict: ['range:touch', 'trigger:grounded'] },
   { id: 'longglide', name: 'Long Glide', only: 'friction', kinds: ['secondary'], shape: 'slip', behaviors: ['glance'], restrict: ['duration:held', 'resource:half'] },
   { id: 'skaters', name: 'Skater\'s Line', only: 'friction', kinds: ['primary'], shape: 'railstep', behaviors: ['heel'], restrict: ['direction:line', 'target:people'] },
+  { id: 'netter', name: 'Netter\'s Hand', only: 'dark', kinds: ['primary'], shape: 'seal', behaviors: ['catch'], restrict: ['storage:one', 'trigger:grounded'] },
+  { id: 'quartermaster', name: 'Quartermaster', only: 'dark', kinds: ['primary'], shape: 'seal', restrict: ['storage:still', 'range:short'] },
+  { id: 'trapdoor', name: 'Trapdoor', only: 'dark', kinds: ['secondary'], shape: 'summon', behaviors: ['overhead'], restrict: ['direction:front', 'resource:half'] },
 ];
 
 // Two sacrifices are the same surrender when they name the same tag, or when

@@ -24,7 +24,9 @@ export const GHOST = 0x5fb893;
 const SPARK_SPEED = 13;
 const POOL = 2.3;
 
-interface Pool { at: THREE.Vector3; patch: THREE.Mesh | null; mark: Mark | null; dist: number; lit: boolean }
+interface Pool { at: THREE.Vector3; patch: THREE.Mesh | null; mark: Mark | null; dist: number; lit: boolean; litAt?: number; burn?: THREE.Mesh }
+// How long a pool burns hot enough to be sealed away still burning (Dark Dimension).
+const FLAME_SECONDS = 2.5;
 
 export class Fuse {
   private t = 0;
@@ -81,8 +83,24 @@ export class Fuse {
     if (this.done) return 0;
     let n = 0;
     for (const p of this.pools) if (!p.lit && p.patch && p.at.distanceTo(at) < radius + POOL * 0.5) { this.ignite(p); n++; }
-    if (this.pools.every((p) => p.lit)) this.done = true;
     return n;
+  }
+
+  // Dark Dimension seals what lies within `radius` of `at` out of the world:
+  // fuel still waiting goes as fuel (the spark finds nothing there), a pool
+  // just lit goes as the fire it is. What it took, pool by pool.
+  take(at: THREE.Vector3, radius: number): ('fuel' | 'fire')[] {
+    const g = this.game, out: ('fuel' | 'fire')[] = [];
+    for (let i = this.pools.length - 1; i >= 0; i--) {
+      const p = this.pools[i]!;
+      if (!p.patch || p.at.distanceTo(at) > radius + POOL * 0.5) continue;
+      if (!p.lit) { out.push('fuel'); p.mark?.cancel(); g.vfx.endPatch(p.patch, 0.15); }
+      else if (p.litAt !== undefined && this.t - p.litAt < FLAME_SECONDS && p.burn) { out.push('fire'); g.vfx.endPatch(p.burn, 0.2); }
+      else continue;
+      this.pools.splice(i, 1);
+    }
+    if (!this.pools.length) this.done = true;
+    return out;
   }
 
   // Hit out of the cast before the snap: the fuel stays, unlit and harmless.
@@ -102,7 +120,7 @@ export class Fuse {
     if (this.snapAt === null) { for (const p of this.pools) if (p.mark) p.mark.progress = Math.min(0.5, (this.t - 0.3) * 0.5); return; }
     const run = (this.t - this.snapAt) * SPARK_SPEED;
     // The line burns behind the spark.
-    const far = this.pools[this.pools.length - 1]!.dist;
+    const far = this.pools[this.pools.length - 1]?.dist ?? 0;
     while (this.burnedAlong < Math.min(run, far)) {
       const at = this.pointAt(this.burnedAlong);
       g.vfx.flames(at, 0.12, 1, 0.45);
@@ -114,7 +132,8 @@ export class Fuse {
       if (p.mark) p.mark.progress = 0.5 + 0.5 * Math.min(1, run / p.dist);
       if (run >= p.dist) this.ignite(p);
     }
-    if (this.pools.every((p) => p.lit)) this.done = true;
+    // Over once everything has gone up and the flames have died down.
+    if (this.pools.every((p) => p.lit && this.t - (p.litAt ?? 0) > FLAME_SECONDS)) this.done = true;
   }
 
   private pointAt(d: number): THREE.Vector3 {
@@ -126,12 +145,13 @@ export class Fuse {
   private ignite(p: Pool): void {
     const g = this.game, at = p.at;
     p.lit = true;
+    p.litAt = this.t;
     p.mark?.fire();
     if (p.patch) g.vfx.endPatch(p.patch, 0.4);
     g.vfx.flames(at, POOL * 0.9, 16, 1.3);
     g.vfx.flash(at.clone().add(new THREE.Vector3(0, 1, 0)), FLAME, 45, 0.45, 10);
     g.vfx.burst(at.clone().add(new THREE.Vector3(0, 0.3, 0)), 10, 'spark', 6, 0xff8a2a);
-    g.vfx.patch(at, POOL, 'burn', 20);
+    p.burn = g.vfx.patch(at, POOL, 'burn', 20);
     g.audio.play('kuroda.ignite', { at });
     // Caught in it, the player gets the held frame; seen from outside it is only fire.
     if (!this.hitPlayer && g.player.position.distanceTo(at) < POOL + 0.2) {

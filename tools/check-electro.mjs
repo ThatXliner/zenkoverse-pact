@@ -185,10 +185,8 @@ check(wetLeak > dryLeak * 4 && dryLeak > 0, `charge leaks, and far faster in wat
 
 console.log('\nRime ice carries nothing; meltwater does');
 await fresh([P.x, 0.25, P.z + 3.4], 'third');
-const frozen = await api(async (g) => {
-  try { const m = await import('/src/techniques/kits/rime.ts'); m.freezePond(g.game, 20); return true; } catch { return false; }
-});
-if (frozen) {
+await api((g) => g.ice(20));
+{
   await body([P.x + 0.9, -0.9, P.z - 0.7]);
   await api((g) => { g.game.techniques.resource = 100; });
   await face([P.x, P.y, P.z + 2.1], -0.95);
@@ -198,7 +196,7 @@ if (frozen) {
   await cast('primary'); await fire(); await step(20);
   after = await hp();
   check(after[0] === before[0], `a body under the ice is not reached through it (${before[0]} → ${after[0]})`);
-} else console.log('  (skipped: Rime\'s module is not importable from this build)');
+}
 await fresh([0, 0, 8], 'third');
 await api((g) => { g.eye('vault', { vault: 'rime' }); });
 await face([0, 0, 2]);

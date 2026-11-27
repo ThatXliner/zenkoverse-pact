@@ -12,6 +12,8 @@ export interface Settings {
   volume: number;
   music: number;
   effects: number;
+  // The bed under it all: wind, leaves, water, the room.
+  ambience: number;
   camera: CameraMode;
   invertY: boolean;
   // The small key reminder that fades in when you stand idle.
@@ -24,7 +26,7 @@ export type CutscenePlay = 'always' | 'first' | 'never';
 
 // v3: the camera gained the top-down view and it became the default.
 const KEY = 'zenko.settings.v3';
-const defaults: Settings = { sensitivity: 1, fov: 80, quality: 'high', volume: 0.8, music: 0.6, effects: 0.9, camera: 'top', invertY: false, keyHints: true, cutscenes: 'always' };
+const defaults: Settings = { sensitivity: 1, fov: 80, quality: 'high', volume: 0.8, music: 0.6, effects: 0.9, ambience: 1, camera: 'top', invertY: false, keyHints: true, cutscenes: 'always' };
 
 function load(): Settings {
   try {

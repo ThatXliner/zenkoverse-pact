@@ -195,16 +195,16 @@ console.log('volume settings persist');
 {
   await page.keyboard.press('Escape');
   await wait(300);
-  await api((g) => { g.setting('volume', 0.7); g.setting('music', 0.25); g.setting('effects', 0.45); });
+  await api((g) => { g.setting('volume', 0.7); g.setting('music', 0.25); g.setting('effects', 0.45); g.setting('ambience', 0); });
   await page.reload();
   await page.waitForFunction(() => window.game?.game?.ready, null, { timeout: 180000 });
   const v = await view();
-  check(v.volumes.master === 0.7 && v.volumes.music === 0.25 && v.volumes.effects === 0.45, `master, music and effects survive a reload: ${JSON.stringify(v.volumes)}`);
+  check(v.volumes.master === 0.7 && v.volumes.music === 0.25 && v.volumes.effects === 0.45 && v.volumes.ambience === 0, `master, music, effects and ambience survive a reload: ${JSON.stringify(v.volumes)}`);
   check(!v.unlocked, 'after a reload the mixer waits for a gesture again');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   const labels = await page.locator('.row label').allTextContents();
-  check(['Master volume', 'Music', 'Effects'].every((l) => labels.includes(l)), `the settings sheet has the three faders: ${labels.filter((l) => /volume|Music|Effects/.test(l)).join(', ')}`);
-  await api((g) => { g.setting('volume', 0.8); g.setting('music', 0.6); g.setting('effects', 0.9); });
+  check(['Master volume', 'Music', 'Effects', 'Ambience'].every((l) => labels.includes(l)), `the settings sheet has the four faders: ${labels.filter((l) => /volume|Music|Effects|Ambience/.test(l)).join(', ')}`);
+  await api((g) => { g.setting('volume', 0.8); g.setting('music', 0.6); g.setting('effects', 0.9); g.setting('ambience', 1); });
 }
 
 check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.slice(0, 5).join(' | ') : ''}`);

@@ -57,6 +57,11 @@ const castRime = () => page.evaluate(() => {
 
 console.log('a rooftop restart leaves no effects');
 await page.evaluate(() => { const g = window.game; g.technique('rime'); g.game.startRun({ skipTutorial: true }); g.step(10); });
+// The pass streams in round the compound a slice per frame and stays,
+// whatever run is under way, so the stepped frames finish it before the
+// world is counted; otherwise the count taken mid-build differs from one
+// taken after the restart by the slices built in between.
+await page.evaluate(() => { const g = window.game; for (let i = 0; i < 5000 && g.world().regions.some((r) => r.state === 'building'); i++) g.step(1); });
 await page.evaluate(() => { window.game.rooftop.begin(); window.game.step(4); });
 const fresh = await world();
 await castRime();

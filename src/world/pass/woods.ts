@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { toon } from '../../render/materials';
+import { Strokes, TONES } from '../strokes';
 import { tree, rng, type Kit, type TreeKind } from '../kit';
-import { ROUTE, SITES, walkDistance, along } from './route';
-import { GRID, GRID_X1, GRID_Z1, KNOLL, TARN, COL } from './plan';
+import { ROUTE, SITES, ROAD_HALF, walkDistance, along } from './route';
+import { GRID, GRID_X1, GRID_Z1, KNOLL, TARN, COL, ravineBed } from './plan';
 import type { Ground } from './road';
 
 // The woods over the pass: old cedars lining the stone stretches in pairs,
@@ -95,35 +95,62 @@ export function* buildWoods(k: Kit, parent: THREE.Object3D, ground: Ground, phas
     yield;
   }
 
-  // Dry silver grass on the far side's open ground and along the road's shoulders there.
-  phase('woods:grass');
-  const grassGold = toon(0xd9c27a, { side: THREE.DoubleSide }), grassGreen = toon(0xacb86a, { side: THREE.DoubleSide }), grassPlume = toon(0xf1e7cf, { side: THREE.DoubleSide });
+  // The low growth, in unlined strokes as in the valley: tufts along the
+  // road's verges with red spider lilies in drifts and wild flowers between,
+  // lilies and reeds on the creek's banks, reeds round the tarn, tufts and
+  // flowers over the open slopes, and dry silver grass on the far side's
+  // open ground and along its shoulders.
+  phase('woods:growth');
   {
-    const band = k.stretch('pass:grass', parent);
-    for (let z0 = COL.z + 6; z0 < GRID_Z1 - 4; z0 += 48) {
-    const gold: number[] = [], green: number[] = [], plumes: number[] = [];
-    for (let x = GRID.x0 + 2; x < GRID_X1 - 2; x += 2.6) for (let z = z0; z < Math.min(z0 + 48, GRID_Z1 - 4); z += 2.6) {
-      const jx = x + (rand() - 0.5) * 2.2, jz = z + (rand() - 0.5) * 2.2;
-      const w = walkDistance(jx, jz);
-      if (w < 0.6 || slope(jx, jz) > 0.9) continue;
-      const patch = Math.sin(jx * 0.09 + jz * 0.05) + Math.sin(jz * 0.11 - jx * 0.04 + 1.3);
-      if (!(patch > -0.2 && rand() < 0.55) && !(w < 3 && rand() < 0.35)) continue;
-      const y = ground(jx, jz), n = 3 + Math.floor(rand() * 3), spin = rand() * Math.PI * 2, tall = 1.0 + rand() * 0.5;
-      for (let i = 0; i < n; i++) {
-        const a = spin + (i / n) * Math.PI * 2 + rand() * 0.5, lean = 0.2 + rand() * 0.2, h = tall * (0.75 + rand() * 0.5), bw = 0.12 + rand() * 0.05;
-        const tx = jx + Math.cos(a) * lean * h, tz = jz + Math.sin(a) * lean * h, mx = jx + Math.cos(a) * lean * h * 0.45, mz = jz + Math.sin(a) * lean * h * 0.45, my = y + h * 0.45;
-        const px = -Math.sin(a) * bw, pz = Math.cos(a) * bw;
-        const leaf = rand() < 0.6 ? gold : green;
-        leaf.push(jx, y, jz, mx + px, my, mz + pz, tx, y + h, tz, jx, y, jz, tx, y + h, tz, mx - px, my, mz - pz);
-        if (rand() < 0.4) plumes.push(tx - px * 0.8, y + h - 0.5, tz - pz * 0.8, tx + px * 0.8, y + h - 0.5, tz + pz * 0.8, tx + Math.cos(a) * 0.12, y + h + 0.12, tz + Math.sin(a) * 0.12);
+    const band = k.stretch('pass:growth', parent);
+    const s = new Strokes(rand, ground);
+    const BLOOMS = [TONES.white, TONES.yellow, TONES.violet];
+    let tested = 0;
+    for (let z0 = GRID.z0; z0 < GRID_Z1 - 4; z0 += 40) {
+      for (let x = GRID.x0 + 2; x < GRID_X1 - 2; x += 1.7) for (let z = z0; z < Math.min(z0 + 40, GRID_Z1 - 4); z += 1.7) {
+        if (++tested % 80 === 0) yield;
+        const jx = x + (rand() - 0.5) * 1.6, jz = z + (rand() - 0.5) * 1.6, roll = rand();
+        const w = walkDistance(jx, jz);
+        if (w > 30 || inView(jx, jz)) continue;
+        const sl = slope(jx, jz);
+        if (sl > 0.9) continue;
+        along(jx, jz, al);
+        // Off the road's surface (and its steps), and out of the water.
+        if (al.d < ROAD_HALF + 0.25 || ground(jx, jz) < TARN.y + 0.05) continue;
+        const far = jz > COL.z + 6, tarn = Math.hypot(jx - TARN.x, jz - TARN.z) - TARN.r;
+        const bed = Math.abs(jx - 85) < 25 && jz > 150 && jz < 240 ? ravineBed(jx, jz) : null;
+        const bank = bed && bed.d > 0.9 && bed.d < 2.8 && ground(jx, jz) - bed.y < 1.2;
+        const verge = w < 2.2;
+        if (tarn > -0.6 && tarn < 1.4 && ground(jx, jz) < TARN.y + 0.5) { if (roll < 0.7) s.reeds(jx, jz, 1.0 + rand() * 0.5); continue; }
+        if (bank) {
+          if (roll < 0.3) { for (let n = 0; n < 3 + Math.floor(rand() * 4); n++) s.lily(jx + (rand() - 0.5) * 1.2, jz + (rand() - 0.5) * 1.2, 0.3 + rand() * 0.12); }
+          else if (roll < 0.55) s.reeds(jx, jz, 0.8 + rand() * 0.4);
+          else if (roll < 0.8) s.tuft(jx, jz, 0.3 + rand() * 0.2);
+          continue;
+        }
+        if (verge) {
+          // Drifts of lilies where a slow wave along the road says so.
+          const drift = Math.sin(jx * 0.21 + jz * 0.17) + Math.sin(jz * 0.09 - jx * 0.13 + 2);
+          if (drift > 1.0 && roll < 0.55) { for (let n = 0; n < 3 + Math.floor(rand() * 4); n++) s.lily(jx + (rand() - 0.5) * 0.9, jz + (rand() - 0.5) * 0.9, 0.3 + rand() * 0.12); continue; }
+          if (roll < 0.55) { for (let n = 0; n < 2 + Math.floor(rand() * 2); n++) s.tuft(jx + (rand() - 0.5) * 0.8, jz + (rand() - 0.5) * 0.8, 0.25 + rand() * 0.2, far ? TONES.dryTuft : TONES.tuft); continue; }
+          if (roll < 0.68) { const kind = BLOOMS[Math.floor(rand() * BLOOMS.length)]!; for (let n = 0; n < 3 + Math.floor(rand() * 3); n++) s.flower(jx + (rand() - 0.5) * 1.1, jz + (rand() - 0.5) * 1.1, kind, 0.15 + rand() * 0.08, 0.06); }
+          continue;
+        }
+        if (far) {
+          // Silver grass in its patches, thinner off them.
+          const patch = Math.sin(jx * 0.09 + jz * 0.05) + Math.sin(jz * 0.11 - jx * 0.04 + 1.3);
+          if (sl < 0.75 && ((patch > -0.2 && roll < 0.2) || roll < 0.04)) { s.clump(jx, jz, 1.0 + rand() * 0.5); continue; }
+          if (roll > 0.9) s.tuft(jx, jz, 0.3 + rand() * 0.2, TONES.dryTuft);
+          continue;
+        }
+        // The open slopes of the hollow: a scatter of tufts and, here and there, flowers.
+        if (sl < 0.7 && w < 16) {
+          if (roll < 0.3) { for (let n = 0; n < 1 + Math.floor(rand() * 3); n++) s.tuft(jx + (rand() - 0.5) * 0.9, jz + (rand() - 0.5) * 0.9, 0.28 + rand() * 0.2); }
+          else if (roll < 0.36) { const kind = BLOOMS[Math.floor(rand() * BLOOMS.length)]!; for (let n = 0; n < 3; n++) s.flower(jx + (rand() - 0.5) * 1.2, jz + (rand() - 0.5) * 1.2, kind, 0.15 + rand() * 0.08, 0.06); }
+        }
       }
-      if (++placed % 40 === 0) yield;
-    }
-    k.tris(band, gold, grassGold, false, true);
-    yield;
-    k.tris(band, green, grassGreen, false, true);
-    k.tris(band, plumes, grassPlume, false, true);
-    yield;
+      s.mesh(band, `pass:growth:${z0}`);
+      yield;
     }
   }
 

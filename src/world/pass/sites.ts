@@ -3,8 +3,8 @@ import { toon, paintedSign, emissive } from '../../render/materials';
 import { waterMaterial } from '../water';
 import type { Kit } from '../kit';
 import type { RegionLights, WaterLine } from '../region';
-import { ROUTE, SITES, ROAD_HALF, type Site } from './route';
-import { TARN, RAVINE, natural } from './plan';
+import { ROUTE, SITES, ROAD_HALF, walkDistance, type Site } from './route';
+import { TARN, RAVINE, groundHeight, ravineBed } from './plan';
 import type { Ground } from './road';
 
 // The places along the pass, each built by hand: two stone figures at the
@@ -59,8 +59,9 @@ export function* buildSites(k: Kit, parent: THREE.Object3D, ground: Ground, ligh
 
   phase('sites:tarn');
   // ---------------------------------------------------------------- the tarn
-  // Still water in the hollow's lowest place, reeds round its edge, a few
-  // stones at the little clearing by the road.
+  // Still water in the hollow's lowest place (the reeds round its edge grow
+  // with the rest of the low growth, src/world/pass/woods.ts), a few stones
+  // at the little clearing by the road.
   {
     const g = k.stretch('pass:tarn', parent);
     const pond = new THREE.Mesh(new THREE.CircleGeometry(TARN.r + 1.6, 40), stream);
@@ -68,19 +69,6 @@ export function* buildSites(k: Kit, parent: THREE.Object3D, ground: Ground, ligh
     pond.position.set(TARN.x, TARN.y - 0.25, TARN.z);
     pond.userData.keep = true;
     g.add(pond);
-    const reeds: number[] = [];
-    let seed = 3;
-    const r = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-    for (let i = 0; i < 70; i++) {
-      const a = r() * Math.PI * 2, d = TARN.r - 0.6 + r() * 2.4, x = TARN.x + Math.cos(a) * d, z = TARN.z + Math.sin(a) * d;
-      const y = ground(x, z);
-      if (y > TARN.y + 1.2) continue;
-      for (let b = 0; b < 4; b++) {
-        const ba = r() * Math.PI * 2, h = 0.9 + r() * 0.8, w = 0.05, tx = x + Math.cos(ba) * 0.25, tz = z + Math.sin(ba) * 0.25;
-        reeds.push(x - Math.sin(ba) * w, y, z + Math.cos(ba) * w, x + Math.sin(ba) * w, y, z - Math.cos(ba) * w, tx, y + h, tz);
-      }
-    }
-    k.tris(g, reeds, toon(C.reed, { side: THREE.DoubleSide }), false, true);
     const clearing = site('tarn');
     for (const [dx, dz, s] of [[-1.6, 1.2, 0.5], [1.9, -0.6, 0.38], [0.6, 2.2, 0.3]] as const) k.rock(g, C.stoneDark, clearing.x + dx, clearing.y + s * 0.2, clearing.z + dz, s, 0, [1.4, 0.6, 1]);
     water.push({ pts: [[TARN.x - TARN.r, TARN.z], [TARN.x + TARN.r, TARN.z]], y: TARN.y - 0.25 });
@@ -90,21 +78,27 @@ export function* buildSites(k: Kit, parent: THREE.Object3D, ground: Ground, ligh
 
   phase('sites:creek');
   // ---------------------------------------------------------------- the creek
-  // Down the ravine's floor into the tarn: a strip of painted water laid on the bed.
+  // Down the ravine's floor into the tarn: a strip of painted water laid on
+  // the bed. Where a stretch of road crosses the ravine on its bank of fill,
+  // the creek goes under it through a culvert, a dark stone-lined mouth at
+  // each foot of the bank, and is never drawn over the road.
   {
     const g = k.stretch('pass:creek', parent);
     const pts: [number, number][] = [];
-    // From below the steps (the ravine's head is under the road) down to the tarn.
-    for (let i = 1; i < RAVINE.length - 1; i++) {
+    // From the ravine's head under the steps down to the tarn.
+    for (let i = 0; i < RAVINE.length - 1; i++) {
       const [ax, az] = RAVINE[i]!, [bx, bz] = RAVINE[i + 1]!, n = Math.ceil(Math.hypot(bx - ax, bz - az) / 1.5);
       for (let s = 0; s < n; s++) pts.push([ax + ((bx - ax) * s) / n, az + ((bz - az) * s) / n]);
     }
     pts.push(RAVINE[RAVINE.length - 1]! as [number, number]);
+    // Open water where the ground is the ravine's bed, clear of the road's own ground.
+    const open = pts.map(([x, z]) => walkDistance(x, z, false) > 1.0 && groundHeight(x, z) - ravineBed(x, z).y < 0.3);
     const pos: number[] = [];
     const half = 0.9;
     for (let i = 0; i < pts.length - 1; i++) {
+      if (!open[i] || !open[i + 1]) continue;
       const [ax, az] = pts[i]!, [bx, bz] = pts[i + 1]!, l = Math.hypot(bx - ax, bz - az), nx = -(bz - az) / l * half, nz = (bx - ax) / l * half;
-      const ya = Math.max(natural(ax, az), ground(ax, az)) + 0.12, yb = Math.max(natural(bx, bz), ground(bx, bz)) + 0.12;
+      const ya = ground(ax, az) + 0.12, yb = ground(bx, bz) + 0.12;
       pos.push(ax + nx, ya, az + nz, bx - nx, yb, bz - nz, ax - nx, ya, az - nz, ax + nx, ya, az + nz, bx + nx, yb, bz + nz, bx - nx, yb, bz - nz);
     }
     const geo = new THREE.BufferGeometry();
@@ -112,8 +106,22 @@ export function* buildSites(k: Kit, parent: THREE.Object3D, ground: Ground, ligh
     const creek = new THREE.Mesh(geo, stream);
     creek.userData.keep = true;
     g.add(creek);
+    // A culvert mouth where the water meets the foot of a bank: a dark arch
+    // in a ring of stones, facing down the open water.
+    for (let i = 0; i < pts.length - 1; i++) {
+      if (open[i] === open[i + 1]) continue;
+      const [ox, oz] = open[i] ? pts[i]! : pts[i + 1]!, [ix, iz] = open[i] ? pts[i + 1]! : pts[i]!;
+      const yaw = Math.atan2(ox - ix, oz - iz);
+      const m = k.at(g, (ox + ix) / 2, ground(ox, oz), (oz + iz) / 2, yaw);
+      const arch = k.add(m, new THREE.CircleGeometry(0.75, 10, 0, Math.PI), C.iron, 0, 0.05, 0, undefined, false);
+      arch.scale.set(1.15, 1, 1);
+      for (let s = 0; s <= 6; s++) {
+        const a = (s / 6) * Math.PI;
+        k.rock(m, s % 2 ? C.stoneDark : C.stone, Math.cos(a) * 1.0, 0.05 + Math.sin(a) * 0.85, -0.05, 0.28, 0, [1, 0.8, 0.9]);
+      }
+    }
     // Stones in the bed.
-    for (let i = 3; i < pts.length - 2; i += 3) { const [x, z] = pts[i]!; k.rock(g, i % 2 ? C.stoneDark : C.stone, x + ((i * 7) % 3 - 1) * 0.7, ground(x, z) + 0.1, z, 0.4 + (i % 4) * 0.12, 0, [1.3, 0.6, 1]); }
+    for (let i = 3; i < pts.length - 2; i += 3) { if (!open[i]) continue; const [x, z] = pts[i]!; k.rock(g, i % 2 ? C.stoneDark : C.stone, x + ((i * 7) % 3 - 1) * 0.7, ground(x, z) + 0.1, z, 0.4 + (i % 4) * 0.12, 0, [1.3, 0.6, 1]); }
     water.push({ pts, y: ground(...pts[Math.floor(pts.length / 2)]!) });
     k.bake(g);
   }

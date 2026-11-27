@@ -90,14 +90,16 @@ export const PASS: RegionDef = {
     const k = new Kit(ctx.group, ctx.physics);
     const land = k.stretch('pass:land');
     ctx.phase('terrain');
-    const heights = yield* buildTerrain(k, land, ctx.phase);
+    const { heights, drawn } = yield* buildTerrain(k, land, ctx.phase);
     const ground = makeGround(heights);
     ctx.phase('road');
     yield* buildRoad(k, k.stretch('pass:road'), ground, ctx.phase);
     ctx.phase('sites');
     const sites = yield* buildSites(k, k.stretch('pass:sites'), ground, ctx.lights, ctx.phase);
     ctx.phase('woods');
-    const groves = yield* buildWoods(k, k.stretch('pass:woods'), ground, ctx.phase);
+    // Trees, rocks and growth stand on the ground as drawn.
+    const standing = (x: number, z: number): number => (z >= GRID.z0 ? drawn(x, z) : ground(x, z));
+    const groves = yield* buildWoods(k, k.stretch('pass:woods'), standing, ctx.phase);
     ctx.phase('done');
     const occluders = [...sites.occluders, ...groves];
     const at = { d: 0, y: 0, seg: 0, t: 0, x: 0, z: 0 };

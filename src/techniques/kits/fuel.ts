@@ -143,6 +143,8 @@ function douse(ctx: AbilityContext) {
   if (e) {
     soak(e, ctx.potency * (linger ? 1.3 : 1));
     at = e.center();
+    // A spray in the face stings, no more: it is a touch, not a blow that moves anyone.
+    g.combat.hitEnemy(e, 3 * ctx.potency, { from: me, stagger: false, kind: 'kinetic' });
     g.vfx.burst(at, 8, 'spark', 2, 0x8a9a3a, flat);
     hits = 1;
   } else {

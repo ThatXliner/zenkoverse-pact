@@ -144,8 +144,15 @@ console.log('striking posts');
 await api((g) => g.loop(true));
 const posts = () => api((g) => g.posts());
 const fill = () => api((g) => { g.game.techniques.resource = g.game.techniques.def.resource.max; });
-// The key each Technique strikes with: Electro's discharge is its right click.
-const click = async () => { const button = (await api((g) => g.game.techniques.def.strikes)) === 'secondary' ? 'right' : 'left'; await page.mouse.move(640, 360); await page.mouse.down({ button }); await page.mouse.up({ button }); };
+// The key each Technique strikes with: Electro's discharge is its right click,
+// and Fuel, whose primary lays vapour and touches nothing, strikes with the
+// spray of Delayed Ignition on slot 1.
+const click = async () => {
+  const def = await api((g) => ({ id: g.game.techniques.def.id, strikes: g.game.techniques.def.strikes }));
+  if (def.id === 'fuel') { await page.keyboard.press('Digit1'); return; }
+  const button = def.strikes === 'secondary' ? 'right' : 'left';
+  await page.mouse.move(640, 360); await page.mouse.down({ button }); await page.mouse.up({ button });
+};
 const waitFor = (fn, arg, timeout = 8000) => page.waitForFunction(new Function('a', `return (${fn.toString()})(window.game, a);`), arg, { polling: 'raf', timeout }).then(() => true, () => false);
 // Stands 1.6 m from the lit post on the line from the mark (inside the
 // shortest reach, Kinetic Release's) and faces its chest. Walking there is

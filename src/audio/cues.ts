@@ -215,6 +215,26 @@ export const CUES = {
   'friction.max.blow': sfx([S(PUNCH_H, 1, { pitch: 0.6 }), S(MINING, 0.6, { pitch: 0.75 }), Y('crack', { dur: 0.1, hp: 1200 }, { gain: 0.7 }), Y('boom', { f0: 100, f1: 30, dur: 1.5 }, { gain: 1.1 }), Y('whoosh', { dur: 0.9, f0: 120, f1: 900, peak: 0.2 }, { gain: 0.6 })], { wet: 0.55, duck: 1 }),
   'friction.max.tail': net([Y('whoosh', { dur: 1.2, f0: 2600, f1: 3400, peak: 0.15, q: 0.5 }, { gain: 0.4 }), Y('rumble', { dur: 1.2, lp: 500 }, { gain: 0.6 }), Y('squeak', { f: 1100, glide: 500, dur: 0.9, rate: 34 }, { gain: 0.14 })], { wet: 0.45 }),
 
+  // ------------------------------------------------------------ Fuel: vapour laid, herded, and lit by something else
+  'fuel.cast': net([S(CLOTH, 0.3, { pitch: 0.95 }), Y('vent', { dur: 0.35, f: 700, glide: 1400, attack: 0.12 }, { gain: 0.3 })]),
+  'fuel.lay': net([Y('vent', { dur: 0.7, f: 1100, glide: 500, flutter: 9 }, { gain: 0.45 }), S(CLOTH, 0.25, { pitch: 1.2 })]),
+  'fuel.pour': net([Y('vent', { dur: 0.3, f: 800, flutter: 12 }, { gain: 0.22 })], { every: 0.22 }),
+  'fuel.herd': net([Y('inhale', { dur: 0.4, f1: 1400 }, { gain: 0.25 }), Y('vent', { dur: 0.5, f: 420, glide: 300, flutter: 4 }, { gain: 0.3 })]),
+  'fuel.herding': net([Y('vent', { dur: 0.45, f: 380, flutter: 3 }, { gain: 0.16 })], { every: 0.4 }),
+  'fuel.soak': net([Y('vent', { dur: 0.25, f: 1800, glide: 900, attack: 0.02 }, { gain: 0.4 }), Y('splash', { size: 0.35, bubbles: 1 }, { gain: 0.2 })]),
+  'fuel.clear': net([Y('whoosh', { dur: 0.45, f0: 900, f1: 260, peak: 0.25 }, { gain: 0.5 }), Y('vent', { dur: 0.4, f: 500 }, { gain: 0.2 })]),
+  'fuel.take': net([Y('vent', { dur: 0.8, f: 300, glide: 1200, attack: 0.3 }, { gain: 0.45 }), Y('splash', { size: 0.8, bubbles: 3 }, { gain: 0.25 })]),
+  'fuel.drum': net([S(v('impactMetal_light_', 2), 0.4, { pitch: 0.7 }), Y('vent', { dur: 1.2, f: 1400, flutter: 14 }, { gain: 0.45 })]),
+  'fuel.catch': net([Y('whump', { size: 0.5 }, { gain: 0.55 }), Y('sizzle', { dur: 0.4, hp: 900, pops: 8 }, { gain: 0.14 })], { every: 0.07 }),
+  'fuel.flash': net([Y('whump', { size: 1.3 }, { gain: 0.95 }), Y('rumble', { dur: 1.3, lp: 600, attack: 0.03 }, { gain: 0.5 }), Y('sizzle', { dur: 1.0, hp: 1000, pops: 26 }, { gain: 0.25 })], { wet: 0.4, duck: 0.35, every: 0.2 }),
+  'fuel.blast': net([S(MINING, 0.8, { pitch: 0.6 }), S(v('impactMetal_heavy_', 2), 0.5, { pitch: 0.55 }), Y('whump', { size: 2 }, { gain: 1.1 }), Y('crack', { dur: 0.1, hp: 900 }, { gain: 0.6 }), Y('rumble', { dur: 2, lp: 500 }, { gain: 0.8 })], { wet: 0.5, duck: 0.6 }),
+  'fuel.alight': sfx([Y('sizzle', { dur: 0.5, hp: 1200, pops: 14 }, { gain: 0.3 }), Y('tone', { f: 180, glide: 120, dur: 0.35, lp: 500 }, { gain: 0.15 })], { every: 0.45 }),
+  'fuel.max.cast': sfx([Y('riser', { dur: 1.2, f0: 70, f1: 1200, tone: 0.3 }, { gain: 0.4 }), Y('vent', { dur: 1.2, f: 300, glide: 1500, flutter: 5, attack: 0.9 }, { gain: 0.3 })]),
+  'fuel.max.charge': sfx([Y('riser', { dur: 1.0, f0: 60, f1: 1500, tone: 0.3 }, { gain: 0.45 }), Y('vent', { dur: 1.1, f: 250, glide: 1800, flutter: 6, attack: 0.9 }, { gain: 0.45 })], { duck: 0.6 }),
+  'fuel.max.inhale': sfx([Y('inhale', { dur: 0.5, f1: 2600 }, { gain: 0.6 }), Y('vent', { dur: 0.5, f: 2200, glide: 400 }, { gain: 0.3 })]),
+  'fuel.max.blow': sfx([S(SOFT_H, 1, { pitch: 0.55 }), Y('splash', { size: 3, bubbles: 9 }, { gain: 0.7 }), Y('boom', { f0: 90, f1: 30, dur: 1.4 }, { gain: 1 }), Y('vent', { dur: 1.4, f: 600, glide: 200, flutter: 5 }, { gain: 0.7 })], { wet: 0.5, duck: 1 }),
+  'fuel.max.tail': net([Y('vent', { dur: 2.2, f: 450, glide: 250, flutter: 3, attack: 0.2 }, { gain: 0.5 }), Y('rumble', { dur: 1.4, lp: 260 }, { gain: 0.35 })]),
+
   // ------------------------------------------------------------ Blink: a concussive pulse from the eyes
   'blink.cast': net([Y('tone', { f: 2800, glide: 5200, dur: 0.16 }, { gain: 0.07 }), Y('inhale', { dur: 0.16, f1: 5000 }, { gain: 0.25 })]),
   'blink.flinch': net([S(SOFT_H, 0.6, { pitch: 1.2 }), Y('boom', { f0: 160, f1: 55, dur: 0.35 }, { gain: 0.7 }), Y('whoosh', { dur: 0.22, f0: 900, f1: 300, peak: 0.1, q: 0.6 }, { gain: 0.6 }), Y('crack', { dur: 0.05 }, { gain: 0.35 })], { wet: 0.3 }),

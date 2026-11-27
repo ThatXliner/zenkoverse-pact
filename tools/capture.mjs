@@ -14,7 +14,7 @@ const { url, args, stop } = await resolveTarget();
 
 const out = args.out ?? 'captures';
 const only = args.only ? new Set(args.only.split(',')) : null;
-const TECHS = ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension', 'electro', 'friction', 'dark'];
+const TECHS = ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension', 'electro', 'friction', 'dark', 'fuel'];
 const MODAL_SIZES = [[1280, 720], [1920, 1080]];
 const HUD_SIZES = [[1280, 720], [1920, 1080], [2000, 1000], [2560, 1440]];
 mkdirSync(out, { recursive: true });
@@ -545,6 +545,40 @@ if (run('dark')) {
     for (const f of [16, 24, 32, 40]) { await step(f === 16 ? 16 : 8); await shot('dark', `summon-${view}-f${f}`); }
     await api((g) => g.quitDrill());
   }
+}
+
+// Fuel (issue #20): a trail laid from the hall's east lantern out to two
+// thugs, then a dense charge at the lantern's foot; the flame climbs out of
+// the lantern and runs the trail to them. Top-down and over the shoulder,
+// and Dōkasen's posts set out. `npm run check:fuel` proves the rules.
+if (run('fuel')) {
+  for (const view of ['top', 'third']) {
+    await startRun('fuel');
+    await api((g, v) => {
+      const G = g.game, V = G.player.position.constructor;
+      g.quitDrill(); g.god(true); g.camera(v); g.teleport([5.3, 0, -0.9]);
+      for (const at of [[10.6, 0, 4.4], [11.4, 0, 3.4]]) { const e = G.encounters.spawn('thug', new V(...at)); e.attackCd = 1e9; e.castCd = 1e9; e.locked = 1e9; }
+      G.techniques.resource = 100;
+    }, view);
+    // Aim the cast at a point: under the cursor top-down, along the look over the shoulder.
+    const castAt = (slot, at) => api((g, slot, at) => {
+      const G = g.game, V = G.player.position.constructor, p = G.player.eye();
+      g.look(Math.atan2(-(at[0] - p.x), -(at[2] - p.z)), Math.atan2(at[1] - p.y, Math.hypot(at[0] - p.x, at[2] - p.z)));
+      for (let i = 0; i < 3; i++) { const n = new V(...at).project(G.renderer.camera); G.input.mouse.x = n.x; G.input.mouse.y = n.y; g.step(10); }
+      G.techniques.cast(slot, true);
+    }, slot, at);
+    await castAt('primary', [11, 0, 4]);
+    await step(40);
+    await shot('fuel', `trail-${view}`);
+    await api((g) => { g.teleport([7.6, 0, -2.8]); g.step(10); });
+    await castAt('art1', [5.0, 0, -1.4]);
+    let prev = 0;
+    for (const f of [20, 32, 46, 62]) { await step(f - prev); prev = f; await shot('fuel', `fuse-${view}-f${f}`); }
+  }
+  await startRun('fuel');
+  await api((g) => { g.teleport([6.6, 0, -1.4]); g.camera('top'); g.drill('fuel-dokasen'); });
+  for (const f of [70, 130]) { await step(f === 70 ? 70 : 60); await shot('drill', `fuel-dokasen-f${f}`); }
+  await api((g) => g.quitDrill());
 }
 
 // Fight direction (issues #10 and #11), from the top-down camera the game is

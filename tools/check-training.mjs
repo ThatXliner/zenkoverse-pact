@@ -23,8 +23,8 @@ import { resolveTarget } from './lib/target.mjs';
 const { url, args, stop } = await resolveTarget();
 const out = args.out ?? 'captures/training';
 mkdirSync(out, { recursive: true });
-const TECHS = (args.techs ?? 'recoil,shift,rime,blink,echo,heat,tension,electro,friction,dark').split(',');
-// Every stat the posts raise. Control is read by Heat, Tension, Electro and Friction, and only their own drills raise it.
+const TECHS = (args.techs ?? 'recoil,shift,rime,blink,echo,heat,tension,electro,friction,dark,fuel').split(',');
+// Every stat the posts raise. Control is read by Heat, Tension, Electro, Friction and Fuel, and only their own drills raise it.
 const USED = ['output', 'precision', 'efficiency', 'range', 'speed', 'activation', 'tolerance'];
 
 const failures = [];
@@ -113,7 +113,7 @@ await api((g) => { g.technique('recoil'); g.encounter('dummy-room'); g.teleport(
 for (let i = 0; i < 30; i++) await api((g) => { g.game.techniques.resource = g.game.techniques.def.resource.max; g.cast('primary'); g.step(40); });
 const afterPlay = await stats('recoil');
 for (const s of ['output', 'precision', 'activation']) check(Math.abs(afterPlay[s] - CEIL) < 1e-9, `thirty landed casts fill ${s} to the ceiling and stop: ${afterPlay[s].toFixed(4)}`);
-await api((g) => { for (const t of ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension', 'electro', 'friction', 'dark']) for (const s of ['output', 'precision', 'efficiency', 'range', 'speed', 'control', 'activation', 'tolerance']) for (let i = 0; i < 2000; i++) g.game.mastery.gainPassive(t, s, 0.05); });
+await api((g) => { for (const t of ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension', 'electro', 'friction', 'dark', 'fuel']) for (const s of ['output', 'precision', 'efficiency', 'range', 'speed', 'control', 'activation', 'tolerance']) for (let i = 0; i < 2000; i++) g.game.mastery.gainPassive(t, s, 0.05); });
 const capped = await api((g) => g.game.mastery.stats.value);
 const over = Object.entries(capped).flatMap(([t, v]) => Object.entries(v).filter(([s, x]) => s !== 'refinement' && Math.abs(x - CEIL) > 1e-9).map(([s, x]) => `${t}.${s}=${x.toFixed(3)}`));
 check(!over.length, `every stat's passive gain stops at ${CEIL} for every Technique${over.length ? `: ${over.join(', ')}` : ''}`);
@@ -144,8 +144,15 @@ console.log('striking posts');
 await api((g) => g.loop(true));
 const posts = () => api((g) => g.posts());
 const fill = () => api((g) => { g.game.techniques.resource = g.game.techniques.def.resource.max; });
-// The key each Technique strikes with: Electro's discharge is its right click.
-const click = async () => { const button = (await api((g) => g.game.techniques.def.strikes)) === 'secondary' ? 'right' : 'left'; await page.mouse.move(640, 360); await page.mouse.down({ button }); await page.mouse.up({ button }); };
+// The key each Technique strikes with: Electro's discharge is its right click,
+// and Fuel, whose primary lays vapour and touches nothing, strikes with the
+// spray of Delayed Ignition on slot 1.
+const click = async () => {
+  const def = await api((g) => ({ id: g.game.techniques.def.id, strikes: g.game.techniques.def.strikes }));
+  if (def.id === 'fuel') { await page.keyboard.press('Digit1'); return; }
+  const button = def.strikes === 'secondary' ? 'right' : 'left';
+  await page.mouse.move(640, 360); await page.mouse.down({ button }); await page.mouse.up({ button });
+};
 const waitFor = (fn, arg, timeout = 8000) => page.waitForFunction(new Function('a', `return (${fn.toString()})(window.game, a);`), arg, { polling: 'raf', timeout }).then(() => true, () => false);
 // Stands 1.6 m from the lit post on the line from the mark (inside the
 // shortest reach, Kinetic Release's) and faces its chest. Walking there is

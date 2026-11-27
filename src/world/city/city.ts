@@ -106,6 +106,7 @@ export function city(origin: THREE.Vector3): RegionDef {
         zones: ZONE_LIST.map((z) => ({ ...z, min: z.min.clone(), max: z.max.clone() })),
         occluders: k.occluders,
         waters,
+        flames: k.flames,
         water: [{ pts: [[BOUNDS.x0, (CANAL.z0 + CANAL.z1) / 2], [BOUNDS.x1, (CANAL.z0 + CANAL.z1) / 2]], y: CANAL.waterY }],
         groundAt: () => 0,
         surfaceAt: citySurface,

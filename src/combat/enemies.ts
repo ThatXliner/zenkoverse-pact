@@ -9,6 +9,7 @@ import { BOSS_ULTIMATES } from './ultimates';
 import { MOVES } from './moves';
 import { ATTACKS, inAttack, markOrigin, reachOf, type AttackDef } from './attacks';
 import { DANGER, Echo, Fuse, GHOST } from './bosses';
+import { kindle } from '../techniques/ignition';
 import type { Mark } from '../techniques/mark';
 
 // 'rival' is another player in an online room (src/net/remote.ts): no AI, its
@@ -347,6 +348,10 @@ export class Enemy {
   // Dark Dimension takes the pour (or its fresh fire) out of the world.
   takeFuel(at: THREE.Vector3, radius: number): ('fuel' | 'fire')[] { return this.fuse?.take(at, radius) ?? []; }
 
+  // A Fuel user draws the Kuroda's waiting pour near `at` up off the ground:
+  // where each pool lay, for the vapour it becomes.
+  drawFuel(at: THREE.Vector3, radius: number): THREE.Vector3[] { return this.fuse?.drawUp(at, radius) ?? []; }
+
   protected tickFrost(dt: number): void {
     if ((this.frozen > 0 && this.frozen <= dt) || (this.gripped > 0 && this.gripped <= dt)) this.thaw = THAW;
     else this.thaw = Math.max(0, this.thaw - dt);
@@ -576,6 +581,10 @@ export class Enemy {
       g.vfx.trail([top, top.clone().lerp(hit, 0.5).addScaledVector(fwd, 0.5).setY(top.y * 0.7), hit.clone().setY(hit.y + 0.15)], INK, 0.5, 0.2);
       g.vfx.ring(hit.clone().setY(hit.y + 0.06), 0x9c8b72, 0.3, a.shape.kind === 'sector' ? a.shape.radius * 1.15 : 2, 0.4);
       g.vfx.burst(hit.clone().setY(hit.y + 0.1), 7, 'debris', 4.5);
+      // Iron-shod fists on stone or tile strike sparks, enough to light fuel.
+      const floor = g.physics.castRay(hit.clone().setY(hit.y + 1), new THREE.Vector3(0, -1, 0), 2.5, GROUP_WORLD);
+      const ground = g.world.surfaceAt(floor?.point ?? hit, (floor?.collider as { surfaceTag?: string } | undefined)?.surfaceTag ?? '');
+      if (ground === 'stone' || ground === 'tile') { g.vfx.burst(hit.clone().setY(hit.y + 0.12), 6, 'spark', 4, 0xffd27a); kindle(hit, 1.3); }
       g.cam.shake(0.18);
       g.audio.play('prop.land', { at: hit, pitch: 0.7 });
     } else if (this.def.ai !== 'ancient') {
@@ -608,7 +617,9 @@ export class Enemy {
   private resolveCast(): void {
     const g = this.game;
     if (this.def.ai === 'kuroda') {
-      this.fuse?.snap();
+      // The snap sparks at his fingers whether or not his pour still lies there.
+      if (this.fuse) this.fuse.snap();
+      else { g.vfx.glint(this.center().add(new THREE.Vector3(0, 0.3, 0)), 0.5, 0.2); kindle(this.position, 0.9); }
     } else if (this.def.ai === 'ancient') {
       this.castMark?.fire();
       this.castMark = null;

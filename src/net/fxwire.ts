@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Vfx } from '../techniques/vfx';
 import type { Audio } from '../audio/audio';
 import type { FxCall } from './protocol';
+import { kindle, wireKindle } from '../techniques/ignition';
 
 // Online, everything a player's Techniques draw through the shared effect
 // pool is drawn on the other screens too: the same rings, sparks, ice and
@@ -45,6 +46,11 @@ export class FxWire {
     audio.mirror = (cue, at, gain, pitch) => {
       if (!this.replaying && this.calls.length < 64) this.calls.push({ f: 'sfx', a: [cue, at ? encode(at) : null, r2(gain), r2(pitch)] });
     };
+    // Something hot enough to light fuel (src/techniques/ignition.ts): it draws
+    // nothing itself, but vapour laid on another screen catches from it.
+    wireKindle((at, radius) => {
+      if (!this.replaying && this.calls.length < 64) this.calls.push({ f: 'kindle', a: [encode(at), r2(radius)] });
+    });
     const pool = vfx as unknown as Record<Mirrored, (...a: unknown[]) => unknown>;
     for (const f of MIRRORED) {
       const original = pool[f].bind(vfx);
@@ -71,6 +77,11 @@ export class FxWire {
         if (c.f === 'sfx' && Array.isArray(c.a)) {
           const at = decode(c.a[1], self);
           this.audio.replay(c.a[0], at instanceof THREE.Vector3 ? at : null, c.a[2], c.a[3], self.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 1.2, 0)));
+          continue;
+        }
+        if (c.f === 'kindle' && Array.isArray(c.a)) {
+          const at = decode(c.a[0], self);
+          if (at instanceof THREE.Vector3 && typeof c.a[1] === 'number') kindle(at, Math.min(8, c.a[1]), true);
           continue;
         }
         const fn = this.originals.get(c.f as Mirrored);

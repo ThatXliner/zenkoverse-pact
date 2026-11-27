@@ -99,6 +99,16 @@ const STAGED: Partial<Record<PoseName, { pos: [number, number, number]; rot?: [n
   doorsWide: { pos: [0.74, -0.08, -0.42] },
   frame: { pos: [0.12, -0.2, -0.46] },
   frameTurn: { pos: [0.13, -0.24, -0.46] },
+  fanGather: { pos: [0.3, -0.62, -0.1] },
+  fanSweep: { pos: [0.64, -0.62, -0.42], rot: [-0.3, -0.6, 0.4] },
+  flickReady: { pos: [0.34, -0.06, -0.08] },
+  flickOpen: { pos: [0.1, -0.24, -0.8] },
+  herdCup: { pos: [0.26, -0.3, -0.62] },
+  herdDraw: { pos: [0.18, -0.34, -0.3] },
+  condense: { pos: [0.04, -0.3, -0.3] },
+  parting: { pos: [0.7, -0.22, -0.12] },
+  stretch: { pos: [0.07, -0.26, -0.32] },
+  stretchWide: { pos: [0.3, -0.26, -0.34] },
 };
 const BODY_POSES = Object.fromEntries(Object.entries(POSES).map(([name, pose]) => {
   const st = STAGED[name as PoseName];

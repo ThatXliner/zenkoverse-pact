@@ -88,6 +88,9 @@ export interface RegionContent {
   water?: WaterLine[];
   // Water Rime can freeze into a floor.
   waters?: FreezableWater[];
+  // Open flames at standing height (a stone lantern's light chamber): vapour
+  // that climbs to one catches (src/techniques/kits/fuelVapour.ts).
+  flames?: THREE.Vector3[];
   // Per frame while it stands: animated materials, things that move on
   // their own. `time` is the game clock, `dt` the frame's real seconds;
   // `player` and `camera` are in world space.

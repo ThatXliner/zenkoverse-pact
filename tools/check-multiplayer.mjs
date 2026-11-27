@@ -578,6 +578,24 @@ if (restart) {
   check(!errors.length, 'no page errors through the restart');
 }
 
+// Fire is fire across screens: vapour laid by a Fuel player catches from
+// another player's Heat, which reaches it only as an effect on the wire.
+console.log('\nfuel catches from another player\'s heat');
+const Fu = await player('Chiyo', 'fuel');
+const He = await player('Daisuke', 'heat');
+await Fu.api((g) => { g.camera('third'); g.teleport([6, 0, 0]); g.look(-Math.PI / 2, -0.3); });
+await He.api((g) => { g.camera('third'); g.teleport([12.6, 0, 0]); g.look(Math.PI / 2, -0.3); });
+await wait(900 * slack);
+await Fu.api((g) => g.cast('primary'));
+await wait(1200);
+const laid = await Fu.api((g) => g.fuel().puffs.length);
+await He.api((g) => g.cast('primary'));
+let caught = 0;
+for (const t0 = Date.now(); Date.now() - t0 < 4000 * slack && !caught; await wait(100)) caught = await Fu.api((g) => g.fuel().tally.lit);
+check(laid > 3 && caught > 0, `a trail of ${laid} puffs on Chiyo's screen catches from Daisuke's Heat (${caught} burned)`);
+await Fu.ctx.close();
+await He.ctx.close();
+
 console.log('\nB leaves');
 const bId = (await B.net()).id;
 await B.ctx.close();

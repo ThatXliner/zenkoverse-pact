@@ -3,6 +3,7 @@ import type { Game } from '../app/game';
 import type { Mark } from '../techniques/mark';
 import type { Enemy } from './enemies';
 import { inAttack, markOrigin, type AttackDef } from './attacks';
+import { kindle } from '../techniques/ignition';
 
 export const DANGER = 0xe0382b;
 const FUEL = 0x2c1f0c;
@@ -72,10 +73,28 @@ export class Fuse {
     const g = this.game;
     g.vfx.glint(this.owner.center().add(new THREE.Vector3(0, 0.3, 0)), 0.5, 0.2);
     g.vfx.flash(this.line[0]!.clone().add(new THREE.Vector3(0, 0.6, 0)), FLAME, 25, 0.3, 6);
+    kindle(this.line[0]!, 0.9);
   }
 
   // The pools not burning yet.
   get waiting(): THREE.Vector3[] { return this.pools.filter((p) => !p.lit).map((p) => p.at); }
+
+  // A Fuel user draws the waiting pools within `radius` of `at` up off the
+  // ground before they burn: they leave his line (his spark finds nothing
+  // there), and where each lay is returned, for the vapour it becomes.
+  drawUp(at: THREE.Vector3, radius: number): THREE.Vector3[] {
+    const out: THREE.Vector3[] = [];
+    for (let i = this.pools.length - 1; i >= 0; i--) {
+      const p = this.pools[i]!;
+      if (p.lit || !p.patch || p.at.distanceTo(at) > radius + POOL * 0.5) continue;
+      p.mark?.cancel();
+      this.game.vfx.endPatch(p.patch, 0.5);
+      out.push(p.at.clone());
+      this.pools.splice(i, 1);
+    }
+    if (!this.pools.length) this.done = true;
+    return out;
+  }
 
   // Someone else's heat reaches a pool still waiting to burn: it goes up now,
   // and burns whoever stands in it, him included. How many pools it lit.
@@ -125,6 +144,7 @@ export class Fuse {
       const at = this.pointAt(this.burnedAlong);
       g.vfx.flames(at, 0.12, 1, 0.45);
       g.vfx.burst(at.clone().add(new THREE.Vector3(0, 0.1, 0)), 1, 'spark', 1.5, 0xffd27a);
+      kindle(at, 0.6);
       this.burnedAlong += 0.7;
     }
     for (const p of this.pools) {
@@ -153,6 +173,7 @@ export class Fuse {
     g.vfx.burst(at.clone().add(new THREE.Vector3(0, 0.3, 0)), 10, 'spark', 6, 0xff8a2a);
     p.burn = g.vfx.patch(at, POOL, 'burn', 20);
     g.audio.play('kuroda.ignite', { at });
+    kindle(at, POOL);
     // Caught in it, the player gets the held frame; seen from outside it is only fire.
     if (!this.hitPlayer && g.player.position.distanceTo(at) < POOL + 0.2) {
       this.hitPlayer = true;

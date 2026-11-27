@@ -12,6 +12,7 @@ import { surfaceAt } from '../../audio/surfaces';
 import { worldRuns } from '../../app/state';
 import { kaeshi, showStation } from '../../drills/kaeshi';
 import { DarkPanel, type DarkStore } from './DarkHud';
+import { kindle } from '../ignition';
 
 // Dark Dimension (蔵): the user moves nonliving things between the world and
 // a private, timeless space. Nothing is made, lost or copied: a sealed prop
@@ -351,6 +352,7 @@ function burnAt(g: Game, at: THREE.Vector3, radius: number, dmg: number): void {
   g.vfx.flash(at.clone().add(new THREE.Vector3(0, 1, 0)), FLAME, 40, 0.4, 9);
   g.vfx.patch(at, radius, 'burn', 8);
   g.audio.play('dark.fire', { at });
+  kindle(at, radius);
   for (const e of g.techniques.enemiesInSphere(at, radius)) g.combat.hitEnemy(e, dmg, { from: at, knock: 3, kind: 'heat' });
   // It burns whoever stands in it, the bearer too.
   if (g.player.position.distanceTo(at) < radius) g.combat.hurtPlayer(10, { from: at });

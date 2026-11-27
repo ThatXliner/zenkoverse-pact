@@ -241,6 +241,22 @@ export const SYNTHS = {
     src.connect(hp).connect(crackle).connect(hit(v, n(p, 'gain', 0.4), n(p, 'attack', 0.015), dur));
     return dur;
   },
+  // Skin catching and letting go of a surface many times a second (stick-slip),
+  // as a sole squeaks on polished boards: a bright buzz chopped by a fast gate.
+  squeak(v: Voice, p: SynthParams): number {
+    const dur = n(p, 'dur', 0.16), f = n(p, 'f', 1700);
+    const o = osc(v, 'sawtooth', f, dur);
+    const bp = filter(v, 'bandpass', f * v.pitch, n(p, 'q', 7));
+    if (p.glide) { o.frequency.exponentialRampToValueAtTime(p.glide * v.pitch, v.t + dur); bp.frequency.exponentialRampToValueAtTime(p.glide * v.pitch, v.t + dur); }
+    const gate = v.ctx.createGain();
+    gate.gain.value = 0.5;
+    const lfo = osc(v, 'square', n(p, 'rate', 48) / v.pitch, dur);
+    const depth = v.ctx.createGain();
+    depth.gain.value = 0.5;
+    lfo.connect(depth).connect(gate.gain);
+    o.connect(bp).connect(gate).connect(hit(v, n(p, 'gain', 0.35), 0.006, dur));
+    return dur;
+  },
   // Water: a slap of noise and a couple of bubbles.
   splash(v: Voice, p: SynthParams): number {
     const size = n(p, 'size', 1);

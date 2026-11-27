@@ -3,8 +3,8 @@
 // courtyard at running speed, casts now and then with a ring of effects, and
 // takes every hit it is dealt in full. They fill a room to measure frame
 // times without eight GPUs.
-const TECHS = ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension', 'electro'];
-const COLORS = { recoil: 0xff7a2f, shift: 0x6fd3ff, rime: 0x9fe8ff, blink: 0xc6a8ff, echo: 0x7dffb2, heat: 0xff4a5e, tension: 0xff5fa2, electro: 0xffe45c };
+const TECHS = ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension', 'electro', 'friction'];
+const COLORS = { recoil: 0xff7a2f, shift: 0x6fd3ff, rime: 0x9fe8ff, blink: 0xc6a8ff, echo: 0x7dffb2, heat: 0xff4a5e, tension: 0xff5fa2, electro: 0xffe45c, friction: 0xe0a96d };
 
 export function wsUrl(pageUrl) {
   const u = new URL('ws', pageUrl);

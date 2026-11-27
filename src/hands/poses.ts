@@ -53,6 +53,10 @@ const pinch = f([0.5, 0.45, 0.35], [0.5, 0.6, 0.4], [0.85, 0.95, 0.8], [0.9, 1, 
 const fling = f([0.08, 0.05, 0.05], [0, 0, 0], [0.12, 0.08, 0.05], [0.22, 0.16, 0.1], [0.32, 0.26, 0.14]);
 // String figures: every finger out and apart, a little hooked at the tips.
 const cradle = f([0.05, 0.05, 0.12], [0.02, 0.06, 0.18], [0.02, 0.06, 0.18], [0.04, 0.08, 0.2], [0.06, 0.1, 0.22]);
+// A hand closed on cloth: the fingers wrap a collar, the thumb locks over them.
+const clutch = f([0.55, 0.6, 0.45], [0.7, 0.85, 0.6], [0.72, 0.88, 0.62], [0.74, 0.9, 0.62], [0.78, 0.9, 0.6]);
+// Fingers pressed out flat and wide, as on a wall: the whole palm and every pad in contact.
+const flatSplay = f([0.0, -0.05, -0.05], [-0.05, 0, 0], [-0.05, 0, 0], [-0.05, 0, 0], [-0.05, 0, 0]);
 
 export const POSES = {
   // Idle: low in the corners, thumb side up and turned in a little, the
@@ -150,6 +154,23 @@ export const POSES = {
   // The sign: fingertips tented before the sternum, then torn apart.
   tent: { pos: [0.045, -0.21, -0.4], rot: [1.2, 0.35, -1.5], fingers: tented, spread: 0.35 },
   arcSpread: { pos: [0.3, -0.17, -0.4], rot: [0.95, 0.5, -0.55], fingers: splay, spread: 0.6 },
+  // Friction. `collar` closes on a collar at arm's length; `wrench` hauls it
+  // in and across past the other hip, the throw. `glideOut` holds the arm
+  // out low to the side, palm down, for balance on a slide. `wallPress`
+  // lays both palms flat and high, fingers splayed. `skateFwd` and
+  // `skateBack` are a skater's arm swing, across the body and back past the
+  // hip. `heave` draws both gripping hands up over the shoulder. `hookLock`
+  // hooks the curled fingers of each hand into the other's at the sternum;
+  // `hookPull` hauls the elbows apart against the lock, which does not slip.
+  collar: { pos: [0.1, -0.2, -0.47], rot: [0.05, 0.25, -0.4], fingers: clutch, spread: 0.08 },
+  wrench: { pos: [0.02, -0.29, -0.3], rot: [0.45, 0.95, -1.05], fingers: clutch, spread: 0.05 },
+  glideOut: { pos: [0.34, -0.27, -0.33], rot: [-0.1, -0.35, 0.25], fingers: open, spread: 0.4 },
+  wallPress: { pos: [0.16, -0.08, -0.43], rot: [1.45, 0.15, -0.05], fingers: flatSplay, spread: 0.6 },
+  skateFwd: { pos: [0.03, -0.24, -0.43], rot: [0.2, 0.75, -1.15], fingers: relaxed, spread: 0.1 },
+  skateBack: { pos: [0.31, -0.33, -0.22], rot: [0.4, -0.2, -1.4], fingers: relaxed, spread: 0.1 },
+  heave: { pos: [0.17, -0.02, -0.33], rot: [1.1, 0.5, -0.85], fingers: clutch, spread: 0.05 },
+  hookLock: { pos: [0.03, -0.24, -0.38], rot: [1.3, 0.1, -1.55], fingers: clutch, spread: 0.02 },
+  hookPull: { pos: [0.075, -0.235, -0.38], rot: [1.25, 0.2, -1.5], fingers: clutch, spread: 0.02 },
 } satisfies Record<string, HandPose>;
 
 export type PoseName = keyof typeof POSES;

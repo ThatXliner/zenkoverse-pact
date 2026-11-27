@@ -29,11 +29,11 @@ const EYE_WHITE = 0xf8f6f2;
 export type Stance = 'push' | 'hold' | 'feint';
 const STANCES: Stance[] = ['push', 'hold', 'feint'];
 
-export type Locomotion = 'idle' | 'walk' | 'run' | 'sprint' | 'air' | 'land' | 'dead';
+export type Locomotion = 'idle' | 'walk' | 'run' | 'sprint' | 'air' | 'land' | 'dead' | 'glide';
 
 // Backing up is the walk and jog clips played in reverse, not a clip of its own.
-const LOCO_CLIP: Record<Locomotion, string> = { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Jog_Fwd_Loop', sprint: 'Sprint_Loop', air: 'Jump_Loop', land: 'Jump_Land', dead: 'Death01' };
-const LOOPS: Locomotion[] = ['idle', 'walk', 'run', 'sprint', 'air'];
+const LOCO_CLIP: Record<Locomotion, string> = { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Jog_Fwd_Loop', sprint: 'Sprint_Loop', air: 'Jump_Loop', land: 'Jump_Land', dead: 'Death01', glide: 'Crouch_Idle_Loop' };
+const LOOPS: Locomotion[] = ['idle', 'walk', 'run', 'sprint', 'air', 'glide'];
 const UPPER_CLIPS = ['Hit_Chest'];
 const UPPER_BONE = /^(spine_0[1-3]|neck_01|Head|clavicle|upperarm|lowerarm|hand|thumb|index|middle|ring|pinky)/;
 const SPINE = ['spine_01', 'spine_02', 'spine_03'];
@@ -116,6 +116,9 @@ export class Avatar {
   private actions = new Map<string, THREE.AnimationAction>();
   private upper = new Map<string, THREE.AnimationAction>();
   private current: Locomotion = 'idle';
+  // Riding slick footing (Friction): the body crouches low and the feet
+  // travel with it instead of striding.
+  glide = false;
   private weights: Partial<Record<Locomotion, number>> = { idle: 1 };
   private clipSpeed: Record<string, number>;
   readonly bones = new Map<string, THREE.Bone>();
@@ -306,6 +309,7 @@ export class Avatar {
     const footed = grounded || (stepDown && velocity.y <= 0) || (this.airT < GROUND_GRACE && velocity.y < 1);
     const targets: Partial<Record<Locomotion, number>> = {};
     if (!footed) targets.air = 1;
+    else if (this.glide) targets.glide = 1;
     else if (speed < 0.12) targets.idle = 1;
     else {
       // From a standstill the walk comes in with the speed, so the first
@@ -562,7 +566,7 @@ export class Avatar {
 
     const ground = this.root.position.y;
     const posing = this.stance !== null || STANCES.some((k) => this.stanceAmt[k] > 0.01);
-    const canPlant = this.grounded && !posing;
+    const canPlant = this.grounded && !posing && !this.glide;
     const [a, b] = this.legs;
     const probe = this.floorAt;
     const floorAt = probe ? (x: number, z: number) => probe(x, z, ground) : null;

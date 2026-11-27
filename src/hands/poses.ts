@@ -78,6 +78,10 @@ export const POSES = {
   chamber: { pos: [0.26, -0.31, -0.28], rot: [0.3, 0.2, -2.8], fingers: fist, spread: 0 },
   punch: { pos: [0.09, -0.2, -0.45], rot: [0.15, 0.3, -0.8], fingers: fist, spread: 0 },
   punchOver: { pos: [0.07, -0.19, -0.48], rot: [0.12, 0.25, -0.75], fingers: fist, spread: 0 },
+  // A hook: drawn back wide of the shoulder, then swept across the line of
+  // sight with the knuckles leading and the palm turned down.
+  hookDraw: { pos: [0.3, -0.22, -0.3], rot: [0.35, -0.2, -1.3], fingers: fist, spread: 0 },
+  hook: { pos: [0.02, -0.18, -0.42], rot: [0.2, 1.05, -0.35], fingers: fist, spread: 0 },
   palmDown: { pos: [0.16, -0.24, -0.42], rot: [0.1, 0.15, 0.1], fingers: open, spread: 0.3 },
   slamUp: { pos: [0.2, -0.05, -0.34], rot: [1.0, 0.15, -0.3], fingers: claw, spread: 0.35 },
   slamDown: { pos: [0.17, -0.27, -0.45], rot: [-0.6, 0.05, 0.1], fingers: open, spread: 0.45 },

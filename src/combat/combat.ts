@@ -9,6 +9,7 @@ import { Eyes } from '../eyes/eyes';
 import type { EyeId } from '../eyes/registry';
 import type { TechniqueId } from '../techniques/kit';
 import { RULES } from '../net/protocol';
+import { MELEE, type MeleeWeight } from './melee';
 
 export const combatUi = {
   hp: signal(1),
@@ -59,18 +60,22 @@ export class Combat {
     return Math.max(0, low - 0.6) * 0.012 + (this.game.clock.frozen ? 0.004 : 0);
   }
 
-  hitEnemy(e: Enemy, amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number; kind?: 'kinetic' | 'cold' | 'pulse' | 'resonance' | 'cut' | 'heat' | 'shock'; heavy?: boolean; stagger?: boolean } = {}): number {
+  // A bare-hand blow (`melee`, src/combat/melee.ts) sets its own catch
+  // (`stop`), may go through a field's reinforcement (`pierce`) and carry
+  // extra posture damage to a boss (`poise`), letters its own word and
+  // colour on a heavy hit, and trains no Technique.
+  hitEnemy(e: Enemy, amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number; kind?: 'kinetic' | 'cold' | 'pulse' | 'resonance' | 'cut' | 'heat' | 'shock'; heavy?: boolean; stagger?: boolean; melee?: MeleeWeight; stop?: number; pierce?: boolean; poise?: number; word?: string; color?: number } = {}): number {
     const g = this.game;
     // A Wager's harder strike, on the blows of the cast that declared it (src/techniques/wagers.ts).
     const wager = g.techniques.wagers.boost;
     let m = wager;
     // A body in the player's open field, or one whose guard a clash broke, takes more.
-    m *= g.aura.damageOn(e);
+    m *= g.aura.damageOn(e, opts.pierce);
     if (e.guardBroken > 0) m *= 1 + AURA.guardBreak.taken;
     const eye = this.eyes.dealt(e);
     m *= eye.mult;
     const final = Math.round(amount * m);
-    e.hurt(final, { from: opts.from, knock: opts.knock, lift: opts.lift, stagger: eye.stagger || opts.stagger });
+    e.hurt(final, { from: opts.from, knock: opts.knock, lift: opts.lift, stagger: eye.stagger || opts.stagger, melee: opts.melee, poise: opts.poise });
     this.eyes.landed(e, final);
     g.drills.struck(e, final);
     this.quiet = 0;
@@ -82,15 +87,16 @@ export class Combat {
     // not stutter the whole fight.
     const w = Math.min(1, final / 100);
     const heavy = opts.heavy || final >= 40;
-    if (heavy || g.clock.time - this.stopAt > 0.15) { g.clock.hitStop(heavy ? 0.05 + 0.08 * w : 0.018 + 0.03 * w); this.stopAt = g.clock.time; }
+    if (heavy || opts.stop || g.clock.time - this.stopAt > 0.15) { g.clock.hitStop(opts.stop ?? (heavy ? 0.05 + 0.08 * w : 0.018 + 0.03 * w)); this.stopAt = g.clock.time; }
     if (heavy) {
+      const color = opts.color ?? g.techniques.def.color;
       g.cam.shake(0.25 + 0.2 * w);
-      g.renderer.impactFrame(final >= 80 ? 4 : 2, new THREE.Color(g.techniques.def.color), e.center());
+      g.renderer.impactFrame(final >= 80 ? 4 : 2, new THREE.Color(color), e.center());
       // A cutscene letters its own word over its blow.
-      if (!g.cutscenes.active) this.letter(e.center().add(new THREE.Vector3(0, 0.9, 0)), g.techniques.def.sfx, g.techniques.def.color, final >= 80);
+      if (!g.cutscenes.active) this.letter(e.center().add(new THREE.Vector3(0, 0.9, 0)), opts.word ?? g.techniques.def.sfx, color, final >= 80);
     }
-    else g.cam.shake(0.12);
-    g.mastery.gainPassive(g.techniqueId, 'output', 0.0015);
+    else g.cam.shake(opts.melee ? 0.06 : 0.12);
+    if (!opts.melee) g.mastery.gainPassive(g.techniqueId, 'output', 0.0015);
     if (e.isBoss) combatUi.boss.value = { name: e.def.title ?? e.def.name, frac: Math.max(0, e.hp / e.maxHp), color: e.def.emissive ?? 0xff6a1a };
     return final;
   }
@@ -101,15 +107,22 @@ export class Combat {
   // to the server here; the new value arrives through `setHp`.
   // A Maximum Output cutscene shields both people in it from everything but
   // its own blow (`cutscene`), for the cutscene's length and no longer.
-  hurtPlayer(amount: number, opts: { from?: THREE.Vector3; kinetic?: boolean; self?: boolean; pvp?: boolean; cutscene?: boolean } = {}): number {
+  // A bare-hand blow from another player (`melee`) is too light to need the
+  // moment of protection after a blow, and gives none, so a combo lands
+  // whole; an aura strike (`pierce`) goes through this player's
+  // reinforcement and breaks the guard of a settled field.
+  hurtPlayer(amount: number, opts: { from?: THREE.Vector3; kinetic?: boolean; self?: boolean; pvp?: boolean; cutscene?: boolean; melee?: boolean; pierce?: boolean } = {}): number {
     const g = this.game;
     if (this.god) return 0;
-    if (!opts.self && !opts.cutscene && (this.invuln > 0 || g.cutscenes.locksPlayer)) return 0;
+    if (!opts.self && !opts.cutscene && ((this.invuln > 0 && !opts.melee) || g.cutscenes.locksPlayer)) return 0;
     let a = amount;
     if (!opts.self) a = g.techniques.def.effects.onStruck?.(g, a, opts.from ?? g.player.position) ?? a;
     if (g.aura.guardBroken > 0 && !opts.self) a *= 1 + AURA.guardBreak.taken;
-    if (!opts.self) a *= g.aura.reinforce;
+    if (!opts.self && !opts.pierce) a *= g.aura.reinforce;
     if (a <= 0) return 0;
+    if (opts.pierce && g.aura.reinforce < 1) g.aura.guardBroken = Math.max(g.aura.guardBroken, MELEE.aura.guard);
+    // A blow taken before the player's own lands knocks it aside.
+    if (!opts.self) g.melee.struck();
     this.quiet = 0;
     if (g.net) { if (!opts.pvp) g.net.selfDamage(a); }
     else { this.hp = Math.max(0, this.hp - a); combatUi.hp.value = this.hp / this.maxHp; }
@@ -128,7 +141,7 @@ export class Combat {
     }
     g.cam.kick({ fov: -4, pitch: opts.from ? 0.02 : 0 });
     if (opts.self) g.audio.play('hurt.self'); else g.audio.play('hurt', { weight: Math.min(1, a / 40) });
-    if (!opts.self) { this.invuln = 0.35; g.techniques.struck(); g.techniques.charge = Math.min(1, g.techniques.charge + a / 220); }
+    if (!opts.self) { if (!opts.melee) this.invuln = 0.35; g.techniques.struck(); g.techniques.charge = Math.min(1, g.techniques.charge + a / 220); }
     g.book.observe('lowHealthFraction', this.hp / this.maxHp < 0.35 ? 1 : 0);
     if (this.hp <= 0 && !g.net) this.defeat();
     return a;

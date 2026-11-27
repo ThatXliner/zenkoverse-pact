@@ -5,6 +5,7 @@ import { auraUi, fieldWords } from '../combat/aura';
 import { clashUi, PICK_WORDS, TELL_WORDS, type ClashView } from '../combat/clash';
 import { PICKS, type Pick } from '../net/clash';
 import { drillUi } from '../drills/drills';
+import { MELEE, meleeUi } from '../combat/melee';
 import './aura.css';
 
 const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
@@ -22,11 +23,15 @@ export function AuraMeter() {
   const w = fieldWords(f);
   const fill = f.state === 'open' ? f.left / Math.max(0.1, f.holds) : f.pool;
   const capped = tr.trained > tr.potential + 0.004;
+  // The aura strike's share, ticked on the bar: what the fill must reach for X to fire.
+  const cost = f.state === 'open' ? MELEE.aura.open : MELEE.aura.cost;
+  const short = fill + 1e-6 < cost;
+  const denied = useMoved(String(meleeUi.denied.value), 450);
   return (
-    <div class={`aura-meter ${f.state} ${f.ended ?? ''}`} data-aura={f.state}>
+    <div class={`aura-meter ${f.state} ${f.ended ?? ''} ${short ? 'short' : ''} ${denied ? 'denied' : ''}`} data-aura={f.state} data-strike={short ? 'short' : 'ok'}>
       <span class="lbl"><b class="jp">気</b><span class="w">Aura · {w.state}</span></span>
       <span class="val">{w.detail}</span>
-      <div class="track"><i style={{ width: `${Math.max(0, Math.min(1, fill)) * 100}%` }} /><s style={{ left: `${pct(tr.potential)}%` }} /></div>
+      <div class="track"><i style={{ width: `${Math.max(0, Math.min(1, fill)) * 100}%` }} /><s style={{ left: `${pct(tr.potential)}%` }} /><u style={{ left: `${pct(cost)}%` }} title={`${keyLabel('strike')}: aura strike`} /></div>
       <span class={`sub ${showSub ? 'on' : ''}`} title="Refinement sets how dense and strong your field is. Its potential falls as your Technique is broader and as you inscribe more Pacts.">
         Refinement <b>{pct(tr.refinement)}</b> of potential <b>{pct(tr.potential)}</b>{capped ? ` · trained ${pct(tr.trained)}, held by potential` : ''}
       </span>

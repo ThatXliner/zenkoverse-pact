@@ -39,6 +39,8 @@ const STAGED: Partial<Record<PoseName, { pos: [number, number, number]; rot?: [n
   chamber: { pos: [0.24, -0.58, 0.06] },
   punch: { pos: [0.07, -0.3, -0.78] },
   punchOver: { pos: [0.03, -0.29, -0.82] },
+  hookDraw: { pos: [0.5, -0.32, -0.12] },
+  hook: { pos: [-0.08, -0.26, -0.62] },
   guard: { pos: [0.2, -0.22, -0.34] },
   slamUp: { pos: [0.26, 0.28, -0.05] },
   slamDown: { pos: [0.32, -1.0, -0.5] },

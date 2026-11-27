@@ -8,7 +8,7 @@ import { KEY_SLOTS, slotDef, type KeySlot } from '../pacts/slots';
 
 export type Action =
   | 'forward' | 'back' | 'left' | 'right' | 'sprint' | 'jump' | 'dash'
-  | 'aura' | 'fullsign' | 'vault' | 'tool' | 'interact' | 'camera' | 'map' | 'workshop' | 'skip' | 'pause'
+  | 'punch' | 'strike' | 'aura' | 'fullsign' | 'vault' | 'tool' | 'interact' | 'camera' | 'map' | 'workshop' | 'skip' | 'pause'
   | KeySlot;
 export type Code = string;
 export type Group = 'move' | 'ability' | 'combat' | 'interface';
@@ -27,6 +27,9 @@ export const ACTIONS: readonly ActionDef[] = [
   { id: 'jump', label: 'Jump', group: 'move', defaults: ['Space'] },
   { id: 'dash', label: 'Dash', group: 'move', defaults: ['KeyC'] },
   ...KEY_SLOTS.map((s): ActionDef => ({ id: s, label: slotDef(s).name, group: 'ability', defaults: [slotDef(s).defaultKey!] })),
+  // Bare hands (src/combat/melee.ts): every Technique has them, Pact or none.
+  { id: 'punch', label: 'Punch', group: 'combat', defaults: ['KeyR'] },
+  { id: 'strike', label: 'Aura strike', group: 'combat', defaults: ['KeyX'] },
   { id: 'aura', label: 'Aura Expansion', group: 'combat', defaults: ['KeyF'] },
   { id: 'fullsign', label: 'Full hand sign', group: 'combat', defaults: ['AltLeft'] },
   { id: 'vault', label: 'Vault Eye: its Technique', group: 'combat', defaults: ['KeyG'] },

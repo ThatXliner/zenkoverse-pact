@@ -11,6 +11,11 @@
 .aura-meter.recovering .track > i { background: rgba(159,227,255,0.45); }
 .aura-meter.recovering.collapsed .track > i { background: #ff6a5a; }
 .aura-meter.recovering.collapsed .lbl { color: #ff8a7a; }
+/* The aura strike's share of the bar: a notch the fill must pass. */
+.aura-meter .track > u { position: absolute; top: -1px; bottom: -1px; width: 2px; margin-left: -1px; background: var(--ink-line); box-shadow: 0 0 0 1px rgba(243,238,228,0.55); }
+.aura-meter.short .track > u { box-shadow: 0 0 0 1px rgba(255,138,122,0.7); }
+.aura-meter.denied .track { animation: aura-denied 0.4s var(--ease); }
+@keyframes aura-denied { 0%, 100% { translate: 0; } 20% { translate: -4px; } 45% { translate: 3px; } 70% { translate: -2px; } }
 
 /* The clash: everything sits over the letterbox, out of the two fighters' way. */
 .clash-layer { position: absolute; inset: 0; pointer-events: none; z-index: 5; --me: var(--c, #ff7a2f); animation: fade 0.25s var(--ease); }

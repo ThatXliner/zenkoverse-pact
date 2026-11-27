@@ -9,6 +9,9 @@ import type { GestureVariant } from '../mastery/mastery';
 export const RULES = rulesJson as {
   maxPlayers: number; defaultRoom: string; tickHz: number; sendHz: number; interpMs: number; maxHp: number;
   respawnSeconds: number; spawnProtectSeconds: number; hitTimeoutMs: number; maxHitDamage: number; maxHitRange: number;
+  // A bare-hand blow (src/combat/melee.ts): how far apart the two may stand,
+  // the most one blow may deal, and how many blows a second a player may throw.
+  melee: { range: number; maxDamage: number; blowsPerSecond: number };
   reconnectGraceSeconds: number; spawns: [number, number, number][];
   // The regions past the valley (src/world/atlas.ts): a player downed on one's land ([x0, z0, x1, z1]) gets up at one of its spawns.
   regions: { id: string; bounds: [number, number, number, number]; spawns: [number, number, number][] }[];
@@ -73,7 +76,9 @@ export interface PlayerInfo {
 // interpolated body reaches the moment they happened.
 export interface FxCall { f: string; a: unknown[] }
 
-export type HitOpts = { from: Vec3; knock: number; lift: number };
+// `m` marks a bare-hand blow: 1 a punch, 2 an aura strike, which goes
+// through the victim's reinforcement and breaks a settled field's guard.
+export type HitOpts = { from: Vec3; knock: number; lift: number; m?: 1 | 2 };
 
 // One physics prop as its owner simulates it (src/net/propsync.ts):
 // [id, x, y, z, qx, qy, qz, qw, vx, vy, vz, flags, frozen seconds left].
@@ -105,6 +110,8 @@ export type ClientMsg =
   // `variant` and `speed` are the gesture the cast plays, so every screen draws the same one.
   | { type: 'cast'; ct: number; kind: string; tech: string; name: string; dir: Vec3; variant: GestureVariant; speed: number; shout?: boolean }
   | { type: 'fx'; ct: number; calls: FxCall[] }
+  // A bare-hand blow began: `n` is its place in BLOW_MOVES (src/combat/moves.ts), 0 to 3.
+  | { type: 'blow'; ct: number; n: number; dir: Vec3 }
   | ({ type: 'hit'; seq: number; target: number; amount: number } & HitOpts)
   | { type: 'resolve'; hit: number; taken: number }
   | { type: 'self'; amount: number }
@@ -143,6 +150,7 @@ export type ServerMsg =
   | { type: 'snap'; t: number; players: { id: number; hp: number; down: boolean; away: boolean; st: PlayerState[] }[] }
   | { type: 'cast'; id: number; ct: number; kind: string; tech: string; name: string; dir: Vec3; variant: GestureVariant; speed: number; shout?: boolean }
   | { type: 'fx'; id: number; ct: number; calls: FxCall[] }
+  | { type: 'blow'; id: number; ct: number; n: number; dir: Vec3 }
   | ({ type: 'struck'; hit: number; by: number; amount: number } & HitOpts)
   | { type: 'hp'; id: number; hp: number; by: number | null; amount: number }
   | { type: 'down'; id: number; by: number | null }

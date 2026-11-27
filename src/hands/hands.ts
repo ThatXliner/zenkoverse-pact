@@ -102,6 +102,12 @@ export class Hands {
   // A beat of Technique-coloured light on the hands, set by
   // the full sign on its seal and release keys and decaying over a few frames.
   private pulseT = 0;
+  // Aura drawn into the fists (src/combat/melee.ts), asked for each frame it
+  // shows like the strings, in the aura's colour; and whether the gesture
+  // playing lights the hands with the Technique (a bare-hand blow does not).
+  private flareAmt = { want: 0, now: 0 };
+  private flareColor = new THREE.Color();
+  private lit = true;
   // Holds one named pose on both hands, for the capture harness.
   debugPose: PoseName | HandPose | null = null;
   // Orbits the view around the right hand (yaw from its right, negative
@@ -212,8 +218,9 @@ export class Hands {
     this.frost = def.id === 'rime' ? 0.6 : 0;
   }
 
-  play(g: Gesture, speed: number, onEvent: (e: string) => void, onCamera: (k: { fov: number; pitch?: number; roll?: number }) => void): void {
+  play(g: Gesture, speed: number, onEvent: (e: string) => void, onCamera: (k: { fov: number; pitch?: number; roll?: number }) => void, lit = true): void {
     this.clock.play(g, speed);
+    this.lit = lit;
     this.onEvent = onEvent;
     this.onCamera = onCamera;
   }
@@ -226,6 +233,8 @@ export class Hands {
   jump(): void { this.jumpLift = 0.05; }
   dash(): void { this.dashT = 0.3; }
   pulse(amount: number): void { this.pulseT = Math.max(this.pulseT, amount); }
+  // Shows aura in the fists for this frame, at `amount` (0 to 1).
+  flare(color: number, amount: number): void { this.flareColor.set(color); this.flareAmt.want = Math.max(this.flareAmt.want, amount); }
   // A small idle flex of one finger now and then, so the hands stay alive.
   twitch(): void { this.idleTwitch.push({ finger: FINGERS[Math.floor(Math.random() * 5)]!, side: Math.random() < 0.5 ? 1 : -1, t: 0.3 }); }
 
@@ -294,13 +303,16 @@ export class Hands {
     this.held.update(this.clock, dtc);
     this.drawStrings(dtc);
 
-    const glowTarget = this.playing ? 1 : 0;
+    const glowTarget = this.playing && this.lit ? 1 : 0;
+    const fl = this.flareAmt;
+    fl.now += (fl.want - fl.now) * (1 - Math.exp(-(fl.want > fl.now ? 18 : 7) * dtc));
+    fl.want = 0;
     this.glow += (glowTarget - this.glow) * (1 - Math.exp(-8 * dtc));
     this.pulseT *= Math.exp(-5 * dtc);
     this.light.intensity = this.glow * 0.25 + this.pulseT * 1.1;
     this.clawMat.emissiveIntensity = 0.3 + this.glow * 0.8 + this.pulseT;
     const h = Math.min(1, this.heat);
-    this.skin.emissive.setRGB(h * 0.7, h * 0.12, h * 0.02);
+    this.skin.emissive.setRGB(h * 0.7, h * 0.12, h * 0.02).lerp(this.flareColor, Math.min(1, fl.now) * 0.85);
   }
 
   // The arms are framed for a 16:9 window. A narrower window keeps that

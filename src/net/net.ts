@@ -15,6 +15,7 @@ import type { Pick } from './clash';
 import { pick } from '../hands/gestures';
 import type { GestureVariant } from '../mastery/mastery';
 import { cutsceneTiming, enemyActor, playerActor, type CutsceneDef } from '../cutscene/cutscene';
+import type { MeleeWeight } from '../combat/melee';
 
 const kitOfCutscene = (id: string) => Object.values(KITS).find((k) => k.cutscene.id === id) ?? null;
 
@@ -262,13 +263,18 @@ export class Net {
         if (r) r.at(m.ct, () => this.fx.replay(m.calls, r.avatar.model));
         return;
       }
+      case 'blow': {
+        const r = this.remotes.get(m.id);
+        if (r) r.at(m.ct, () => r.blow(m.n, m.dir));
+        return;
+      }
       case 'struck': {
         if (this.downed) { this.send({ type: 'resolve', hit: m.hit, taken: 0 }); return; }
         const from = new THREE.Vector3(...m.from);
         // This player's own defences decide what gets through: the same
         // rules as a hit from anything else in the compound.
         // In a Maximum Output's cutscene only its caster's blow lands.
-        const taken = g.combat.hurtPlayer(m.amount, { from, kinetic: true, pvp: true, cutscene: g.cutscenes.role === 'target' && g.cutscenes.partner === m.by });
+        const taken = g.combat.hurtPlayer(m.amount, { from, kinetic: true, pvp: true, cutscene: g.cutscenes.role === 'target' && g.cutscenes.partner === m.by, melee: !!m.m, pierce: m.m === 2 });
         if (taken > 0 && m.knock > 0) {
           const away = g.player.position.clone().sub(from).setY(0).normalize();
           g.player.velocity.addScaledVector(away, m.knock);
@@ -396,6 +402,7 @@ export class Net {
     this.downed = true;
     g.combat.setHp(0);
     g.techniques.reset();
+    g.melee.reset();
     g.avatar.die();
     g.input.clear();
     netUi.downed.value = { by: this.nameOf(by), at: performance.now() };
@@ -413,12 +420,15 @@ export class Net {
 
   // A Technique connected with another player. The number shows at once;
   // the server applies it.
-  hit(target: RemotePlayer, amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number }): void {
+  hit(target: RemotePlayer, amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number; melee?: MeleeWeight }): void {
     if (this.downed || !this.connected) return;
     const from = opts.from ?? this.game.player.position;
     this.log.sent.push({ target: target.id, amount, t: performance.now() });
-    this.send({ type: 'hit', seq: ++this.seq, target: target.id, amount, from: v3(from), knock: opts.knock ?? 0, lift: opts.lift ?? 0 });
+    this.send({ type: 'hit', seq: ++this.seq, target: target.id, amount, from: v3(from), knock: opts.knock ?? 0, lift: opts.lift ?? 0, ...(opts.melee ? { m: opts.melee === 'aura' ? 2 as const : 1 as const } : {}) });
   }
+
+  // A bare-hand blow began: the others play it on this body.
+  blow(n: number, dir: THREE.Vector3): void { this.send({ type: 'blow', ct: performance.now(), n, dir: v3(dir) }); }
 
   // Health this player spends on its own Pacts and Risks.
   selfDamage(amount: number): void { if (!this.downed) this.send({ type: 'self', amount }); }

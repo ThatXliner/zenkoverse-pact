@@ -7,6 +7,8 @@ import type { Gesture } from '../hands/gestures';
 import { KITS } from '../techniques/techniques';
 import { EyeMark } from '../eyes/mark';
 import { eyeFromCode } from '../eyes/registry';
+import { BLOW_MOVES } from '../combat/moves';
+import type { MeleeWeight } from '../combat/melee';
 
 // Each seat in a room has a suit colour and a look, the same on every screen.
 export const SEAT_SUITS = [0x2a4a9e, 0xb3263a, 0x1f8a80, 0xd98a1c, 0x6a3fa0, 0x3f8f3a, 0x3a3d48, 0xc0407e];
@@ -66,7 +68,7 @@ export class RemotePlayer extends Enemy {
   private unconfirmed: { amount: number; at: number }[] = [];
   readonly id: number;
 
-  constructor(game: Game, info: PlayerInfo, private onStatus: (target: RemotePlayer, frozen: number, slow: number) => void, private onHit: (target: RemotePlayer, amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number }) => void) {
+  constructor(game: Game, info: PlayerInfo, private onStatus: (target: RemotePlayer, frozen: number, slow: number) => void, private onHit: (target: RemotePlayer, amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number; melee?: MeleeWeight }) => void) {
     const def = { ...ENEMY_DEFS.rival!, name: info.name, model: SEAT_LOOKS[info.slot % SEAT_LOOKS.length]!, tint: seatSuit(info.slot) };
     super(game, 'rival', new THREE.Vector3(0, -50, 0), NO_SCALE, false, def);
     this.id = info.id;
@@ -128,7 +130,7 @@ export class RemotePlayer extends Enemy {
     return { ...last, p: [last.p[0] + last.v[0] * ahead, last.p[1], last.p[2] + last.v[2] * ahead] };
   }
 
-  override hurt(amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number; stagger?: boolean } = {}): void {
+  override hurt(amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number; stagger?: boolean; melee?: MeleeWeight } = {}): void {
     if (!this.alive) return;
     this.avatar.flash(1.2);
     // The attacker sees the blow land at once; the body's real position stays its owner's.
@@ -257,6 +259,19 @@ export class RemotePlayer extends Enemy {
     this.gestureKey = key;
     this.avatar.perform(gesture, speed);
     this.held = gesture.hold ? { gesture, at: performance.now() } : null;
+  }
+
+  // A bare-hand blow they threw, by its place in BLOW_MOVES. An aura strike
+  // gathering inside this player's field is sensed like a cast.
+  blow(n: number, dir: [number, number, number]): void {
+    const gesture = BLOW_MOVES[n];
+    if (!gesture || !this.alive) return;
+    this.perform(`blow${n}`, gesture, 1);
+    if (n !== 3) return;
+    this.game.aura.senseBlow(this, dir, gesture.impactAt);
+    // Their fist fills as it does on their screen: the star rides it to the blow.
+    const fist = () => this.avatar.boneWorld('hand_r', new THREE.Vector3());
+    this.game.vfx.glint(fist(), 0.45, gesture.impactAt + 0.05, fist);
   }
 
   // The drawn position, for the checks.

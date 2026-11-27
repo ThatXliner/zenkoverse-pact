@@ -24,6 +24,7 @@ import { Combat } from '../combat/combat';
 import { Encounters } from '../combat/encounters';
 import { Ward } from '../combat/ward';
 import { Aura } from '../combat/aura';
+import { Melee } from '../combat/melee';
 import { Vfx } from '../techniques/vfx';
 import { Audio } from '../audio/audio';
 import { bindUiSounds } from '../audio/ui';
@@ -107,6 +108,7 @@ export class Game {
   encounters!: Encounters;
   ward!: Ward;
   aura!: Aura;
+  melee!: Melee;
   vfx!: Vfx;
   audio!: Audio;
   cutscenes!: Cutscenes;
@@ -173,6 +175,7 @@ export class Game {
     this.techniques = new Techniques(this);
     this.combat = new Combat(this);
     this.aura = new Aura(this);
+    this.melee = new Melee(this);
     this.encounters = new Encounters(this);
     this.ward = new Ward(this);
     this.drills.register(strikingPosts(this));
@@ -216,6 +219,7 @@ export class Game {
     this.drills.abandon();
     this.combat.resetPlayer();
     this.techniques.reset();
+    this.melee.reset();
     this.encounters.reset();
     this.book.preview.value = null;
     this.tutorial.skip();
@@ -250,6 +254,7 @@ export class Game {
     this.vfx.clear();
     this.props.thaw();
     this.techniques.reset();
+    this.melee.reset();
     this.aura.reset();
     this.player.speedScale = 1;
   }
@@ -423,11 +428,13 @@ export class Game {
     const moving = this.player.planarSpeed.value > 0.5;
     // Outside first person the body runs the way it goes, like a twin-stick
     // or GTA hero, and turns back to the aim to sign, cast, and a beat after.
-    this.aimHold = this.techniques.casting || this.techniques.sign.kind !== 'idle' || this.cam.inShot || this.cam.isFirst ? 0.6 : Math.max(0, this.aimHold - raw);
+    this.aimHold = this.techniques.casting || this.melee.busy || this.techniques.sign.kind !== 'idle' || this.cam.inShot || this.cam.isFirst ? 0.6 : Math.max(0, this.aimHold - raw);
     const v = this.player.velocity;
-    if (this.aimHold > 0) this.bodyYaw = this.cam.yaw;
+    // A bare-hand blow turns the body to what it locked onto.
+    if (this.melee.facing !== null) this.bodyYaw = this.melee.facing;
+    else if (this.aimHold > 0) this.bodyYaw = this.cam.yaw;
     else if (moving && this.player.grounded) this.bodyYaw = Math.atan2(-v.x, -v.z);
-    this.avatar.turnTo(this.bodyYaw, raw, moving ? 14 : 8);
+    this.avatar.turnTo(this.bodyYaw, raw, this.melee.busy ? 22 : moving ? 14 : 8);
     if (!this.net?.downed) this.avatar.setLocomotion(this.player.velocity, this.player.grounded, raw);
     this.avatar.setAimPitch(this.cam.isTop ? 0 : this.cam.pitch);
     this.avatar.update(dt);
@@ -439,6 +446,7 @@ export class Game {
     this.nav.update(raw);
 
     this.techniques.update(dt, raw);
+    this.melee.update(dt, raw);
     this.hands.update(raw, this.player, this.cam, this.input);
     this.combat.update(dt);
     this.aura.update(dt, raw);

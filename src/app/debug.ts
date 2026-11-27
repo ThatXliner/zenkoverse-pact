@@ -18,6 +18,8 @@ import { heatState, setBodyHeat, quenchView } from '../techniques/kits/heat';
 import { freezePond } from '../techniques/kits/rime';
 import { lanesView } from '../drills/snareLanes';
 import { tensionView } from '../techniques/kits/tension';
+import { wetStoneView } from '../drills/wetStone';
+import { electroView } from '../techniques/kits/electro';
 import { netUi } from '../net/net';
 import { clashUi } from '../combat/clash';
 import { setSetting, type Settings } from './settings';
@@ -49,6 +51,9 @@ export interface DebugApi {
   // Tension's lines as the checks read them, and the Snare Lanes' runners.
   tension(): ReturnType<typeof tensionView>;
   lanes(): ReturnType<typeof lanesView>;
+  // Electro's pond drill and the kit's own state, as the checks read them.
+  wetStone(): ReturnType<typeof wetStoneView>;
+  electro(): ReturnType<typeof electroView>;
   // Ends a running drill without judging it, back to explore.
   quitDrill(): void;
   // Heat's body heat and what it has burning, as the checks read them; `body`
@@ -178,6 +183,8 @@ export function installDebug(game: Game): void {
     heat(body) { if (body !== undefined) setBodyHeat(body); return { ...heatState(), quench: quenchView() }; },
     tension() { return tensionView(game); },
     lanes() { return lanesView(); },
+    wetStone() { return wetStoneView(); },
+    electro() { return electroView(game); },
     quitDrill() { game.drills.abandon(); if (appState.value.kind === 'drill') setState({ kind: 'explore' }); },
     training() { return { passiveCeiling: MASTERY_CONFIG.passiveCeiling, regen: RULES.regen, quiet: game.combat.quiet, mending: combatUi.mending.value }; },
     workshop(open) { if (open) game.openWorkshop(); else game.closeWorkshop(); },

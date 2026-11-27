@@ -6,12 +6,12 @@
 import { SLOTS, slotAccepts, slotDef, type AbilitySlot, type AbilityKind } from './slots';
 import { DECLARATIONS, DECLARE, REWARDS, FORFEITS, FORFEIT, MAX_PARTS, wagerError, upgradeWager, type WagerTerms } from './wager';
 
-export type TechniqueId = 'recoil' | 'shift' | 'rime' | 'blink' | 'echo' | 'heat' | 'tension';
+export type TechniqueId = 'recoil' | 'shift' | 'rime' | 'blink' | 'echo' | 'heat' | 'tension' | 'electro';
 export type Param = 'direction' | 'range' | 'target' | 'trigger' | 'duration' | 'resource' | 'body';
 
 export type Direction = 'front' | 'declared' | 'ground' | 'line' | 'behind' | 'loosen';
 export type RangeValue = 'touch' | 'short' | 'medium' | 'long';
-export type TargetValue = 'single' | 'named' | 'resonant' | 'water' | 'self' | 'props' | 'people';
+export type TargetValue = 'single' | 'named' | 'resonant' | 'water' | 'conductive' | 'self' | 'props' | 'people';
 export type TriggerValue = 'still' | 'grounded' | 'airborne' | 'struck' | 'eyesClosed' | 'declared' | 'lowHealth' | 'fullSign';
 export type DurationValue = 'instant' | 'brief' | 'held' | 'sustained';
 export type ResourceValue = 'all' | 'half' | 'health' | 'strain';
@@ -56,7 +56,7 @@ export interface Pact {
 export const PARAM_VALUES: Record<Param, readonly string[]> = {
   direction: ['front', 'declared', 'ground', 'line', 'behind', 'loosen'],
   range: ['touch', 'short', 'medium', 'long'],
-  target: ['single', 'named', 'resonant', 'water', 'self', 'props', 'people'],
+  target: ['single', 'named', 'resonant', 'water', 'conductive', 'self', 'props', 'people'],
   trigger: ['still', 'grounded', 'airborne', 'struck', 'eyesClosed', 'declared', 'lowHealth', 'fullSign'],
   duration: ['instant', 'brief', 'held', 'sustained'],
   resource: ['all', 'half', 'health', 'strain'],
@@ -69,6 +69,7 @@ const VALUE_OWNERS: Partial<Record<`${Param}:${string}`, readonly TechniqueId[]>
   'target:water': ['rime'],
   // Tension's one-direction vow: it may let a fiber go, never draw it tighter.
   'direction:loosen': ['tension'],
+  'target:conductive': ['electro'],
 };
 
 export function valuesFor(param: Param, technique: TechniqueId): readonly string[] {
@@ -76,7 +77,7 @@ export function valuesFor(param: Param, technique: TechniqueId): readonly string
 }
 
 export const RISK_COSTS: readonly RiskCost[] = ['health', 'exhaustion', 'seal'];
-export const TECHNIQUE_IDS: readonly TechniqueId[] = ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension'];
+export const TECHNIQUE_IDS: readonly TechniqueId[] = ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension', 'electro'];
 
 export interface Validation { ok: boolean; errors: string[] }
 

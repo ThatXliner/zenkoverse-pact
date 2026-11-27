@@ -9,8 +9,13 @@ interface Glint { sprite: THREE.Sprite; life: number; max: number; size: number;
 interface Ring { mesh: THREE.Mesh; life: number; max: number; from: number; to: number; mat: THREE.MeshBasicMaterial; peak: number }
 interface Trail { mesh: THREE.Mesh; points: THREE.Vector3[]; life: number; mat: THREE.MeshBasicMaterial; width: number; peak: number; at: THREE.Vector3 }
 interface Flash { light: PointSource; life: number; max: number; peak: number }
-interface Patch { mesh: THREE.Mesh; life: number; max: number; mat: THREE.MeshPhysicalMaterial; frost: boolean }
+interface Patch { mesh: THREE.Mesh; life: number; max: number; mat: THREE.MeshPhysicalMaterial; kind: 'frost' | 'burn' | 'fuel'; radius: number }
 interface Timer { left: number; fire(): void }
+// A bolt: a jagged line from `from` to `to`, a white core in a coloured
+// glow, redrawn on a new path every few frames for as long as it lives.
+// Three strokes drawn over each other: an ink edge, the colour, a white core.
+interface ArcLayer { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; width: number; peak: number }
+interface Arc { layers: ArcLayer[]; from: THREE.Vector3; to: THREE.Vector3; life: number; max: number; width: number; jag: number; next: number }
 interface Held { left: number; end(): void }
 
 // The one owner of every effect's lifetime. It holds the pooled effects every
@@ -28,6 +33,7 @@ export class Vfx {
   private patches: Patch[] = [];
   private marks: Mark[] = [];
   private glints: Glint[] = [];
+  private arcs: Arc[] = [];
   private markGeo = new THREE.PlaneGeometry(1, 1);
   private flameGeo = new THREE.ConeGeometry(0.16, 0.7, 5).translate(0, 0.35, 0);
   // Steam is drawn as a manga panel draws it: solid puffs the brush inks round,
@@ -67,7 +73,7 @@ export class Vfx {
 
   // How many effects are alive, for the checks that prove a restart leaves none.
   get live(): number {
-    return this.particles.length + this.rings.length + this.trails.length + this.flashes.length + this.patches.length + this.spikes.length + this.timers.length + this.held.length + this.marks.length + this.glints.length;
+    return this.particles.length + this.rings.length + this.trails.length + this.flashes.length + this.patches.length + this.spikes.length + this.timers.length + this.held.length + this.marks.length + this.glints.length + this.arcs.length;
   }
 
   // Ends every effect now: a new run, a new Technique, or leaving a scene
@@ -83,6 +89,39 @@ export class Vfx {
     for (const s of this.spikes.splice(0)) this.scene.remove(s.mesh);
     for (const m of this.marks.splice(0)) this.dropMark(m);
     for (const g of this.glints.splice(0)) { this.scene.remove(g.sprite); g.sprite.material.dispose(); }
+    for (const a of this.arcs.splice(0)) this.dropArc(a);
+  }
+
+  private dropArc(a: Arc): void {
+    for (const l of a.layers) { this.scene.remove(l.mesh); l.mesh.geometry.dispose(); l.mat.dispose(); }
+  }
+
+  // An electric arc between two points: `jag` is how far the path wanders
+  // from the straight line, as a share of its length (a short hop crackles,
+  // a long one forks). It takes a new path every few frames while it lives.
+  // Drawn as the page draws lightning: an ink edge, the colour, a white core.
+  arc(from: THREE.Vector3, to: THREE.Vector3, color: number, life = 0.2, width = 0.08, jag = 0.18): void {
+    const layers = ([[INK_ARC, 2.4, 0.85, 4], [color, 1.5, 1, 5], [0xffffff, 0.55, 1, 6]] as const).map(([c, k, peak, order]) => {
+      // Light drawn over what it runs past, as the page inks a bolt over a figure.
+      const mat = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: peak, side: THREE.DoubleSide, depthWrite: false, depthTest: false, toneMapped: false });
+      const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
+      mesh.renderOrder = 20 + order;
+      mesh.frustumCulled = false;
+      this.scene.add(mesh);
+      return { mesh, mat, width: k, peak };
+    });
+    const a: Arc = { layers, from: from.clone(), to: to.clone(), life, max: life, width, jag, next: 0 };
+    this.redrawArc(a);
+    this.arcs.push(a);
+  }
+
+  private redrawArc(a: Arc): void {
+    const eye = this.viewer?.camera.position ?? a.from.clone().add(new THREE.Vector3(0, 10, 0));
+    const paths = boltPaths(a.from, a.to, a.jag);
+    for (const l of a.layers) {
+      l.mesh.geometry.dispose();
+      l.mesh.geometry = boltGeometry(paths, a.width * l.width, eye);
+    }
   }
 
   private dropMark(m: Mark): void { this.scene.remove(m.root); m.mat.dispose(); m.state = 'gone'; }
@@ -164,7 +203,7 @@ export class Vfx {
       if (s.life > 0.6 && Math.hypot(s.mesh.position.x - center.x, s.mesh.position.z - center.z) < radius) { s.life = 0.6; n++; }
     }
     for (const p of this.patches) {
-      if (p.frost && p.life > 0.5 && Math.hypot(p.mesh.position.x - center.x, p.mesh.position.z - center.z) < radius + p.mesh.scale.x * 0.5) { p.life = 0.5; p.max = Math.max(p.max, 0.5); n++; }
+      if (p.kind === 'frost' && p.life > 0.5 && Math.hypot(p.mesh.position.x - center.x, p.mesh.position.z - center.z) < radius + p.mesh.scale.x * 0.5) { p.life = 0.5; p.max = Math.max(p.max, 0.5); n++; }
     }
     return n;
   }
@@ -230,6 +269,13 @@ export class Vfx {
     if (p) { p.life = Math.min(p.life, seconds); p.max = Math.max(p.max, seconds); }
   }
 
+  // The patches of `kind` lying under `at` (within `margin` of one's edge),
+  // for what reads the ground: frost thawing on stone is meltwater, and
+  // meltwater carries a current.
+  patchesUnder(at: THREE.Vector3, kind: Patch['kind'], margin = 0): { at: THREE.Vector3; radius: number }[] {
+    return this.patches.filter((p) => p.kind === kind && p.life > 0.3 && Math.abs(at.y - p.mesh.position.y) < 1.2 && Math.hypot(at.x - p.mesh.position.x, at.z - p.mesh.position.z) < p.radius + margin).map((p) => ({ at: p.mesh.position.clone(), radius: p.radius }));
+  }
+
   patch(center: THREE.Vector3, radius: number, kind: 'frost' | 'burn' | 'fuel', life = 12): THREE.Mesh {
     const mat = new THREE.MeshPhysicalMaterial(kind === 'frost'
       ? { color: 0xdff6ff, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.85, emissive: 0x6fd3ff, emissiveIntensity: 0.12, clearcoat: 1 }
@@ -241,7 +287,7 @@ export class Vfx {
     mesh.scale.setScalar(0.01);
     mesh.receiveShadow = true;
     this.scene.add(mesh);
-    this.patches.push({ mesh, life, max: life, mat, frost: kind === 'frost' });
+    this.patches.push({ mesh, life, max: life, mat, kind, radius });
     (mesh as unknown as { targetRadius: number }).targetRadius = radius;
     return mesh;
   }
@@ -363,6 +409,16 @@ export class Vfx {
       g.sprite.material.rotation = u * 0.6;
       if (g.life <= 0) { this.scene.remove(g.sprite); g.sprite.material.dispose(); this.glints.splice(i, 1); }
     }
+    for (let i = this.arcs.length - 1; i >= 0; i--) {
+      const a = this.arcs[i]!;
+      a.life -= dt;
+      if (a.life <= 0) { this.dropArc(a); this.arcs.splice(i, 1); continue; }
+      // A bolt is light: it holds full, then gutters out in flickers.
+      const u = a.life / a.max;
+      const flicker = (u > 0.5 ? 1 : (Math.random() < 0.3 ? 0.25 : 1) * u * 2) * this.nearFade(a.from.clone().lerp(a.to, 0.5));
+      for (const l of a.layers) l.mat.opacity = l.peak * flicker;
+      if ((a.next -= dt) <= 0) { a.next = 0.045; this.redrawArc(a); }
+    }
     for (let i = this.spikes.length - 1; i >= 0; i--) {
       const s = this.spikes[i]!;
       s.life -= dt;
@@ -384,6 +440,54 @@ export class Vfx {
     if (!this.viewer) return 1;
     return THREE.MathUtils.smoothstep(at.distanceTo(this.viewer.camera.position), 0.7, 2.2);
   }
+}
+
+const INK_ARC = 0x17110c;
+
+// The paths of one bolt: the main line from `a` to `b`, kinked at random
+// points off the straight line, and a fork or two off it that die out.
+function boltPaths(a: THREE.Vector3, b: THREE.Vector3, jag: number): THREE.Vector3[][] {
+  const len = a.distanceTo(b);
+  const n = Math.max(3, Math.min(16, Math.round(len / 0.3)));
+  const dir = b.clone().sub(a).normalize();
+  const side = new THREE.Vector3().crossVectors(dir, Math.abs(dir.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)).normalize();
+  const up = new THREE.Vector3().crossVectors(side, dir).normalize();
+  const kink = (p: THREE.Vector3, amount: number) => p.addScaledVector(side, (Math.random() - 0.5) * 2 * amount).addScaledVector(up, (Math.random() - 0.5) * 2 * amount);
+  const main = [a.clone()];
+  for (let i = 1; i < n; i++) main.push(kink(a.clone().lerp(b, i / n), len * jag * Math.sin((i / n) * Math.PI) * 0.5));
+  main.push(b.clone());
+  const paths = [main];
+  for (let f = 0; f < (len > 1.5 ? 2 : len > 0.6 ? 1 : 0); f++) {
+    const at = 1 + Math.floor(Math.random() * (n - 2));
+    const fork = [main[at]!.clone()];
+    const heading = dir.clone().addScaledVector(side, (Math.random() - 0.5) * 1.6).addScaledVector(up, (Math.random() - 0.5) * 1.6).normalize();
+    for (let k = 1; k <= 3; k++) fork.push(kink(fork[k - 1]!.clone().addScaledVector(heading, len / n * 0.9), len * jag * 0.12));
+    paths.push(fork);
+  }
+  return paths;
+}
+
+// Quads along each path, turned to face the eye, thinning toward a fork's end.
+function boltGeometry(paths: THREE.Vector3[][], width: number, eye: THREE.Vector3): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const idx: number[] = [];
+  paths.forEach((pts, pi) => {
+    const base = pos.length / 3;
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i]!;
+      const d = (i < pts.length - 1 ? pts[i + 1]!.clone().sub(p) : p.clone().sub(pts[i - 1]!)).normalize();
+      // Seen from far off (the top-down camera) a bolt keeps a readable width.
+      const far = THREE.MathUtils.clamp(eye.distanceTo(p) / 6, 1, 3.2);
+      const w = width * 0.5 * far * (pi === 0 ? 1 : 0.6 * (1 - i / pts.length));
+      const s = new THREE.Vector3().crossVectors(d, eye.clone().sub(p)).normalize().multiplyScalar(w);
+      pos.push(p.x + s.x, p.y + s.y, p.z + s.z, p.x - s.x, p.y - s.y, p.z - s.z);
+    }
+    for (let i = 0; i < pts.length - 1; i++) { const k = base + i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  return g;
 }
 
 function ribbon(points: THREE.Vector3[], width: number): THREE.BufferGeometry {

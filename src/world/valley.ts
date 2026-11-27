@@ -8,6 +8,7 @@ import {
   type Pt, FLOOR_Y, WATER_Y, VALLEY, ROAD, ROAD_HALF, PATHS, PATH_HALF, STREAM, STREAM_HALF, BANK, FALLS, EXIT, BRIDGE, STONES,
   FIELD, GROUNDS, GINKGO, TERRACES, MEADOW, SHRINE, STONE_AT, CLIFF, heightAt, cliffDistance, cliffRun, nearest, nearPath, tierY, smooth,
 } from './valleyPlan';
+import { walkDistance as passRoad } from './pass/route';
 import type { Zone, Footprint } from './compound';
 
 // The open valley the compound sits in (the plan is src/world/valleyPlan.ts):
@@ -139,7 +140,8 @@ export function buildValley(k: ValleyKit): Valley {
     const painted = (x: number, z: number): number => {
       const y = heightAt(x, z), d = cliffDistance(x, z), run = cliffRun(x, z);
       if (d <= 0.25 || d >= run + 1.2) return y;
-      const w = smooth(0.25, 1.6, d) * smooth(run + 1.2, run - 0.4, d);
+      // Fading out into the pass road's cutting, whose banks are the road's (src/world/pass/).
+      const w = smooth(0.25, 1.6, d) * smooth(run + 1.2, run - 0.4, d) * smooth(2, 8, passRoad(x, z));
       const flute = Math.sin(x * 0.62 + Math.sin(z * 0.37) * 1.8) * Math.sin(z * 0.66 + Math.sin(x * 0.29) * 1.8);
       const band = (y - CLIFF.rise) / 2.3, ledge = (Math.floor(band) + smooth(0.45, 1, band - Math.floor(band))) * 2.3 + CLIFF.rise;
       return y + w * (flute * 1.5 + (ledge - y) * 0.7);
@@ -688,7 +690,8 @@ export function buildValley(k: ValleyKit): Valley {
       const d = cliffDistance(jx, jz);
       const r = rand(), kindRoll = rand(), s = 0.95 + rand() * 0.55, seed = Math.floor(rand() * 100);
       if (d > cliffRun(jx, jz) + 0.6) {
-        if (d > 36 || r > 0.62) continue;
+        // The pass road's cutting climbs through these slopes (src/world/pass/).
+        if (d > 36 || r > 0.62 || passRoad(jx, jz) < 14) continue;
         tree(jx, jz, kindRoll < 0.45 ? 'cedar' : kindRoll < 0.86 ? 'pine' : kindRoll < 0.94 ? 'maple' : 'gold', s * 1.15, seed, false, true);
         continue;
       }
@@ -725,7 +728,7 @@ export function buildValley(k: ValleyKit): Valley {
     const rand = rng(31);
     const tones = [0x9c9384, 0xa89c86, 0x8b877f, 0x9a8a78, 0x857b70].map((c) => toon(c));
     const scrub = [toon(0x55794a), toon(0x4a6b45), toon(0x6c8a4c)];
-    const quiet = (x: number, z: number): boolean => Math.hypot(x - FALLS.x, z - FALLS.z) < 10 || Math.hypot(x - EXIT.x, z - EXIT.z) < 7;
+    const quiet = (x: number, z: number): boolean => Math.hypot(x - FALLS.x, z - FALLS.z) < 10 || Math.hypot(x - EXIT.x, z - EXIT.z) < 7 || passRoad(x, z) < 9;
     const V = VALLEY, cx = (V.x0 + V.x1) / 2, cz = (V.z0 + V.z1) / 2;
     const perimeter = 2 * (V.x1 - V.x0 + V.z1 - V.z0);
     for (let t = 0; t < perimeter; t += 4.2 + rand() * 3) {
@@ -788,7 +791,12 @@ export function buildValley(k: ValleyKit): Valley {
       physics.staticBox(new THREE.Vector3((x0 + x1) / 2 + nx * 0.5, 30, (z0 + z1) / 2 + nz * 0.5), new THREE.Vector3(len / 2 + 0.15, 32, 0.5), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.atan2(z1 - z0, x1 - x0)));
     };
     const ring = (pts: [number, number, number, number][]): void => {
-      for (let i = 0; i < pts.length; i++) { const [x0, z0, nx, nz] = pts[i]!, [x1, z1] = pts[(i + 1) % pts.length]!; wall(x0, z0, x1, z1, nx, nz); }
+      for (let i = 0; i < pts.length; i++) {
+        const [x0, z0, nx, nz] = pts[i]!, [x1, z1] = pts[(i + 1) % pts.length]!;
+        // The pass road's cutting leaves the valley through the rock here; its own edges close it (src/world/pass/road.ts).
+        if ([0.5, 0.25, 0.75, 0, 1].some((t) => passRoad(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t) < 0.3)) continue;
+        wall(x0, z0, x1, z1, nx, nz);
+      }
     };
     // Slide each point out along its direction until it sits on the ragged line.
     const FACE = 0.35;

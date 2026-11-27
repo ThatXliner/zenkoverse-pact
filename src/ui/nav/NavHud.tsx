@@ -30,7 +30,7 @@ function TopCenter({ view }: { view: NavView }) {
   return (
     <div class="top-center">
       <Compass view={view} />
-      {zone && <div class="zone-line" key={zone.id}><span class="jp">{ZONE_JP[zone.id] ?? ''}</span><span class="en">{zone.label}</span></div>}
+      {zone && <div class="zone-line" key={zone.id}><span class="jp">{zone.jp ?? ZONE_JP[zone.id] ?? ''}</span><span class="en">{zone.label}</span></div>}
     </div>
   );
 }

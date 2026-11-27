@@ -31,6 +31,10 @@ export class RemotePlayer extends Enemy {
   info: PlayerInfo;
   away = false;
   cine = false;
+  // Standing on land this screen has not built (out on the pass while this
+  // player is in the compound): not drawn, not hit, no name plate, until
+  // this screen builds that land or they come back to it.
+  elsewhere = false;
   // Their aura field as their own screen draws it.
   fieldRadius = 0;
   fieldDensity = 0;
@@ -161,7 +165,7 @@ export class RemotePlayer extends Enemy {
     this.hp = hp;
     this.frozen = 0;
     this.resonance = 0;
-    this.collider.setEnabled(true);
+    this.collider.setEnabled(!this.elsewhere);
     this.avatar.revive();
   }
 
@@ -195,7 +199,9 @@ export class RemotePlayer extends Enemy {
     this.grounded = s.g;
     this.body.setNextKinematicTranslation({ x: s.p[0], y: s.p[1] + this.height / 2, z: s.p[2] });
     const root = this.avatar.root;
-    root.visible = true;
+    const gone = !this.game.world.present(this.position);
+    if (gone !== this.elsewhere) { this.elsewhere = gone; if (this.alive) this.collider.setEnabled(!gone); }
+    root.visible = !gone;
     root.position.copy(this.position);
     if (this.alive) {
       root.rotation.y = s.yaw;

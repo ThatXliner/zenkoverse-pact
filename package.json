@@ -39,6 +39,7 @@
     "check:tension": "node tools/check-tension.mjs",
     "check:valley": "node tools/check-valley.mjs",
     "check:city": "node tools/check-city.mjs",
+    "check:world": "node tools/check-world.mjs",
     "manifest": "node tools/manifest.mjs"
   },
   "dependencies": {

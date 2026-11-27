@@ -24,7 +24,7 @@ export interface Places {
   stairs: { id: string; top: THREE.Vector3; bottom: THREE.Vector3 }[];
 }
 
-export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
+export function* buildPlaces(k: CityKit, signs: SignAtlas): Generator<void, Places, void> {
   const r = rng(23);
   const stairs: Places['stairs'] = [];
   const lantern = k.shared('lantern', () => emissive(0xffa25a, 2.2));
@@ -61,9 +61,13 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
     stairs.push({ id, top: k.w(x, y, z), bottom: k.w(x + dx * len, 0, z + dz * len) });
   };
 
+  yield;
   // ------------------------------------------------------------ the railway
+  yield;
   // A concrete viaduct the width of the ward: a deck on a solid run of bays
+  yield;
   // (bars and stores under the tracks), parapets either side, two tracks of
+  yield;
   // ballast, sleepers and rails, and catenary masts.
   const V = RAIL;
   const vx = 90;
@@ -74,6 +78,7 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
   }
   k.span(CONCRETE, -vx, vx, V.deckY, V.deckY + 1.1, V.z0, V.z0 + 0.3, {});
   k.span(CONCRETE_DARK, -vx, vx, V.deckY + 1.1, V.deckY + 1.16, V.z0 - 0.04, V.z0 + 0.34, { collide: false });
+  yield;
   // Under the station the deck stands on columns.
   k.span(CONCRETE, STATION.x0, STATION.x1, V.deckY - 0.9, V.deckY, V.z0, V.z1, { surface: 'stone' });
   for (let x = STATION.x0 + 2; x <= STATION.x1 - 2; x += 8) for (const z of [V.z0 + 1.2, V.z1 - 1.2]) k.box(CONCRETE, x, (V.deckY - 0.9) / 2, z, 1.0, V.deckY - 0.9, 1.0);
@@ -82,6 +87,7 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
     for (let x = -72; x <= 72; x += 1.1) k.box(0x6b5444, x, V.deckY + 0.22, tz, 0.24, 0.08, 2.4, { collide: false, shadow: false });
     for (const dz of [-0.72, 0.72]) k.span(0x8e949a, -vx, vx, V.deckY + 0.26, V.deckY + 0.36, tz + dz - 0.04, tz + dz + 0.04, { collide: false, shadow: false });
   }
+  yield;
   // Catenary masts on the north parapet with their arms over the tracks, and the wire.
   for (let x = -66; x <= 66; x += 22) {
     k.box(INK.steel, x, V.deckY + 3.5, V.z0 + 0.4, 0.3, 7.0, 0.3, { collide: false });
@@ -89,8 +95,11 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
   }
   for (const tz of V.tracks) k.span(INK.black, -vx, vx, V.deckY + 5.6, V.deckY + 5.63, tz - 0.015, tz + 0.015, { collide: false, shadow: false });
 
+  yield;
   // The bars and stores in the viaduct's bays, facing the walk under the
+  yield;
   // tracks: a lit front behind sliding glass, red lanterns, a noren, a
+  yield;
   // board with the place's name, beer crates and stools out front.
   const barNames = ['焼とん', '立呑み', 'おでん', '酒場', 'もつ焼', '居酒屋', '餃子', '立呑み', '焼鳥', '酒場'];
   let bi = 0;
@@ -133,9 +142,13 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
     }
   }
 
+  yield;
   // ------------------------------------------------------------ the station
+  yield;
   // One deck at platform level: the platform along the tracks under its
+  yield;
   // canopy, and the forecourt deck over the ticket hall, with the grand stair
+  yield;
   // down to the plaza and the pedestrian deck going east.
   const S = STATION;
   const deckMat = k.shared('deck', () => toon(0xffffff, { map: planks(0xb9b3a6, 0xaea795, 0x8f887a, 8) }));
@@ -143,11 +156,14 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
   const forecourt = k.shared('forecourt', () => toon(0xffffff, { map: flagstones(0xd2ccbf, 0xc8c1b2, 0xa9a194, 3) }));
   k.span(forecourt, S.x0 + 0.2, S.x1 - 0.2, S.y, S.y + 0.02, S.platformZ, S.z1 - 0.2, { collide: false, shadow: false, group: 'station-deck', uv: 3 });
   k.span(deckMat, S.x0, S.x1, S.y, S.y + 0.02, V.z1, S.platformZ, { collide: false, shadow: false, uv: 2 });
+  yield;
   // The tactile line and the white edge along the platform.
   k.span(0xe6c13c, S.x0 + 0.4, S.x1 - 0.4, S.y + 0.02, S.y + 0.04, V.z1 + 0.7, V.z1 + 1.0, { collide: false, shadow: false });
   k.span(0xf1ece0, S.x0, S.x1, S.y - 0.1, S.y + 0.03, V.z1, V.z1 + 0.25, { collide: false, shadow: false });
+  yield;
   // Nobody goes down onto the tracks: a rail along the platform edge.
   k.block(S.x0, S.x1, S.y, S.y + 6, V.z1 - 0.2, V.z1);
+  yield;
   // The ticket hall under the deck: walls, glass doors to the plaza, gates.
   const hall = S.hall;
   k.span(0xd9d3c6, hall.x0, hall.x1, 0, S.y - 0.6, hall.z0, hall.z1, { surface: 'stone', group: k.group('station-hall') });
@@ -159,18 +175,22 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
     const b = k.mesh(signs.face(x < 0 ? 'きっぷうりば' : '改札口', 3.0, 0.6, { paper: '#1f2b44', ink: '#f4f1e8', font: 'gothic' }), signs.lit, x, 4.2, hall.z1 + 0.12, { shadow: false });
     b.rotation.y = 0;
   }
+  yield;
   // The station's name on a frame over the head of the grand stair, read from the plaza and from above.
   for (const x of [GRAND_STAIR.x0 - 0.5, GRAND_STAIR.x1 + 0.5]) k.box(INK.steel, x, S.y + 1.7, S.z1 - 0.6, 0.26, 3.4, 0.26, { group: 'station-deck' });
   k.box(0x1f2b44, 0, S.y + 3.65, S.z1 - 0.6, GRAND_STAIR.x1 - GRAND_STAIR.x0 + 2.6, 1.3, 0.3, { group: 'station-deck', collide: false });
   const nameBoard = k.mesh(signs.face('東雲駅', 5.6, 1.1, { paper: '#f4f1e8', ink: '#1f2b44', font: 'gothic', sub: 'SHINONOME STATION' }), signs.lit, 0, S.y + 3.65, S.z1 - 0.44, { shadow: false, group: 'station-deck' });
   nameBoard.rotation.y = 0;
+  yield;
   // The ticket gates between the forecourt and the platform: a row of
+  yield;
   // waist-high cabinets with a passage between each pair.
   for (let x = -9; x <= 9; x += 1.5) {
     k.box(0xe6e3da, x, S.y + 0.5, S.platformZ + 0.6, 0.32, 1.0, 1.4);
     k.box(0x2f6a8a, x, S.y + 1.0, S.platformZ + 0.6, 0.34, 0.06, 1.42, { collide: false, shadow: false });
   }
   for (const x of [-15.5, 14.5]) k.box(0xd9d3c6, x, S.y + 0.6, S.platformZ + 0.6, 3.6, 1.2, 0.4);
+  yield;
   // Long planters on the forecourt, low enough to vault, high enough for cover.
   for (const [x, z] of [[-14, -31.4], [11, -31.4]] as const) {
     k.box(0xb0a998, x, S.y + 0.4, z, 5.2, 0.8, 1.2);
@@ -179,8 +199,10 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
   k.prop('crate', -4.6, S.y + 0.05, -32.6);
   k.prop('crate', -4.6, S.y + 0.05, -31.4);
   k.prop('signStand', 5.6, S.y + 0.04, -30.4, 0.4);
+  yield;
   // Columns under the deck either side of the hall.
   for (const x of [-20, -16, 16, 20]) for (const z of [-38, -33, -29.2]) k.box(CONCRETE, x, (S.y - 0.6) / 2, z, 0.9, S.y - 0.6, 0.9);
+  yield;
   // The canopy over the platform, on a row of posts.
   const canopy = k.group('station-canopy', false);
   for (let x = S.x0 + 2; x <= S.x1 - 2; x += 6) {
@@ -190,6 +212,7 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
   k.span(0xe9e6dc, S.x0 - 0.2, S.x1 + 0.2, S.y + 3.3, S.y + 3.5, V.z1 - 0.6, S.platformZ + 0.9, { group: canopy, collide: false });
   for (let x = S.x0 + 2; x <= S.x1 - 2; x += 3) k.span(0xb9bdb8, x - 0.08, x + 0.08, S.y + 3.5, S.y + 3.56, V.z1 - 0.6, S.platformZ + 0.9, { group: canopy, collide: false, shadow: false });
   k.span(0x4f6c8a, S.x0 - 0.3, S.x1 + 0.3, S.y + 3.2, S.y + 3.6, S.platformZ + 0.8, S.platformZ + 1.0, { group: canopy, collide: false });
+  yield;
   // Platform furniture: benches, a machine, the station's name board with its neighbours.
   for (const x of [-14, -4, 8]) { k.box(INK.woodLight, x, S.y + 0.45, -37.2, 1.8, 0.08, 0.45); k.box(INK.steel, x, S.y + 0.22, -37.2, 1.6, 0.44, 0.3, { collide: false }); }
   const sta = k.mesh(signs.face('しののめ', 3.2, 1.2, { paper: '#f6f6f2', ink: '#1f2b44', font: 'gothic', sub: '東雲  ←みなと   かわら→' }), signs.lit, 2, S.y + 2.0, -37.4, { shadow: false });
@@ -197,6 +220,7 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
   k.span(INK.steel, 0.3, 0.4, S.y, S.y + 2.6, -37.5, -37.4, { collide: false });
   k.span(INK.steel, 3.6, 3.7, S.y, S.y + 2.6, -37.5, -37.4, { collide: false });
   k.span(0x2f6a8a, 0.3, 3.7, S.y + 1.36, S.y + 1.42, -37.46, -37.38, { collide: false, shadow: false });
+  yield;
   // Railings round the deck, open at the grand stair and the pedestrian deck.
   const deckRail = (x0: number, x1: number, z0: number, z1: number): void => {
     if (Math.abs(x1 - x0) < 0.1 && Math.abs(z1 - z0) < 0.1) return;
@@ -211,9 +235,11 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
   deckRail(PED_DECK.x1, S.x1, S.z1, S.z1);
   k.light(0xffe2b0, 6, 12, -8, S.y + 2.8, -37.5);
   k.light(0xffe2b0, 6, 12, 10, S.y + 2.8, -37.5);
+  yield;
   // The grand stair from the forecourt down into the plaza, between stone cheeks.
   flight('grand', 0, S.y, S.z1, 0, 1, GRAND_STAIR.x1 - GRAND_STAIR.x0, 'stone');
 
+  yield;
   // ------------------------------------------------------------ pedestrian deck
   const P = PED_DECK;
   const ped = k.group('ped-deck', false);
@@ -228,13 +254,18 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
   pedRail(P.x1, P.x1, S.z1, P.z1);
   pedRail(P.x0, P.x0, S.z1, -14);
   pedRail(P.x0, P.x1, P.z1, P.z1);
+  yield;
   // A covered stretch where the deck crosses the station street.
   for (const x of [P.x0 + 0.3, P.x1 - 0.3]) for (const z of [-18.5, -14.5]) k.box(INK.steel, x, P.y + 1.4, z, 0.14, 2.8, 0.14, { group: ped, collide: false });
   k.span(0x4f6c8a, P.x0, P.x1, P.y + 2.8, P.y + 2.95, -19, -14, { group: ped, collide: false });
 
+  yield;
   // ------------------------------------------------------------ the arcade
+  yield;
   // A barrel roof of pale panels on steel ribs every four metres over the
+  yield;
   // shopping street, red lanterns hung down both sides, and a gate at each
+  yield;
   // end with the street's name.
   const A = ARCADE;
   const arcade = k.group('arcade', false);
@@ -273,7 +304,9 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
     gateSign.rotation.y = face > 0 ? 0 : Math.PI;
   }
 
+  yield;
   // ------------------------------------------------------------ catwalk
+  yield;
   // Steel grating over the arcade roof between the two rows' roofs, with rails.
   const C = CATWALK;
   k.span(INK.steelLight, -4.4, 4.4, C.y - 0.12, C.y, C.z0, C.z1, { surface: 'metal' });
@@ -286,15 +319,20 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
   }
   for (const x of [-2, 2]) k.box(INK.steel, x, (C.y + arcY(x)) / 2, (C.z0 + C.z1) / 2, 0.1, C.y - arcY(x), 0.1, { collide: false });
 
+  yield;
   // ------------------------------------------------------------ outside stairs
+  yield;
   // Steel flights from the back streets up to the arcade rows' roofs.
   stairLanding(k, -15.6, -14, 14.6, 17.4, 6.6);
   flight('west-roofs', -14.8, 6.6, 14.6, 0, -1, 1.4, 'steel');
   stairLanding(k, 14, 15.6, 2.6, 4.6, 6.8);
   flight('east-roofs', 14.8, 6.8, 4.6, 0, 1, 1.4, 'steel');
 
+  yield;
   // ------------------------------------------------------------ the plaza
+  yield;
   // A police box on the corner, a clock on a post, a bus shelter, a round
+  yield;
   // planter with a zelkova, the taxi stand's sign, crates by a shop door.
   koban(k, signs);
   k.cyl(INK.steel, 9, 2.4, -24, 0.09, 0.12, 4.8, 8);
@@ -304,11 +342,13 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
   k.cyl(0xf4f1e6, 9, 4.9, -23.9, 0.38, 0.38, 0.02, 20, { rot: [Math.PI / 2, 0, 0], collide: false, shadow: false });
   k.box(INK.black, 9.12, 4.96, -23.88, 0.04, 0.26, 0.01, { collide: false, shadow: false, rot: [0, 0, -0.5] });
   k.box(INK.black, 8.96, 4.82, -23.88, 0.03, 0.34, 0.01, { collide: false, shadow: false, rot: [0, 0, 2.1] });
+  yield;
   // The round planter.
   k.cyl(0xb0a998, -11, 0.3, -23.2, 2.2, 2.3, 0.6, 20);
   k.solid(-11, 0.3, -23.2, 1.6, 0.3, 1.6);
   k.cyl(0x5a4436, -11, 0.62, -23.2, 2.0, 2.0, 0.06, 20, { collide: false, shadow: false });
   tree(k, -11, -23.2, 'zelkova', 1.15, r, 0.6);
+  yield;
   // The bus shelter on the station street.
   {
     const x = 6, z = -15.2;
@@ -324,7 +364,9 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
   k.prop('signStand', -6.4, 0.04, -19.6, 0.3);
   k.prop('cardboard', 19.6, 0.05, -19.6);
 
+  yield;
   // ------------------------------------------------------------ arcade life
+  yield;
   // Out in front of the shops: crates, stools, a sign on the pavement.
   for (const [key, x, z, rot] of [
     ['beerCrate', -3.4, -10.6, 0], ['beerCrate', -3.4, -10.6, 0.2], ['cardboard', -3.3, -5.2, 0.4], ['signStand', -2.9, -1.4, 1.2],
@@ -332,8 +374,11 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
     ['crate', -3.3, 10.2, 0.1], ['cardboard', 3.4, -6.4, 0], ['beerCrate', 3.3, -12.2, 0],
   ] as const) k.prop(key, x, key === 'beerCrate' && rot === 0.2 ? 0.45 : 0.06, z, rot);
 
+  yield;
   // ------------------------------------------------------------ roofs
+  yield;
   // On the circuit: a water tank and a billboard on the tallest of the west
+  yield;
   // row, a little shrine on the east row, washing poles, and things to throw.
   tank(k, -11.6, 8.2, 11.6, { group: 'w5' });
   billboard(k, signs, -9, 8.2, 8.6);
@@ -346,13 +391,18 @@ export function buildPlaces(k: CityKit, signs: SignAtlas): Places {
   }
   for (const [key, x, y, z] of [['crate', -7, 7.2, -12.6], ['crate', -7, 7.2, -11.2], ['barrel', 8.6, 7.4, 9.2], ['cardboard', -7.2, 7.0, 4.6], ['crateSmall', 7.4, 7.0, -7], ['beerCrate', -6.6, 6.6, 15.8]] as const) k.prop(key, x, y + 0.05, z);
 
+  yield;
   // ------------------------------------------------------------ shrine
-  shrine(k, signs, tile, r);
+  yield* shrine(k, signs, tile, r);
+  yield;
   // ------------------------------------------------------------ park
   park(k, r);
+  yield;
   // ------------------------------------------------------------ kuroda
-  kuroda(k, signs, tile, lantern, r, flight);
+  yield* kuroda(k, signs, tile, lantern, r, flight);
+  yield;
   // ------------------------------------------------------------ the road
+  yield;
   // A few parked things on the main road's kerb: a delivery van, a scooter.
   van(k, -30, ODORI.road1 - 1.1, 0x2f6a8a);
   scooter(k, 22, ODORI.road0 + 0.6);
@@ -407,10 +457,11 @@ function roofShrine(k: CityKit, x: number, y: number, z: number, tile: THREE.Mat
 // stepping stones up to a small worship hall on a stone platform, two
 // foxes on plinths, a row of small torii down the east side to a hokora, a
 // great camphor tree bound with a rope, a water basin, and the ema rack.
-function shrine(k: CityKit, signs: SignAtlas, tile: THREE.Material, r: () => number): void {
+function* shrine(k: CityKit, signs: SignAtlas, tile: THREE.Material, r: () => number): Generator<void, void, void> {
   const S = SHRINE;
   const gravel = k.shared('gravel', () => toon(0xdcd3c0));
   k.span(gravel, S.x0, S.x1, 0, 0.06, S.z0, S.z1, { shadow: false, surface: 'stone' });
+  yield;
   // A low stone wall with a clipped hedge, open at the torii and the side gate.
   const wall = (x0: number, x1: number, z0: number, z1: number): void => {
     if (Math.max(x1 - x0, z1 - z0) < 0.2) return;
@@ -423,10 +474,13 @@ function shrine(k: CityKit, signs: SignAtlas, tile: THREE.Material, r: () => num
   wall(S.x1 - 0.3, S.x1, -3.2, S.z1);
   wall(S.x0, S.toriiX - 2.2, S.z1 - 0.3, S.z1);
   wall(S.toriiX + 2.2, S.x1, S.z1 - 0.3, S.z1);
+  yield;
   // The torii on the lane.
   torii(k, S.toriiX, S.z1 + 0.6, 4.2, 4.6, 0.26);
+  yield;
   // Stepping stones up to the hall.
   for (let z = S.z1 - 1; z > -4.6; z -= 1.15) k.cyl(0xb9b2a5, S.toriiX + (r() - 0.5) * 0.3, 0.08, z, 0.48, 0.52, 0.1, 7, { collide: false, shadow: false });
+  yield;
   // The worship hall on its platform.
   const hx0 = S.toriiX - 4, hx1 = S.toriiX + 4, hz0 = S.z0 + 1, hz1 = -5.5;
   const o = { group: k.group('shrine-hall') };
@@ -436,25 +490,30 @@ function shrine(k: CityKit, signs: SignAtlas, tile: THREE.Material, r: () => num
   k.span(INK.woodDark, hx0 - 0.05, hx1 + 0.05, 0.6, 1.4, hz0 - 0.05, hz1 + 0.05, { ...o, collide: false });
   for (const x of [hx0, hx0 + 2.6, hx1 - 2.6, hx1]) k.box(VERMILION, x, 2.2, hz1 + 0.05, 0.26, 3.2, 0.26, { ...o, collide: false });
   k.span(VERMILION, hx0, hx1, 3.5, 3.8, hz1, hz1 + 0.2, { ...o, collide: false });
+  yield;
   // A lattice front, the offering box, the bell rope.
   for (let x = hx0 + 2.8; x < hx1 - 2.7; x += 0.3) k.span(INK.woodDark, x, x + 0.04, 0.7, 3.4, hz1 + 0.02, hz1 + 0.06, { ...o, collide: false, shadow: false });
   k.span(INK.wood, S.toriiX - 0.8, S.toriiX + 0.8, 0.6, 1.3, hz1 + 0.4, hz1 + 1.0, {});
   k.cyl(0xd9a640, S.toriiX, 3.1, hz1 + 0.5, 0.22, 0.26, 0.36, 10, { collide: false });
   k.box(0xd8bf86, S.toriiX, 2.0, hz1 + 0.52, 0.08, 2.1, 0.08, { collide: false });
+  yield;
   // The rope across the front with its paper streamers.
   k.box(0xd8bf86, S.toriiX, 3.1, hz1 + 0.35, hx1 - hx0 - 1, 0.18, 0.18, { collide: false });
   for (let x = hx0 + 1.2; x < hx1 - 1; x += 1.1) k.box(0xf6eedc, x, 2.8, hz1 + 0.42, 0.14, 0.42, 0.02, { collide: false, shadow: false, rot: [0, 0, (x % 2) * 0.2] });
   gable(k, { x0: hx0 - 0.4, x1: hx1 + 0.4, z0: hz0 - 0.4, z1: hz1 + 0.4 }, 3.8, 'x', tile, o, 0.6);
   const plate = k.mesh(signs.face('稲荷', 0.5, 1.3, { paper: '#2b1d1a', ink: '#e8c36a', font: 'mincho', rule: true }), signs.plain, S.toriiX, 3.9, hz1 + 0.62, { shadow: false });
   plate.rotation.y = 0;
+  yield;
   // The foxes on their plinths either side of the path.
   for (const side of [-1, 1]) fox(k, S.toriiX + side * 2.2, -1.2, side);
+  yield;
   // A row of small torii down the east side to a hokora.
   for (let i = 0; i < 9; i++) torii(k, S.x1 - 1.6, 2.6 - i * 1.15, 1.4, 2.3, 0.09, true);
   const hk = { group: k.group('shrine-hall') };
   k.span(0xa3a7a8, S.x1 - 2.4, S.x1 - 0.8, 0, 0.5, S.z0 + 0.5, S.z0 + 1.6);
   k.span(INK.woodLight, S.x1 - 2.1, S.x1 - 1.1, 0.5, 1.3, S.z0 + 0.6, S.z0 + 1.4, { ...hk, collide: false });
   k.span(tile, S.x1 - 2.3, S.x1 - 0.9, 1.3, 1.42, S.z0 + 0.45, S.z0 + 1.6, { ...hk, collide: false, uv: 1.2 });
+  yield;
   // The camphor tree bound with rope.
   {
     const x = S.x0 + 3.2, z = -1;
@@ -468,6 +527,7 @@ function shrine(k: CityKit, signs: SignAtlas, tile: THREE.Material, r: () => num
     }
     k.group('shrine-tree', true);
   }
+  yield;
   // The water basin under its roof by the path.
   {
     const x = S.toriiX + 3.6, z = 1.4;
@@ -476,6 +536,7 @@ function shrine(k: CityKit, signs: SignAtlas, tile: THREE.Material, r: () => num
     k.span(0x9a948a, x - 0.6, x + 0.6, 0, 0.7, z - 0.35, z + 0.35, {});
     k.span(0x3f7f96, x - 0.5, x + 0.5, 0.7, 0.72, z - 0.25, z + 0.25, { collide: false, shadow: false });
   }
+  yield;
   // The ema rack: small wooden plaques hung on a frame.
   {
     const x = S.toriiX - 4.2, z = 1.6;
@@ -485,6 +546,7 @@ function shrine(k: CityKit, signs: SignAtlas, tile: THREE.Material, r: () => num
     for (let i = 0; i < 12; i++) k.box(INK.woodLight, x - 0.9 + (i % 6) * 0.36, i < 6 ? 1.34 : 0.9, z + 0.04, 0.26, 0.18, 0.02, { collide: false, shadow: false, rot: [0, 0, (r() - 0.5) * 0.2] });
     k.solid(x, 0.8, z, 1.1, 0.8, 0.1);
   }
+  yield;
   // Stone lanterns at the hall's steps, lit.
   for (const side of [-1, 1]) stoneLantern(k, S.toriiX + side * 3.6, -3.6);
   k.light(0xffb36b, 5, 7, S.toriiX, 1.8, -3);
@@ -559,7 +621,7 @@ function park(k: CityKit, r: () => number): void {
 // the warehouse itself with its stair to the roof. The gate on the back
 // street has two lanterns with the house's crest and a name plate; nothing
 // else says whose it is.
-function kuroda(k: CityKit, signs: SignAtlas, tile: THREE.Material, lantern: THREE.Material, r: () => number, flight: (id: string, x: number, y: number, z: number, dx: number, dz: number, width: number, style: 'steel' | 'stone', o?: PieceOpts) => void): void {
+function* kuroda(k: CityKit, signs: SignAtlas, tile: THREE.Material, lantern: THREE.Material, r: () => number, flight: (id: string, x: number, y: number, z: number, dx: number, dz: number, width: number, style: 'steel' | 'stone', o?: PieceOpts) => void): Generator<void, void, void> {
   const K = KURODA;
   const yakisugi = k.shared('yakisugi', () => toon(0xffffff, { map: planks(0x3d3337, 0x2e2629, 0x141012, 10) }));
   k.span(k.shared('yard', () => toon(0x9d978c)), K.x0, K.x1, 0, 0.04, K.z0, K.z1, { shadow: false, collide: false });
@@ -576,6 +638,7 @@ function kuroda(k: CityKit, signs: SignAtlas, tile: THREE.Material, lantern: THR
   fence(K.x1 - t, K.x1, K.z0, K.z1);
   fence(K.x0, K.back.x0, K.z1 - t, K.z1);
   fence(K.back.x1, K.x1, K.z1 - t, K.z1);
+  yield;
   // The gate: two posts, a beam, a tiled hood; the doors stand open inward.
   const gz0 = K.gate.z0 - 0.3, gz1 = K.gate.z1 + 0.3, gx = K.x0 + t / 2;
   for (const z of [gz0, gz1]) k.box(0x2a2326, gx, 1.8, z, 0.4, 3.6, 0.4);
@@ -596,14 +659,18 @@ function kuroda(k: CityKit, signs: SignAtlas, tile: THREE.Material, lantern: THR
   const plate = k.mesh(signs.face('黒田', 0.24, 0.8, { paper: '#d9c9a6', ink: '#1a1416', font: 'mincho', rule: true }), signs.plain, gx - 0.21, 1.7, gz0, { shadow: false });
   plate.rotation.y = -Math.PI / 2;
 
+  yield;
   // The main house: black plaster over dark boarding, a tiled gable.
   const KH = KURODA_HOUSE;
   const hb: Building = { id: 'kuroda-house', kind: 'house', x0: KH.x0, x1: KH.x1, z0: KH.z0, z1: KH.z1, h: KH.h, front: 's', color: 0x2f2a2d, group: 'kuroda-house' };
   house(k, hb, k.group('kuroda-house'), tile, r);
+  yield;
   // A veranda along the yard side.
   k.span(INK.woodLight, KH.x0 + 0.5, KH.x1 - 0.5, 0, 0.45, KH.z1, KH.z1 + 1.0, { surface: 'wood' });
 
+  yield;
   // The warehouse: ribbed steel walls, a sliding door, a flat roof with a
+  yield;
   // parapet; a steel stair up its west side.
   const W = WAREHOUSE;
   const wo = { group: k.group('warehouse') };
@@ -612,6 +679,7 @@ function kuroda(k: CityKit, signs: SignAtlas, tile: THREE.Material, lantern: THR
   k.span(INK.band, W.x0 - 0.04, W.x1 + 0.04, 0, 0.5, W.z0 - 0.04, W.z1 + 0.04, { ...wo, collide: false });
   k.span(0x5c6862, W.x0 - 0.15, W.x1 + 0.15, W.h - 0.3, W.h, W.z0 - 0.15, W.z1 + 0.15, { ...wo, collide: false });
   k.span(INK.roof, W.x0 + 0.2, W.x1 - 0.2, W.h, W.h + 0.04, W.z0 + 0.2, W.z1 - 0.2, { ...wo, collide: false, shadow: false });
+  yield;
   // The sliding door, its leaf drawn half across, the dark beyond it, and its rail.
   const leaf = W.door.z0 + (W.door.z1 - W.door.z0) * 0.45;
   k.span(0x2a2f2c, W.x0 - 0.06, W.x0, 0, 4.4, leaf, W.door.z1, { collide: false });
@@ -620,6 +688,7 @@ function kuroda(k: CityKit, signs: SignAtlas, tile: THREE.Material, lantern: THR
   k.span(INK.steel, W.x0 - 0.24, W.x0, 4.5, 4.7, W.door.z0 - 0.2, W.door.z1 + 0.2, { collide: false });
   const placard = k.mesh(signs.face('危険物', 1.3, 0.7, { paper: '#f6f2e6', ink: '#b8402f', font: 'gothic', rule: true, sub: '第四類  火気厳禁' }), signs.plain, W.x0 - 0.04, 5.4, (W.door.z0 + W.door.z1) / 2, { shadow: false });
   placard.rotation.y = -Math.PI / 2;
+  yield;
   // The roof: a parapet open where the stair lands, skylights, a tank, the crest painted big.
   const wp = (x0: number, x1: number, z0: number, z1: number): void => {
     k.span(INK.parapet, x0, x1, W.h, W.h + 0.7, z0, z1, wo);
@@ -637,24 +706,29 @@ function kuroda(k: CityKit, signs: SignAtlas, tile: THREE.Material, lantern: THR
   k.span(INK.steelLight, W.x0 - 1.6, W.x0, W.h - 0.15, W.h, W.z0, W.z0 + 1.8, { surface: 'metal' });
   flight('warehouse', W.x0 - 0.8, W.h, W.z0 + 1.8, 0, 1, 1.4, 'steel');
 
+  yield;
   // The drums, stacked by the warehouse door and along the fence; crates.
   const drums: [number, number][] = [[40.2, 7.6], [41.0, 8.2], [40.2, 8.8], [41.0, 9.4], [40.2, 10.2], [41.2, 10.8], [42.4, 11.5], [57.8, 13.0], [56.8, 13.0], [59, -11]];
   for (const [x, z] of drums) k.prop('drum', x, 0.05, z, r() * 3);
   k.prop('drum', 40.6, 1.05, 8.5);
   for (const [x, z] of [[35.2, -10.6], [36.4, -10.6], [35.8, -9.4]] as const) k.prop('crate', x, 0.05, z);
+  yield;
   // Pallets against the house wall, a hose reel on the warehouse, the lines
+  yield;
   // where the truck parks.
   for (let i = 0; i < 3; i++) for (let j = 0; j < 4; j++) k.box(i % 2 ? INK.woodLight : 0xb08a5a, 35.2, 0.07 + i * 0.14, -4.4 + j * 0.32, 1.2, 0.1, 0.12, { collide: false });
   k.block(34.6, 35.8, 0, 0.42, -4.6, -3.2);
   k.cyl(0x8a2e24, W_HOSE.x, 1.2, W_HOSE.z, 0.45, 0.45, 0.25, 14, { rot: [0, 0, Math.PI / 2], collide: false });
   k.cyl(INK.steel, W_HOSE.x + 0.05, 1.2, W_HOSE.z, 0.12, 0.12, 0.3, 8, { rot: [0, 0, Math.PI / 2], collide: false });
   for (const z of [7.6, 11.2]) k.span(0xe9e4d8, 27, 34, 0.04, 0.05, z - 0.06, z + 0.06, { collide: false, shadow: false });
+  yield;
   // A corner of garden inside the gate: raked gravel, a trained pine, rocks, a stone lantern.
   k.span(k.shared('gravel', () => toon(0xdcd3c0)), K.x0 + 0.3, 24.5, 0, 0.05, 10.2, K.z1 - 0.3, { collide: false, shadow: false });
   k.span(0x8d9392, 24.5, 24.7, 0, 0.18, 10.2, K.z1 - 0.3);
   pine(k, 21.2, 12.0);
   for (const [x, z, s] of [[23.2, 11.2, 0.5], [19.6, 10.9, 0.35], [23.6, 12.8, 0.3]] as const) k.mesh(faceted(new THREE.DodecahedronGeometry(s, 0)), 0x7c8284, x, s * 0.5, z);
   stoneLantern(k, 19.4, 12.8);
+  yield;
   // The black truck by the house, its bed loaded and roped.
   truck(k, 30.5, 9.4);
 }

@@ -4,13 +4,13 @@ import type { Game } from '../app/game';
 import { appState } from '../app/state';
 import { settings } from '../app/settings';
 import { HALL, STORE } from '../world/compound';
-import { STREAM, WATER_Y, nearest } from '../world/valleyPlan';
+import { STREAM, WATER_Y } from '../world/valleyPlan';
 import { blinkUi } from '../techniques/kits/blink';
 import { CUES, isCue, type Cue, type CueName, type Layer } from './cues';
 import { SYNTHS, makeNoise, type Noise, type Voice } from './synth';
 import { Library } from './library';
 import { Ambience, put, type AmbienceView, type MusicMode } from './ambience';
-import { STEP_CUE, surfaceAt, type Surface } from './surfaces';
+import { STEP_CUE, type Surface } from './surfaces';
 
 // The mixer. Nothing exists until the first click or key (browsers refuse to
 // play before one, and the game should not try): then the context, the buses,
@@ -84,7 +84,7 @@ export class Audio {
   private muffle = 0;
   private room = 0;
   private field = 0;
-  private readonly streamAt = { x: 0, z: 0 };
+  private readonly streamAt = new THREE.Vector3();
   private gestureAt: number | null = null;
   private hum: { gain: GainNode; tone: ConstantSourceNode; filter: BiquadFilterNode; level: number; stop: () => void } | null = null;
   // A cue a kit plays is offered here first; online, the room's wire sends it on.
@@ -195,12 +195,12 @@ export class Audio {
 
   // The player's own step, on what the controller says is underfoot.
   footstep(tag: string, speed: number): void {
-    const s = surfaceAt(this.game.player.position, tag);
+    const s = this.game.world.surfaceAt(this.game.player.position, tag);
     this.play(STEP_CUE[s], { gain: THREE.MathUtils.clamp(0.55 + speed * 0.06, 0.6, 1.1), pitch: 0.96 + Math.random() * 0.08 });
   }
 
   land(v: number): void {
-    const s = surfaceAt(this.game.player.position, this.game.player.surface);
+    const s = this.game.world.surfaceAt(this.game.player.position, this.game.player.surface);
     if (s === 'water') { this.play('land.water'); return; }
     this.play('land', { weight: THREE.MathUtils.clamp(v / 12, 0.1, 1), gain: THREE.MathUtils.clamp(v / 8, 0.35, 1.2) });
     this.play(STEP_CUE[s], { gain: 0.7 });
@@ -249,12 +249,13 @@ export class Audio {
     put(this.hallVerb.gain, this.room * 0.9);
     // The walls' slap thins out as you leave them behind.
     put(this.yardVerb.gain, (1 - this.room) * 0.35 * (1 - this.field * 0.8));
-    nearest(pos.x, pos.z, STREAM, this.streamAt);
+    // The stream's voice at the nearest running water: the valley's stream, or a creek out on the pass.
+    g.world.waterNear(pos.x, pos.z, this.streamAt, STREAM, WATER_Y);
 
     const enemies = g.encounters.enemies.some((e) => e.alive && e.def.ai !== 'dummy');
     const clash = g.aura.clash.active;
     const mode: MusicMode = !inWorld ? 'title' : clash ? 'clash' : enemies || st === 'rooftop' ? 'fight' : 'calm';
-    this.ambience.update(raw, indoors, mode, mode === 'clash' ? 1 : mode === 'fight' ? 0.75 : 0, g.cutscenes.active ? 1 : 0, outdoors, { x: this.streamAt.x, y: WATER_Y, z: this.streamAt.z });
+    this.ambience.update(raw, indoors, mode, mode === 'clash' ? 1 : mode === 'fight' ? 0.75 : 0, g.cutscenes.active ? 1 : 0, outdoors, this.streamAt);
 
     // The aura field hums while it is open; the voice exists only then.
     const f = g.aura.field;
@@ -348,7 +349,7 @@ export class Audio {
 
   private bodySurface(p: THREE.Vector3): Surface {
     const inside = (b: { x0: number; x1: number; z0: number; z1: number }) => p.x > b.x0 && p.x < b.x1 && p.z > b.z0 && p.z < b.z1 && p.y < 1.5;
-    return surfaceAt(p, inside(HALL) || inside(STORE) ? 'wood' : 'stone');
+    return this.game.world.surfaceAt(p, inside(HALL) || inside(STORE) ? 'wood' : 'stone');
   }
 
   private applyVolumes(): void {

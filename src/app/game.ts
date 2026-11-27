@@ -11,7 +11,11 @@ import { Physics } from '../physics/world';
 import { PlayerController } from '../player/controller';
 import { CameraRig, CAMERA_LABEL, type CameraMode } from '../player/camera';
 import { Avatar } from '../character/avatar';
-import { buildCompound, SPAWN, type World, type Zone } from '../world/compound';
+import { buildCompound, SPAWN, type Zone } from '../world/compound';
+import { Regions } from '../world/regions';
+import { homeRegion } from '../world/home';
+import { AWAY } from '../world/atlas';
+import { buildSkyline } from '../world/skyline';
 import { PropSystem } from '../world/props';
 import { Hands } from '../hands/hands';
 import { Techniques } from '../techniques/techniques';
@@ -37,14 +41,11 @@ import { Waypoints } from '../world/waypoints';
 import { installDebug } from './debug';
 import { Net } from '../net/net';
 import type { Enemy } from '../combat/enemies';
-import { buildCity } from '../world/city/city';
-import type { Region } from '../world/city/region';
+import { AWAY_SPAWNS, CITY_ORIGIN } from '../world/atlas';
 
-// `?debug&region=city` loads the city ward on its own, with the player in it,
-// a kilometre east of the compound (which stays loaded for the systems that
-// read it, out of sight).
+// `?debug&region=city` starts a run in the city ward, at the station plaza,
+// past the end of the pass road; the ward builds at once round the player.
 const DEBUG_REGION = (() => { const q = new URLSearchParams(location.search); return q.has('debug') ? q.get('region') : null; })();
-export const CITY_ORIGIN = new THREE.Vector3(1200, 0, 0);
 
 export const hud = {
   zone: signal<Zone | null>(null),
@@ -93,7 +94,8 @@ export class Game {
   readonly assets: Assets;
   readonly physics = new Physics();
   env!: Environment;
-  world!: World;
+  // Every region of the world, streamed round the player; the compound and the valley are `world.home`.
+  world!: Regions;
   props!: PropSystem;
   player!: PlayerController;
   cam!: CameraRig;
@@ -114,8 +116,6 @@ export class Game {
   waypoints!: Waypoints;
   nav!: Navigation;
   techniqueId: TechniqueId = 'recoil';
-  // The city ward, while it is loaded.
-  city: Region | null = null;
   // The online room, while the player is in one.
   net: Net | null = null;
   private titleOrbit = 0;
@@ -142,8 +142,11 @@ export class Game {
     const scene = this.renderer.scene;
     this.env = setupEnvironment(scene);
     this.props = new PropSystem(this.assets, this.physics, scene);
-    this.world = buildCompound(this.assets, this.physics, scene, this.props, this.renderer.lights);
-    if (DEBUG_REGION === 'city') this.loadCity();
+    const home = buildCompound(this.assets, this.physics, scene, this.props, this.renderer.lights);
+    const skyline = buildSkyline();
+    scene.add(skyline);
+    this.world = new Regions(home, [homeRegion(home), ...AWAY], scene, this.physics, this.renderer.lights, skyline, this.props, this.assets);
+    this.world.ensureAt(this.home());
     this.audio = new Audio(this);
     bindUiSounds(this.audio, hud);
     this.vfx = new Vfx(scene, this.renderer.lights);
@@ -172,7 +175,7 @@ export class Game {
     this.drills.register(strikingPosts(this));
     this.tutorial = new Tutorial(this);
     this.rooftop = new Rooftop(this);
-    this.waypoints = new Waypoints(this.physics, scene, this.vfx);
+    this.waypoints = new Waypoints(this.physics, scene, this.vfx, (p) => this.world.present(p));
     this.nav = new Navigation(this);
     this.setTechnique('recoil');
     this.cam.yaw = 0;
@@ -182,20 +185,8 @@ export class Game {
     this.renderer.gl.setAnimationLoop(() => this.frame());
   }
 
-  // Builds the city ward and folds it into the world the game reads: its
-  // zones, the meshes the top-down camera fades, its canal for Rime.
-  private loadCity(): void {
-    const city = buildCity({ parent: this.renderer.scene, physics: this.physics, lights: this.renderer.lights, props: this.props, assets: this.assets, origin: CITY_ORIGIN });
-    this.city = city;
-    this.world.group.visible = false;
-    this.world.occluders.push(...city.occluders);
-    this.world.waters.push(...city.waters);
-    const compoundZone = this.world.zoneAt;
-    this.world.zoneAt = (p) => city.zoneAt(p) ?? compoundZone(p);
-  }
-
-  // Where a run starts: the courtyard, or the station plaza when the city is loaded.
-  private home(): THREE.Vector3 { return this.city ? this.city.spawns.plaza!.clone() : SPAWN.courtyard.clone(); }
+  // Where a run starts: the courtyard, or the station plaza for `?debug&region=city`.
+  private home(): THREE.Vector3 { return DEBUG_REGION === 'city' ? AWAY_SPAWNS['city:plaza']!.clone() : SPAWN.courtyard.clone(); }
 
   setTechnique(id: TechniqueId): void {
     if (!TECHNIQUE_IDS.includes(id)) return;
@@ -209,7 +200,8 @@ export class Game {
 
   // Everything a Technique can hit: the compound's enemies and, online, the other players.
   targets(): Enemy[] {
-    return this.net ? [...this.encounters.enemies, ...this.net.remotes.values()] : this.encounters.enemies;
+    // A player out on land this screen has not built is somewhere else: not drawn and not hit.
+    return this.net ? [...this.encounters.enemies, ...[...this.net.remotes.values()].filter((r) => !r.elsewhere)] : this.encounters.enemies;
   }
 
   // Into an online room: the compound with other players, no tutorial and no
@@ -274,7 +266,7 @@ export class Game {
     this.book.preview.value = null;
     this.player.teleport(this.home());
     this.cam.yaw = 0;
-    if (opts.skipTutorial || this.city) {
+    if (opts.skipTutorial || DEBUG_REGION === 'city') {
       this.tutorial.skip();
       setState({ kind: 'explore' });
       toast(`The compound is yours. ${keyLabel('workshop')} opens the Pact Workshop anywhere.`);
@@ -344,6 +336,8 @@ export class Game {
 
   private frame(): void {
     this.clock.tick();
+    // The regions round the player: what comes into reach builds a slice at a time, what is far behind goes.
+    this.world.stream(this.player.position);
     const st = appState.value;
     // Online, menus are overlays: the shared world keeps running under them.
     const dt = worldRuns.value || this.net ? this.clock.dt : 0;
@@ -363,10 +357,10 @@ export class Game {
     if (st.kind === 'title' || st.kind === 'boot') {
       // A slow orbit over the compound, looking down at the courtyard.
       this.titleOrbit += raw * 0.035;
-      const r = this.city ? 52 : 36, o = this.city?.origin ?? new THREE.Vector3();
+      const inCity = DEBUG_REGION === 'city', r = inCity ? 52 : 36, o = inCity ? CITY_ORIGIN : new THREE.Vector3();
       const c = this.renderer.camera;
-      c.position.set(o.x + Math.cos(this.titleOrbit) * r, (this.city ? 30 : 15) + Math.sin(this.titleOrbit * 0.7) * 2, o.z + Math.sin(this.titleOrbit) * r);
-      c.lookAt(o.x, 1.5, o.z);
+      c.position.set(o.x + Math.cos(this.titleOrbit) * r, o.y + (inCity ? 30 : 15) + Math.sin(this.titleOrbit * 0.7) * 2, o.z + Math.sin(this.titleOrbit) * r);
+      c.lookAt(o.x, o.y + 1.5, o.z);
       c.fov = 52;
       c.updateProjectionMatrix();
       this.avatar.root.visible = false;
@@ -378,8 +372,7 @@ export class Game {
     this.net?.update(raw);
     this.audio.update(raw);
 
-    this.world.update(this.clock.time);
-    this.city?.update(this.clock.time, raw, this.player.position, this.renderer.camera);
+    this.world.update(this.clock.time, raw, this.player.position, this.renderer.camera);
     this.waypoints.update(raw, this.clock.time);
     this.env.update(this.renderer.camera, this.clock.time);
     this.renderer.render(raw);
@@ -469,6 +462,9 @@ export class Game {
   // out, so a fight inside the hall is as readable as one in the yard.
   private fadeCutaway(raw: number, player: THREE.Vector3 | null): void {
     const blocked = new Set<THREE.Mesh>();
+    const occluders = this.world.occluders;
+    // A region taken down takes its meshes with it.
+    if (this.cutaway.size) { const live = new Set(occluders); for (const m of this.cutaway.keys()) if (!live.has(m)) this.cutaway.delete(m); }
     if (player) {
       const cam = this.renderer.camera;
       const to = player.clone().add(new THREE.Vector3(0, 1.0, 0)).sub(cam.position);
@@ -476,10 +472,10 @@ export class Game {
       this.raycaster.set(cam.position, to.normalize());
       this.raycaster.far = len - 0.5;
       const roofs = new Set<string>();
-      for (const h of this.raycaster.intersectObjects(this.world.occluders, false)) { const m = h.object as THREE.Mesh; blocked.add(m); if (m.userData.cutaway) roofs.add(m.userData.cutaway as string); }
-      if (roofs.size) for (const m of this.world.occluders) if (roofs.has(m.userData.cutaway as string)) blocked.add(m);
+      for (const h of this.raycaster.intersectObjects(occluders, false)) { const m = h.object as THREE.Mesh; blocked.add(m); if (m.userData.cutaway) roofs.add(m.userData.cutaway as string); }
+      if (roofs.size) for (const m of occluders) if (roofs.has(m.userData.cutaway as string)) blocked.add(m);
     }
-    for (const m of this.world.occluders) {
+    for (const m of occluders) {
       const cur = this.cutaway.get(m) ?? 1;
       const want = blocked.has(m) ? CUTAWAY_OPACITY : 1;
       const next = Math.abs(want - cur) < 0.005 ? want : cur + (want - cur) * (1 - Math.exp(-9 * raw));

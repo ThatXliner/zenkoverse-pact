@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import type { Game } from './game';
 import { SPAWN } from '../world/compound';
+import { AWAY_SPAWNS, AWAY } from '../world/atlas';
+import { ROUTE, walkDistance } from '../world/pass/route';
+import type { StreamLog } from '../world/regions';
 import type { CameraMode } from '../player/camera';
 import { appState, setState } from './state';
 import { RULES } from '../net/protocol';
@@ -33,8 +36,8 @@ import { eyeUi } from '../eyes/ui';
 
 export interface DebugApi {
   game: Game;
-  // A compound spawn, `city:<spawn>` when the city is loaded, or a point.
-  teleport(where: keyof typeof SPAWN | `city:${string}` | [number, number, number]): void;
+  // A spawn point by name (the compound's, the valley's, or any region's) or a point.
+  teleport(where: string | [number, number, number]): void;
   skipTutorial(): void;
   god(on?: boolean): void;
   technique(id: TechniqueId): void;
@@ -94,6 +97,14 @@ export interface DebugApi {
     offers(): { name: string; slot: string; tags: string[]; text: string; valid: boolean; errors: string[] }[];
   };
   stats(): { fps: number; drawCalls: number; triangles: number; props: number; enemies: number };
+  // The regions as the world check reads them: which stand, which build and
+  // their slowest slices, the streaming log, the milliseconds spent building
+  // in each recent frame, the pass road's line, and every spawn by name.
+  // Takes a region down so it streams in again round the player.
+  restream(id: string): void;
+  // How far inside the pass road's walkable strip a point is (negative inside).
+  passRoad(x: number, z: number): number;
+  world(): { regions: { id: string; state: string; slices: number; worstSlice: number; phases: Record<string, number> }[]; log: StreamLog[]; build: { at: number; ms: number }[]; route: [number, number, number][]; spawns: Record<string, [number, number, number]>; bounds: Record<string, { x0: number; x1: number; z0: number; z1: number }>; origins: Record<string, [number, number, number]> };
   // The player's aura as the checks read it, and the clash in progress.
   aura(): AuraView;
   // Sets trained refinement for the Technique in hand (the drill raises it in play).
@@ -156,9 +167,9 @@ export function installDebug(game: Game): void {
     game,
     errors,
     teleport(where) {
-      const city = typeof where === 'string' && where.startsWith('city:') ? game.city?.spawns[where.slice(5)] : null;
-      if (typeof where === 'string' && where.startsWith('city:') && !city) throw new Error(`no city spawn ${where}`);
-      const p = Array.isArray(where) ? new THREE.Vector3(...where) : city ? city.clone() : SPAWN[where as keyof typeof SPAWN].clone();
+      const named = Array.isArray(where) ? null : (SPAWN as Record<string, THREE.Vector3>)[where] ?? AWAY_SPAWNS[where];
+      if (!Array.isArray(where) && !named) throw new Error(`no spawn point named ${where}`);
+      const p = Array.isArray(where) ? new THREE.Vector3(...where) : named!.clone();
       game.player.teleport(p);
     },
     skipTutorial() { game.tutorial.skip(); },
@@ -253,6 +264,19 @@ export function installDebug(game: Game): void {
       game.mastery.stats.value = { ...game.mastery.stats.value, [t]: { ...game.mastery.stats.value[t], refinement: v } };
     },
     audio() { return game.audio.view(); },
+    passRoad: (x, z) => walkDistance(x, z),
+    restream: (id) => game.world.restream(id),
+    world() {
+      const w = game.world;
+      const all = { ...(SPAWN as Record<string, THREE.Vector3>), ...AWAY_SPAWNS };
+      return {
+        regions: w.status(), log: [...w.log], build: [...w.frameBuild],
+        route: ROUTE.map((n) => [n.x, n.y, n.z] as [number, number, number]),
+        spawns: Object.fromEntries(Object.entries(all).map(([k, v]) => [k, [v.x, v.y, v.z] as [number, number, number]])),
+        bounds: Object.fromEntries(AWAY.map((d) => [d.id, { x0: d.bounds.x0 + d.origin.x, x1: d.bounds.x1 + d.origin.x, z0: d.bounds.z0 + d.origin.z, z1: d.bounds.z1 + d.origin.z }])),
+        origins: Object.fromEntries(AWAY.map((d) => [d.id, [d.origin.x, d.origin.y, d.origin.z] as [number, number, number]])),
+      };
+    },
     audioClear() { game.audio.log.length = 0; },
     audioCues() { return Object.keys(CUES); },
     audioRender(name) { return isCue(name) && game.audio.unlocked ? game.audio.render(name) : Promise.resolve(null); },

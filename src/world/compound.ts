@@ -7,12 +7,12 @@ import type { LightPool } from '../render/lightPool';
 import { mangaShading } from '../render/tone';
 import { flagstones, planks, kawara, ashlar, boxUV } from './textures';
 import { bakeStatic, mergeMeshes } from './batch';
+import type { Zone } from './region';
 import { dressCompound } from './dressing';
 import { buildValley } from './valley';
 import { heightAt, openness, FIELD, GROUNDS, GINKGO, FALLS, SHRINE, BRIDGE, TERRACES, tierY } from './valleyPlan';
 import { waterMaterial } from './water';
-import type { CityZoneId } from './city/plan';
-import type { FreezableWater } from './city/region';
+import type { FreezableWater } from './region';
 
 // One walled dojo compound, 48 by 40 metres inside the walls, every surface
 // hand placed. North is -z. The training hall fills the north side and its
@@ -24,8 +24,8 @@ import type { FreezableWater } from './city/region';
 // The gate stands open onto the valley around the walls (src/world/valley.ts).
 
 export type ZoneId = 'hall' | 'courtyard' | 'ring' | 'storehouse' | 'gate' | 'roof'
-  | 'valley' | 'field' | 'bridge' | 'grounds' | 'ginkgo' | 'falls' | 'terraces' | 'meadow' | 'shrine' | CityZoneId;
-export interface Zone { id: ZoneId; min: THREE.Vector3; max: THREE.Vector3; indoors?: boolean; label: string }
+  | 'valley' | 'field' | 'bridge' | 'grounds' | 'ginkgo' | 'falls' | 'terraces' | 'meadow' | 'shrine';
+export type { Zone };
 export interface Footprint { x: number; z: number; w: number; d: number; y: number }
 export interface Plaque { id: string; title: string; body: string; position: THREE.Vector3; mesh: THREE.Object3D; found: boolean }
 
@@ -64,6 +64,8 @@ export const PALETTE = {
 
 export interface World {
   group: THREE.Group;
+  // The far plain and the painted hills: drawn from everywhere, even once the pass hides the compound.
+  backdrop: THREE.Group;
   zones: Zone[];
   // Building outlines for the map.
   footprints: Footprint[];
@@ -95,6 +97,8 @@ export const HALL = { x0: -14, x1: 14, z0: -19.6, z1: -4, floorY: 0.3, wallTop: 
 export const STORE = { x0: 17.4, x1: 24, z0: -9, z1: -1, wallTop: 3.8, deckY: 4.1 };
 export const WALK_Y = 2.6;
 export const GATE = { x0: -4.2, x1: 4.2, z0: 17.8, z1: 20.8, roofY: 3.9 };
+// Where the pass's land and the low country beyond it lie (src/world/pass/plan.ts): no hill stands there.
+const PASS_LAND = { x0: -40, x1: 180, z0: 100 } as const;
 export const POND = { center: new THREE.Vector3(11, 0, 11), radius: 2.75, surfaceY: -0.15, floorY: -0.9, hole: 2.6 };
 // The quench on the pond's west rim, where Heat's drill sets iron out to
 // temper: the mark the student stands on, an anvil block beside it, and three
@@ -207,10 +211,20 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   span(paving, -HX - 1, HX + 1, -0.3, 0, P.center.z + ph, HZ + 1, { shadow: false });
   span(paving, -HX - 1, P.center.x - ph, -0.3, 0, P.center.z - ph, P.center.z + ph, { shadow: false });
   span(paving, P.center.x + ph, HX + 1, -0.3, 0, P.center.z - ph, P.center.z + ph, { shadow: false });
+  // The plain and the hills stand apart from the compound, so they stay
+  // drawn when the compound and the valley are hidden behind the pass. The
+  // pass's own land (and the low country past it) keeps them off its ground.
+  const backdrop = new THREE.Group();
+  backdrop.name = 'backdrop';
+  scene.add(backdrop);
   const far = 260;
-  span(grassFar, -far, far, -3.6, -3.2, -far, far, { shadow: false, collide: false });
+  const plain = new THREE.Mesh(new THREE.BoxGeometry(far * 2, 0.4, far * 2), grassFar);
+  plain.position.set(0, -3.4, 0);
+  plain.receiveShadow = true;
+  backdrop.add(plain);
   // Hills: low flat cones in two rings, bluer the farther they stand.
   const hillNear = toon(PALETTE.hill), hillFar = toon(PALETTE.hillFar);
+  const hills = new Map<THREE.Material, THREE.Mesh[]>([[hillNear, []], [hillFar, []]]);
   for (let i = 0; i < 26; i++) {
     const a = (i / 26) * Math.PI * 2 + (i % 2) * 0.1;
     const near = i % 3 !== 0;
@@ -219,8 +233,13 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
     const hill = new THREE.Mesh(faceted(new THREE.ConeGeometry(near ? 50 + (i % 4) * 8 : 80 + (i % 3) * 20, h, 7)), near ? hillNear : hillFar);
     hill.position.set(Math.cos(a) * r, h / 2 - 3, Math.sin(a) * r);
     hill.rotation.y = i;
-    g.add(hill);
+    const reach = near ? 50 + (i % 4) * 8 : 80 + (i % 3) * 20;
+    if (hill.position.x + reach > PASS_LAND.x0 && hill.position.x - reach < PASS_LAND.x1 && hill.position.z + reach > PASS_LAND.z0) continue;
+    backdrop.add(hill);
+    hills.get(hill.material as THREE.Material)!.push(hill);
   }
+  backdrop.updateMatrixWorld(true);
+  for (const list of hills.values()) if (list.length) mergeMeshes(list, backdrop).castShadow = false;
 
   // ---------------------------------------------------------------- walls
   // Plaster walls on a dark plinth, capped with tile, with a band of dark
@@ -674,9 +693,10 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
 
   const roofZone: Zone = { id: 'roof', min: new THREE.Vector3(-HX - 2, 2.3, -HZ - 2), max: new THREE.Vector3(HX + 2, 40, HZ + 2), label: 'Rooftops' };
   zones.push(roofZone);
-  const general = new Set<ZoneId>(['courtyard', 'roof', 'valley']);
+  const general = new Set<string>(['courtyard', 'roof', 'valley']);
+  zones.find((z) => z.id === 'valley')!.general = true;
   return {
-    group: g, zones, footprints, plaques, craneHook: hook, occluders, onRoof,
+    group: g, backdrop, zones, footprints, plaques, craneHook: hook, occluders, onRoof,
     pond: { center: P.center, radius: P.radius, surfaceY: P.surfaceY },
     waters: [],
     zoneAt(p) {

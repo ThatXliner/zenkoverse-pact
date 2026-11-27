@@ -6,7 +6,7 @@ import { KITS } from '../techniques/techniques';
 import { PLAYER_SUIT } from '../character/avatar';
 import { FxWire } from './fxwire';
 import { PropSync } from './propsync';
-import { freezePond } from '../techniques/kits/rime';
+import { freezePond, freezeChannel } from '../techniques/kits/rime';
 import { RemotePlayer, seatSuit } from './remote';
 import { eyeCode } from '../eyes/registry';
 import { RULES, type ClientMsg, type PlayerInfo, type ServerMsg, type Vec3 } from './protocol';
@@ -326,7 +326,12 @@ export class Net {
         this.props.shattered(m.prop, m.from);
         return;
       case 'ice':
-        freezePond(g, m.s);
+        if (m.at) {
+          // A canal: the same block on this screen, if its water is built here.
+          const [x, z] = m.at;
+          const w = g.world.waters.find((c) => c.kind === 'channel' && x >= c.x0 && x <= c.x1 && z >= c.z0 - 4 && z <= c.z1 + 4);
+          if (w?.kind === 'channel') freezeChannel(g, w, x, m.r ?? 3, m.s);
+        } else freezePond(g, m.s);
         return;
       case 'max': this.maxStarted(m); return;
       case 'max-end':
@@ -415,7 +420,9 @@ export class Net {
   setTechnique(id: string): void { this.send({ type: 'tech', tech: id }); }
 
   // Rime froze the pond here: it freezes on every screen.
-  ice(seconds: number): void { this.send({ type: 'ice', s: Math.round(seconds * 10) / 10 }); }
+  ice(seconds: number, channel?: { x: number; z: number; r: number }): void {
+    this.send({ type: 'ice', s: Math.round(seconds * 10) / 10, ...(channel ? { at: [Math.round(channel.x * 10) / 10, Math.round(channel.z * 10) / 10] as [number, number], r: Math.round(channel.r * 10) / 10 } : {}) });
+  }
 
   // This player's field touches another's: the server decides whether a clash starts.
   askClash(target: number): void { if (!this.downed) this.send({ type: 'clash', target }); }
@@ -445,7 +452,7 @@ export class Net {
     const out: Plate[] = [];
     const v = new THREE.Vector3();
     for (const r of this.remotes.values()) {
-      if (!r.seen) continue;
+      if (!r.seen || r.elsewhere) continue;
       v.copy(r.position).add(new THREE.Vector3(0, r.height + 0.45, 0)).project(cam);
       if (v.z > 1 || Math.abs(v.x) > 1.1 || Math.abs(v.y) > 1.1) continue;
       out.push({ id: r.id, name: r.info.name, x: (v.x * 0.5 + 0.5) * 100, y: (-v.y * 0.5 + 0.5) * 100, hp: r.shownHp / RULES.maxHp, down: !r.alive, away: r.away, color: hex(seatSuit(r.info.slot)), tech: r.info.tech });

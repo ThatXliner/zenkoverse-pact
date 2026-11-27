@@ -73,6 +73,7 @@
 .nav-map .m-field { fill: rgba(230,211,173,0.16); stroke: rgba(230,211,173,0.55); stroke-width: 0.4; }
 .nav-map .m-ginkgo { fill: rgba(238,189,62,0.32); stroke: rgba(246,212,96,0.7); stroke-width: 0.4; }
 .nav-map .m-bridge { fill: rgba(207,74,50,0.75); }
+.nav-map .m-rail { fill: none; stroke: rgba(196,160,110,0.85); stroke-width: 2.2; stroke-dasharray: 1 0.8; }
 .nav-map .m-stones { stroke: rgba(196,184,160,0.8); stroke-width: 1.2; stroke-dasharray: 0.8 0.5; }
 .nav-map .m-structure { fill: rgba(243,238,228,0.12); stroke: rgba(243,238,228,0.4); stroke-width: 0.4; }
 .nav-map .m-torii { stroke: rgba(207,74,50,0.95); stroke-width: 0.9; }

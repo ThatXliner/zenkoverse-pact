@@ -58,7 +58,7 @@ for (const uncapped of [false, true]) {
   await page.evaluate((q) => { const g = window.game; g.game.renderer.setQuality(q); g.god(true); g.game.startRun({ skipTutorial: true }); }, quality);
   for (const [name, [x, y, z], yaw] of SPOTS) {
     for (const view of ['top', 'third']) {
-      await page.evaluate(([p, view, yaw]) => { const g = window.game, o = g.game.city.origin; g.teleport([p[0] + o.x, p[1], p[2] + o.z]); g.camera(view); if (view === 'third') g.look(yaw, -0.12); }, [[x, y, z], view, yaw]);
+      await page.evaluate(([p, view, yaw]) => { const g = window.game, o = g.world().origins.city; g.teleport([p[0] + o[0], p[1] + o[1], p[2] + o[2]]); g.camera(view); if (view === 'third') g.look(yaw, -0.12); }, [[x, y, z], view, yaw]);
       console.log(await measure(page, `city ${name}, ${view === 'top' ? 'top' : '3P'}`.padEnd(26)));
     }
   }

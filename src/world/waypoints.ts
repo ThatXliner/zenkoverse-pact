@@ -24,11 +24,13 @@ interface Shrine {
 export class Waypoints {
   private readonly shrines = new Map<PoiId, Shrine>();
 
-  constructor(physics: Physics, scene: THREE.Scene, private vfx: Vfx) {
+  // `drawn` says whether a point's region is standing on this screen: a stone on land not built yet is not drawn.
+  constructor(physics: Physics, scene: THREE.Scene, private vfx: Vfx, private drawn: (p: THREE.Vector3) => boolean = () => true) {
     const stone = toon(0xa3a7a8);
     const group = new THREE.Group();
     scene.add(group);
     for (const poi of POIS) {
+      if (!poi.shrine) continue;
       const s = new THREE.Group();
       const add = <T extends THREE.Mesh>(m: T, y: number): T => { m.position.y = y; m.castShadow = true; m.receiveShadow = true; s.add(m); return m; };
       add(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.58, 0.2, 8), stone), 0.1);
@@ -72,6 +74,8 @@ export class Waypoints {
 
   update(raw: number, time: number): void {
     for (const sh of this.shrines.values()) {
+      sh.group.visible = this.drawn(sh.group.position);
+      if (!sh.group.visible) continue;
       sh.glow += (sh.want - sh.glow) * (1 - Math.exp(-3 * raw));
       this.apply(sh);
       sh.crystal.rotation.y = time * (0.5 + sh.glow * 0.7);

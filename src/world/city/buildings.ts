@@ -25,7 +25,7 @@ const GROUND = 3.4;
 
 export interface BuiltRoof { id: string; rect: Rect; y: number; walk: boolean }
 
-export function buildBuildings(k: CityKit, signs: SignAtlas): BuiltRoof[] {
+export function* buildBuildings(k: CityKit, signs: SignAtlas): Generator<void, BuiltRoof[], void> {
   const roofs: BuiltRoof[] = [];
   const tileMat = toon(0xffffff, { map: kawara(INK.tile, 0x7f92b0, INK.tileEdge) });
   const r = rng(7);
@@ -35,8 +35,9 @@ export function buildBuildings(k: CityKit, signs: SignAtlas): BuiltRoof[] {
     else if (b.kind === 'sento') sento(k, b, group, tileMat, signs);
     else block(k, b, group, signs, r);
     roofs.push({ id: b.id, rect: b, y: b.h, walk: !!b.walk });
+    yield;
   }
-  for (const [i, d] of BACKDROP.entries()) backdrop(k, d, i, r);
+  for (const [i, d] of BACKDROP.entries()) { backdrop(k, d, i, r); yield; }
   return roofs;
 }
 

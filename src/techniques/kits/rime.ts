@@ -4,7 +4,7 @@ import { signGesture, gestureSet, rangeFor, hitCone, propsInCone } from './share
 import type { Pact } from '../../pacts/schema';
 import { opening, blow, type CutsceneDef } from '../../cutscene/cutscene';
 import { RAPIER } from '../../physics/world';
-import type { FreezableWater } from '../../world/city/region';
+import type { FreezableWater } from '../../world/region';
 import { toon } from '../../render/materials';
 
 const COLOR = 0x9fe8ff;
@@ -81,7 +81,7 @@ export function meltPond(): boolean {
 // A canal freezes where the frost lands: a block of ice across the channel,
 // wall to wall, heaped up to a step below the walk so a body can climb on
 // from the water or off onto the walk. Each freeze lays its own block.
-function freezeChannel(g: import('../../app/game').Game, w: Extract<FreezableWater, { kind: 'channel' }>, x: number, radius: number, seconds: number): void {
+export function freezeChannel(g: import('../../app/game').Game, w: Extract<FreezableWater, { kind: 'channel' }>, x: number, radius: number, seconds: number): void {
   const half = radius + 1.5, top = w.surfaceY + 0.6, bottom = w.surfaceY - 0.25;
   const cx = THREE.MathUtils.clamp(x, w.x0 + half, w.x1 - half), cz = (w.z0 + w.z1) / 2, depth = w.z1 - w.z0;
   const body = g.physics.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(cx, (top + bottom) / 2, cz));
@@ -125,6 +125,8 @@ function freezeArea(g: import('../../app/game').Game, center: THREE.Vector3, rad
     if (w.kind !== 'channel' || center.x < w.x0 || center.x > w.x1 || center.z < w.z0 - radius * 0.5 || center.z > w.z1 + radius * 0.5 || center.y > w.surfaceY + 3) continue;
     freezeChannel(g, w, center.x, radius, seconds + 4);
     g.audio.play('rime.freeze', { at: center });
+    // Online the block is in everyone's canal.
+    g.net?.ice(seconds + 4, { x: center.x, z: center.z, r: radius });
   }
   g.vfx.burst(center.clone().add(new THREE.Vector3(0, 0.3, 0)), 12, 'shard', 5);
   g.audio.play('rime.stitch', { at: center });

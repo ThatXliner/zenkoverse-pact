@@ -18,7 +18,8 @@ export interface Life { group: THREE.Group; update(time: number, dt: number, pla
 const TRAIN_PERIOD = 52;
 const CAR = 19.5;
 
-export function buildLife(origin: THREE.Vector3, assets: Assets, parent: THREE.Object3D): Life {
+// A generator: each person's rig is a slice of building, so the ward's life arrives over a few frames.
+export function* buildLife(origin: THREE.Vector3, assets: Assets, parent: THREE.Object3D): Generator<void, Life, void> {
   const group = new THREE.Group();
   group.name = 'city-life';
   group.userData.keep = true;
@@ -74,15 +75,17 @@ export function buildLife(origin: THREE.Vector3, assets: Assets, parent: THREE.O
     [[-58, PROMENADE.z0 + 2.8], [58, PROMENADE.z0 + 2.8]],
     [[-60, UNDER.z1 - 0.9], [-26, UNDER.z1 - 0.9]],
   ];
-  paths.forEach((p, i) => {
+  for (const [i, p] of paths.entries()) {
+    yield;
     const path = p.map(([x, z]) => at(x, 0.12, z));
     const avatar = new Avatar(assets, looks[i % looks.length]!, { targetHeight: 1.66 + r() * 0.16, tint: coats[i % coats.length] });
     const start = path[0]!.clone().lerp(path[1]!, 0.2 + r() * 0.6);
     avatar.root.position.copy(start);
     group.add(avatar.root);
     walkers.push({ avatar, path, i: 1, pos: start, speed: 1.15 + r() * 0.35, yaw: 0, pause: 0, vel: new THREE.Vector3() });
-  });
+  }
   for (const dz of [-1.2, 6.2]) {
+    yield;
     const avatar = new Avatar(assets, dz < 0 ? 'buzzed' : 'bald', { targetHeight: 1.84, tint: 0x1f1b20, build: 1.12 });
     const p = at(KURODA.x0 - 1.6, 0.12, KURODA.gate.z0 + dz + (dz < 0 ? 0 : 0.6));
     avatar.root.position.copy(p);

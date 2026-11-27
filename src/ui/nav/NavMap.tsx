@@ -3,21 +3,25 @@ import type { Game } from '../../app/game';
 import { POIS, poiById, type Poi, type PoiId } from '../../nav/poi';
 import { HALL, STORE, GATE, POND, SPAWN } from '../../world/compound';
 import { VALLEY, ROAD, PATHS, STREAM, FALLS, BRIDGE, FIELD, GROUNDS, GINKGO, TERRACES, MEADOW, SHRINE, STONES, openness, type Pt } from '../../world/valleyPlan';
-import type { RegionMap } from '../../world/city/region';
+import { AWAY_LAYERS, awayAt } from '../../world/atlas';
+import type { MapMark } from '../../world/region';
 import './nav.css';
 
-// The map is a plan, north up, in world metres, at two scales: the compound
-// (the walls, the hall and its roof, the storehouse, the gatehouse, the ring
-// and the pond) and the valley round it (the cliffs, the stream and its
-// falls, the road and the paths, and the places along them). It opens on
-// whichever the player stands in.
-// With the city ward loaded (`?debug&region=city`) there is a third scale, its own plan.
-type Scope = 'compound' | 'valley' | 'city';
-const VIEW: Record<Exclude<Scope, 'city'>, { x: number; z: number; w: number; h: number; icon: number }> = {
-  compound: { x: -28, z: -24, w: 56, h: 48, icon: 0.5 },
-  valley: { x: -84, z: -64, w: 170, h: 170, icon: 1.25 },
+// The map is a plan, north up, in world metres, at a scale per stretch of
+// the world: the compound (the walls, the hall and its roof, the storehouse,
+// the gatehouse, the ring and the pond), the valley round it (the cliffs,
+// the stream and its falls, the road and the paths, and the places along
+// them), and a tab for each region past it, drawn from that region's own map
+// layer (src/world/region.ts). It opens on whichever the player stands in.
+type Scope = string;
+interface View { x: number; z: number; w: number; h: number; icon: number; label: string }
+const VIEW: Record<Scope, View> = {
+  compound: { x: -28, z: -24, w: 56, h: 48, icon: 0.5, label: 'Compound' },
+  valley: { x: -84, z: -64, w: 170, h: 170, icon: 1.25, label: 'Valley' },
 };
-const SCOPE_LABEL: Record<Scope, string> = { compound: 'Compound', valley: 'Valley', city: 'City' };
+for (const l of AWAY_LAYERS) VIEW[l.scope.id] ??= { ...l.scope.view, icon: Math.max(l.scope.view.w, l.scope.view.h) / 136, label: l.scope.label };
+const SCOPES = Object.keys(VIEW);
+const scopeAt = (x: number, z: number): Scope => { const r = awayAt(x, z); return r ? r.map.scope.id : openness(x, z) > 0 ? 'valley' : 'compound'; };
 // Places inside the walls: at the valley's scale they keep their glyphs and drop their names.
 const IN_WALLS = new Set<PoiId>(['hall', 'ring', 'pond', 'roof', 'store', 'gate']);
 const line = (pts: readonly Pt[]): string => pts.map(([x, z], i) => `${i ? 'L' : 'M'}${x} ${z}`).join('');
@@ -30,10 +34,8 @@ export function NavMap({ game }: { game: Game }) {
   const unlocked = nav.unlocked.value;
   const [sel, setSel] = useState<Selection>(target?.poi ? { kind: 'poi', id: target.poi } : null);
   const p = game.player.position;
-  const city = game.city;
-  const [scope, setScope] = useState<Scope>(city?.contains(p) ? 'city' : openness(p.x, p.z) > 0 ? 'valley' : 'compound');
-  const vb = scope === 'city' && city ? { ...city.map.view, icon: 1.0 } : VIEW[scope === 'city' ? 'compound' : scope], k = vb.icon * 2;
-  const scopes: Scope[] = city ? ['compound', 'valley', 'city'] : ['compound', 'valley'];
+  const [scope, setScope] = useState<Scope>(scopeAt(p.x, p.z));
+  const vb = VIEW[scope]!, k = vb.icon * 2;
   const heading = (-game.cam.heading * 180) / Math.PI;
 
   const dropPoint = (e: MouseEvent) => {
@@ -47,16 +49,15 @@ export function NavMap({ game }: { game: Game }) {
 
   return (
     <div class="nav-map">
-      <svg viewBox={`${vb.x} ${vb.z} ${vb.w} ${vb.h}`} role="img" aria-label={`${SCOPE_LABEL[scope]} map`} data-scope={scope} onClick={dropPoint}>
+      <svg viewBox={`${vb.x} ${vb.z} ${vb.w} ${vb.h}`} role="img" aria-label={`${vb.label} map`} data-scope={scope} onClick={dropPoint}>
         <defs>
           <pattern id="water" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><line x1="0" y1="0" x2="0" y2="3" stroke="rgba(111,211,255,0.28)" stroke-width="0.4" /></pattern>
           <clipPath id="frame"><rect x={vb.x} y={vb.z} width={vb.w} height={vb.h} /></clipPath>
         </defs>
         <rect class="m-bg" x={vb.x} y={vb.z} width={vb.w} height={vb.h} />
         <g clip-path="url(#frame)">
-          {scope === 'city' && city && <CityPlan map={city.map} scale={vb.icon} />}
-          {scope !== 'city' && <>
           <ValleyPlan />
+          {scope !== 'compound' && <AwayPlan />}
           {scope === 'compound' && [-20, -10, 0, 10, 20].map((g) => <g key={g} class="m-grid"><line x1={g} y1={vb.z} x2={g} y2={vb.z + vb.h} /><line x1={vb.x} y1={g} x2={vb.x + vb.w} y2={g} /></g>)}
           <rect class="m-yard" x={-24} y={-20} width={48} height={40} />
           <rect class="m-wall" x={-24.6} y={-20.6} width={49.2} height={41.2} />
@@ -75,7 +76,6 @@ export function NavMap({ game }: { game: Game }) {
             <text class="m-street" x={(STORE.x0 + STORE.x1) / 2} y={(STORE.z0 + STORE.z1) / 2 + 0.6} text-anchor="middle">STORE</text>
             <text class="m-street" x={0} y={23} text-anchor="middle">GATE</text>
           </>}
-          </>}
         </g>
         <g transform={`translate(${vb.x + vb.w - 3 * k} ${vb.z + 4 * k}) scale(${k})`}>
           <text class="m-north" x={0} y={0} text-anchor="middle">N</text>
@@ -83,25 +83,15 @@ export function NavMap({ game }: { game: Game }) {
         </g>
         {target && !target.poi && <Gem x={target.position.x} z={target.position.z} s={k} />}
         {sel?.kind === 'point' && <g class="m-point" transform={`translate(${sel.x} ${sel.z}) scale(${k})`}><circle r={1.1} /><path d="M-2 0h1.3M0.7 0h1.3M0 -2v1.3M0 0.7v1.3" /></g>}
-        {scope !== 'city' && POIS.map((poi) => <PoiIcon key={poi.id} poi={poi} scale={vb.icon} named={scope === 'compound' || !IN_WALLS.has(poi.id)} view={vb} unlocked={unlocked.has(poi.id)} tracked={target?.poi === poi.id} selected={sel?.kind === 'poi' && sel.id === poi.id} onPick={pick(poi.id)} />)}
+        {POIS.map((poi) => <PoiIcon key={poi.id} poi={poi} scale={vb.icon} named={scope === 'compound' || !IN_WALLS.has(poi.id)} view={vb} unlocked={unlocked.has(poi.id)} tracked={target?.poi === poi.id} selected={sel?.kind === 'poi' && sel.id === poi.id} onPick={pick(poi.id)} />)}
         <g class="m-player" transform={`translate(${p.x} ${p.z}) rotate(${heading}) scale(${k})`}><circle r={2.6} class="halo" /><path d="M0 -2.2 L1.5 1.6 L0 0.8 L-1.5 1.6 Z" /></g>
       </svg>
       <aside class="map-side">
         <div class="map-scope" role="group" aria-label="Map scale">
-          {scopes.map((id) => <button key={id} class={scope === id ? 'on' : ''} aria-pressed={scope === id} data-scope={id} onClick={() => setScope(id)}>{SCOPE_LABEL[id]}</button>)}
+          {SCOPES.map((id) => <button key={id} class={scope === id ? 'on' : ''} aria-pressed={scope === id} data-scope={id} onClick={() => setScope(id)}>{VIEW[id]!.label}</button>)}
         </div>
         <Detail game={game} sel={sel} onClose={() => setSel(null)} />
-        {scope === 'city' && city ? <ul class="map-list">
-          {city.map.places.map((pl) => (
-            <li key={pl.id}>
-              <button class={sel?.kind === 'point' && sel.x === Math.round(pl.x) && sel.z === Math.round(pl.z) ? 'on' : ''} data-place={pl.id} onClick={() => setSel({ kind: 'point', x: Math.round(pl.x), z: Math.round(pl.z) })}>
-                <span class="g">{[...pl.jp][0]}</span>
-                <span class="n">{pl.name}</span>
-                <span class="d">{dist(pl.x, pl.z)} m</span>
-              </button>
-            </li>
-          ))}
-        </ul> : <ul class="map-list">
+        <ul class="map-list">
           {POIS.map((poi) => (
             <li key={poi.id}>
               <button class={`${sel?.kind === 'poi' && sel.id === poi.id ? 'on' : ''} ${target?.poi === poi.id ? 'tracked' : ''}`} data-poi={poi.id} onClick={() => setSel({ kind: 'poi', id: poi.id })}>
@@ -111,7 +101,7 @@ export function NavMap({ game }: { game: Game }) {
               </button>
             </li>
           ))}
-        </ul>}
+        </ul>
         <div class="map-legend"><span><b class="gem" /> tracked</span><span><b class="ring on" /> visited</span><span><b class="ring" /> not yet</span></div>
       </aside>
     </div>
@@ -150,17 +140,19 @@ function ValleyPlan() {
   );
 }
 
-// The city ward from its plan: streets, paving, water and the tracks under
-// the buildings, roofs that can be walked a shade lighter, decks and stairs,
-// and the places named.
-function CityPlan({ map, scale }: { map: RegionMap; scale: number }) {
-  const cls: Record<RegionMap['shapes'][number]['kind'], string> = { building: 'm-building', roof: 'm-walk', street: 'm-city-street', paving: 'm-city-paving', water: 'm-water', rail: 'm-city-rail', green: 'm-floor', deck: 'm-walk', stair: 'm-city-stair' };
-  return (
-    <g class="m-city">
-      {map.shapes.map((s, i) => <rect key={i} class={cls[s.kind]} x={s.x} y={s.z} width={s.w} height={s.h} />)}
-      {map.places.map((pl) => <text key={pl.id} class="m-street" x={pl.x} y={pl.z} text-anchor="middle" style={{ fontSize: `${2.2 * scale}px` }}>{pl.name.toUpperCase()}</text>)}
-    </g>
-  );
+// The regions past the valley, each from its own marks.
+function AwayPlan() {
+  return <g class="m-away">{AWAY_LAYERS.map((l) => <g key={l.region} data-region={l.region}>{l.marks.map((m, i) => <Mark key={i} m={m} />)}</g>)}</g>;
+}
+
+function Mark({ m }: { m: MapMark }) {
+  switch (m.kind) {
+    case 'area': return <path class={`m-${m.class}`} d={`${line(m.pts)}Z`} />;
+    case 'line': return <path class={`m-${m.class}`} d={line(m.pts)} />;
+    case 'box': return <rect class={`m-${m.class}`} x={m.x} y={m.z} width={m.w} height={m.d} />;
+    case 'circle': return <circle class={`m-${m.class}`} cx={m.x} cy={m.z} r={m.r} />;
+    case 'text': return <text class="m-street" x={m.x} y={m.z} text-anchor="middle">{m.text}</text>;
+  }
 }
 
 // A name near the map's side reads inward, so it is not cut off at the edge.

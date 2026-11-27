@@ -77,8 +77,7 @@ export class Navigation {
       if ('poi' in t) { const p = poiById(t.poi); return { source: 'tutorial', title: p.name, subtitle: p.jp, glyph: p.glyph, position: p.at, poi: p.id }; }
       return { source: 'tutorial', title: t.title, subtitle: t.jp, glyph: '標', position: t.at };
     }
-    // The goals are the compound's; in the city ward on its own there are none.
-    const goal = this.game.city ? undefined : GOALS.find((g) => !this.unlocked.value.has(g.poi));
+    const goal = GOALS.find((g) => !this.unlocked.value.has(g.poi));
     if (!goal) return null;
     const p = poiById(goal.poi);
     return { source: 'goal', title: goal.title, subtitle: `${p.jp} · ${p.name}`, glyph: p.glyph, position: p.at, poi: p.id };
@@ -156,7 +155,8 @@ export class Navigation {
   private checkUnlocks(p: THREE.Vector3): void {
     for (const poi of POIS) {
       if (this.unlocked.value.has(poi.id)) continue;
-      if (Math.abs(p.y - poi.shrine.y) > 4 || Math.hypot(p.x - poi.shrine.x, p.z - poi.shrine.z) > UNLOCK_RADIUS) continue;
+      const at = poi.shrine ?? poi.at;
+      if (Math.abs(p.y - at.y) > 4 || Math.hypot(p.x - at.x, p.z - at.z) > UNLOCK_RADIUS) continue;
       this.unlocked.value = new Set([...this.unlocked.value, poi.id]);
       this.game.waypoints.unlock(poi.id);
       toast(`Visited: ${poi.name}.`, 'good');

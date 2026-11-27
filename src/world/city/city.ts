@@ -6,6 +6,7 @@ import { buildBuildings } from './buildings';
 import { buildPlaces } from './places';
 import { buildLife } from './life';
 import { registerCityProps } from './props';
+import { GROUP_WORLD } from '../../physics/world';
 import type { RegionDef, RegionContent, MapMark, MapClass, Place, Zone, FreezableWater } from '../region';
 import type { Surface } from '../../audio/surfaces';
 import {
@@ -96,7 +97,9 @@ export function city(origin: THREE.Vector3): RegionDef {
       ctx.phase('bake');
       yield* k.finishing();
       ctx.phase('life');
-      const life = yield* buildLife(O, ctx.assets, k.root);
+      const phys = ctx.physics.physics;
+      const sees = (a: THREE.Vector3, b: THREE.Vector3): boolean => { const d = b.clone().sub(a); const len = d.length(); return len < 0.01 || !phys.castRay(a, d.divideScalar(len), len, GROUP_WORLD); };
+      const life = yield* buildLife(O, ctx.assets, k.root, sees);
       yield;
       const waters: FreezableWater[] = [{ kind: 'channel', x0: BOUNDS.x0 - 2, x1: BOUNDS.x1 + 10, z0: CANAL.z0, z1: CANAL.z1, surfaceY: CANAL.waterY }];
       return {

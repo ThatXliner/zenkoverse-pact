@@ -34,6 +34,8 @@ export const POSTURES = {
   husk: { hunch: 0.5, head: 0.36, shrug: 0.2, swing: 0.3 },
   // The enforcer: upright, chest out, chin up, arms away from the coat.
   kuroda: { hunch: -0.12, head: -0.1, spread: 0.2, stance: 0.08 },
+  // The house hand: square and still, hands in front, chin level.
+  hand: { hunch: -0.04, head: 0.02, spread: 0.14, swing: 0.1, stance: 0.09 },
   // The Master: stooped with age, hands clasped behind the back.
   ancient: { hunch: 0.2, head: 0.28, clasp: 1 },
 } satisfies Record<string, Posture>;

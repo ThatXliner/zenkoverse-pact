@@ -7,6 +7,7 @@ import { tutorialUi } from '../tutorial/tutorial';
 import { GROUP_WORLD } from '../physics/world';
 import { ARRIVE_RADIUS, GOALS, POIS, TUTORIAL_TARGETS, UNLOCK_RADIUS, poiById, type PoiId } from './poi';
 import { TrackerFx } from './trail';
+import { wardWon } from '../combat/ward';
 
 export type Pin = { kind: 'poi'; id: PoiId } | { kind: 'point'; x: number; z: number };
 
@@ -77,7 +78,8 @@ export class Navigation {
       if ('poi' in t) { const p = poiById(t.poi); return { source: 'tutorial', title: p.name, subtitle: p.jp, glyph: p.glyph, position: p.at, poi: p.id }; }
       return { source: 'tutorial', title: t.title, subtitle: t.jp, glyph: '標', position: t.at };
     }
-    const goal = GOALS.find((g) => !this.unlocked.value.has(g.poi));
+    const won = wardWon.value;
+    const goal = GOALS.find((g) => (g.won ? !won.has(g.won) : !this.unlocked.value.has(g.poi)));
     if (!goal) return null;
     const p = poiById(goal.poi);
     return { source: 'goal', title: goal.title, subtitle: `${p.jp} · ${p.name}`, glyph: p.glyph, position: p.at, poi: p.id };

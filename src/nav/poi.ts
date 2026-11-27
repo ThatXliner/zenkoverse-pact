@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { SPAWN, HALL, STORE, GATE } from '../world/compound';
 import { FIELD, FALLS, GROUNDS, GINKGO, TERRACES, SHRINE, STONE_AT, heightAt, tierY } from '../world/valleyPlan';
-import type { TutorialStepId } from '../app/state';
+import type { TutorialStepId, EncounterId } from '../app/state';
 import { ZONES as CITY_ZONES } from '../world/city/plan';
 import { AWAY_PLACES } from '../world/atlas';
 
@@ -64,20 +64,27 @@ export const TUTORIAL_TARGETS: Partial<Record<TutorialStepId, { title: string; j
   done: { poi: 'hall' },
 };
 
-// The current goal is the first of these whose place has not been visited.
-export interface Goal { id: string; poi: PoiId; title: string; hint: string }
+// The current goal is the first of these not yet done: its place visited,
+// or, for a goal that names a fight (`won`), that fight in the ward won. The
+// thread leads out of the gate, over the pass, into the city and through its
+// fights, then back to what the compound still holds.
+export interface Goal { id: string; poi: PoiId; title: string; hint: string; won?: EncounterId }
 
 export const GOALS: readonly Goal[] = [
   { id: 'hall', poi: 'hall', title: 'Find the Pact Workshop', hint: 'The Architect\'s desk is inside the hall, at the north of the yard.' },
   { id: 'ring', poi: 'ring', title: 'Step into the sparring ring', hint: 'The sand circle on the west side of the yard.' },
-  { id: 'roof', poi: 'roof', title: 'Climb to the hall roof', hint: 'Take the stair on the hall\'s west side.' },
-  { id: 'store', poi: 'store', title: 'Cross to the storehouse roof', hint: 'The plank bridge leaves the east edge of the hall roof.' },
-  { id: 'gate', poi: 'gate', title: 'Walk the wall to the gate', hint: 'Drop from the storehouse to the wall walk and follow it round.' },
-  { id: 'pond', poi: 'pond', title: 'Visit the koi pond', hint: 'East side of the yard, under the maple.' },
+  { id: 'gate', poi: 'gate', title: 'Walk out to the gate', hint: 'The south side of the yard.' },
   { id: 'shrine', poi: 'shrine', title: 'Walk the road to the shrine', hint: 'Out of the gate and south, over the red bridge.' },
-  { id: 'falls', poi: 'falls', title: 'Find the falls', hint: 'Round the back of the walls and west through the north wood.' },
   { id: 'col', poi: 'col', title: 'Walk over the pass', hint: 'The road through the cutting, east of the shrine, climbs to it.' },
   { id: 'city', poi: 'city-plaza', title: 'Walk into the city', hint: 'Down the far side of the pass, past the bus stop, east along the main road.' },
+  { id: 'alley', poi: 'city-shrine', title: 'Walk the back alleys', hint: 'West of the shopping street, the lane past the Inari shrine.', won: 'city-alley' },
+  { id: 'roofs', poi: 'city-catwalk', title: 'Get up on the roofs', hint: 'The deck from the station lands on the east row\'s roofs.', won: 'city-roofs' },
+  { id: 'kuroda', poi: 'city-warehouse', title: 'Go into the Kuroda yard', hint: 'Behind the black fence east of the shopping street. Past the gate, on to the warehouse.', won: 'kuroda-house' },
+  { id: 'canal', poi: 'city-canal', title: 'Walk the canal', hint: 'South of the main road, west along the water.', won: 'city-canal' },
+  { id: 'roof', poi: 'roof', title: 'Climb to the hall roof', hint: 'Back home, the stair on the hall\'s west side.' },
+  { id: 'store', poi: 'store', title: 'Cross to the storehouse roof', hint: 'The plank bridge leaves the east edge of the hall roof.' },
+  { id: 'pond', poi: 'pond', title: 'Visit the koi pond', hint: 'East side of the yard, under the maple.' },
+  { id: 'falls', poi: 'falls', title: 'Find the falls', hint: 'Round the back of the walls and west through the north wood.' },
 ];
 
 export const ZONE_JP: Record<string, string> = {

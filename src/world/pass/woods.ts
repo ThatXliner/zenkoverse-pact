@@ -177,7 +177,12 @@ export function* buildWoods(k: Kit, parent: THREE.Object3D, ground: Ground, phas
     const blue = [0x6f93a4, 0x7d9fae, 0x6a8f8a];
     for (const side of [-1, 1]) for (let z = 150, i = 0; z < 470; z += 52, i++) {
       const r = 58 + ((i * 37) % 24), h = 78 + ((i * 53) % 36), x = side < 0 ? GRID.x0 - r * 0.55 : GRID_X1 + r * 0.55;
-      k.cone(band, blue[(i + (side > 0 ? 1 : 0)) % 3]!, x, h / 2 - 6, z + (side > 0 ? 20 : 0), r, h, 7, [0, i * 1.3, 0], false);
+      const cz = z + (side > 0 ? 20 : 0);
+      // None stands out over the low country past the grid's south end: the
+      // outskirts and the city lie there, and a cone's foot would rise
+      // through their streets (it filled the top-down view over the Kuroda yard).
+      if (cz + r > GRID_Z1) continue;
+      k.cone(band, blue[(i + (side > 0 ? 1 : 0)) % 3]!, x, h / 2 - 6, cz, r, h, 7, [0, i * 1.3, 0], false);
     }
     k.bake(band);
     yield;

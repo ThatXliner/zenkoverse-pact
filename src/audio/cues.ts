@@ -285,6 +285,8 @@ export const CUES = {
   'wager.lost': sfx([S('glitch_001', 0.5), Y('tone', { f: 220, glide: 70, dur: 0.6, type: 3, lp: 900 }, { gain: 0.15 })]),
   'encounter.start': sfx([Y('taiko', { f: 95, dur: 1 }, { gain: 0.7 }), Y('taiko', { f: 95, dur: 1 }, { gain: 0.55, at: 0.32 })], { wet: 0.5 }),
   'encounter.clear': sfx([S('confirmation_002', 0.55), Y('pluck', { f: 587.33 }, { gain: 0.6 }), Y('pluck', { f: 739.99 }, { gain: 0.55, at: 0.12 }), Y('pluck', { f: 880 }, { gain: 0.6, at: 0.24 })], { wet: 0.4 }),
+  // The officer's whistle: two short shrill blasts with a pea's warble.
+  'city.whistle': sfx([Y('tone', { f: 2950, dur: 0.22, type: 1 }, { gain: 0.16 }), Y('tone', { f: 3080, dur: 0.5, type: 1, glide: 2900 }, { gain: 0.18, at: 0.3 }), Y('whoosh', { dur: 0.7, f0: 2400, f1: 3600 }, { gain: 0.06, at: 0.05 })], { wet: 0.35, every: 1 }),
   'defeat': sfx([S('lowDown', 0.5, { pitch: 0.6 }), Y('boom', { f0: 70, f1: 28, dur: 2 }, { gain: 0.9 }), Y('tone', { f: 147, glide: 73, dur: 2.2, type: 1, lp: 600 }, { gain: 0.2 })], { wet: 0.6, duck: 1 }),
 
   // ------------------------------------------------------------ drills

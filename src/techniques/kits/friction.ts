@@ -300,7 +300,8 @@ function tickSlide(g: Game, s: Slide, dt: number): Footing {
   // the slider loses most of what it had.
   if (sp > 4) {
     for (const e of g.techniques.enemiesInSphere(p.position, 1.15)) {
-      if (s.hit.has(e) || e.state === 'knocked' || Math.abs(e.position.y - p.position.y) > 1.2) continue;
+      // A body in the slider's own grip rides along; it is not bowled over.
+      if (s.hit.has(e) || e.state === 'knocked' || e.gripped > 0 || Math.abs(e.position.y - p.position.y) > 1.2) continue;
       s.hit.add(e);
       g.combat.hitEnemy(e, (5 + sp * 1.5) * s.potency, { from: e.position.clone().addScaledVector(dir, -1), knock: Math.min(10, sp * 0.75), lift: 1.4, kind: 'kinetic', heavy: sp > 10 });
       p.velocity.x *= 0.55; p.velocity.z *= 0.55;

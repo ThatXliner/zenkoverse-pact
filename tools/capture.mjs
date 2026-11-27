@@ -14,7 +14,7 @@ const { url, args, stop } = await resolveTarget();
 
 const out = args.out ?? 'captures';
 const only = args.only ? new Set(args.only.split(',')) : null;
-const TECHS = ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension', 'electro'];
+const TECHS = ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat', 'tension', 'electro', 'friction'];
 const MODAL_SIZES = [[1280, 720], [1920, 1080]];
 const HUD_SIZES = [[1280, 720], [1920, 1080], [2000, 1000], [2560, 1440]];
 mkdirSync(out, { recursive: true });
@@ -503,6 +503,10 @@ if (run('electro')) {
     }, [0, 0.4, 5.4], -0.25);
     await scene('touch', (g, G, V) => { g.teleport([0, 0, 7]); G.encounters.spawn('thug', new V(0.45, 0, 5.85)); }, [0.45, 1, 5.85], -0.12);
   }
+  await api((g) => g.quitDrill());
+  await startRun('friction');
+  await api((g) => { g.teleport([-11.4, 0.3, -7.4]); g.camera('top'); g.drill('friction-suriashi'); });
+  for (const f of [70, 130]) { await step(f === 70 ? 70 : 60); await shot('drill', `friction-suriashi-f${f}`); }
 }
 
 // Fight direction (issues #10 and #11), from the top-down camera the game is

@@ -48,8 +48,8 @@ const INK = 0x17110c;
 // A boss shrugs off blows until enough land close together (Sekiro's
 // posture): only then does it stagger, so its wind-ups are not chipped away.
 const POISE: Partial<Record<EnemyAi, number>> = { kuroda: 70, ancient: 130 };
-// Freezes in a row: the fourth (a boss's third) doesn't take, until
-// CHILL_FADES seconds pass without one. THAW is the opening after each.
+// Holds in a row (a freeze, a grip): the fourth (a boss's third) doesn't
+// take, until CHILL_FADES seconds pass without one. THAW is the opening after each.
 const FREEZE_CHAIN = 3;
 const CHILL_FADES = 6;
 const THAW = 1;
@@ -105,9 +105,12 @@ export class Enemy {
   grounded = true;
   resonance = 0;
   frozen = 0;
+  // Seconds left in a grip that will not slip (Friction): the body goes where
+  // the hand takes it and does nothing of its own.
+  gripped = 0;
   slow = 1;
-  // Freezes landed in a row each hold half as long, a boss's from the start,
-  // and a body that has just thawed can't be frozen again for a moment.
+  // Holds landed in a row each last half as long, a boss's from the start,
+  // and a body just let go can't be held again for a moment.
   private chill = 0;
   private sinceChill = 0;
   private thaw = 0;
@@ -280,17 +283,31 @@ export class Enemy {
   }
 
   // Holds this body in place for up to `seconds`: ice, or a line round its
-  // legs. Every hold goes through here. A hold doesn't stack on one still
-  // holding, and a chain of them runs out: see `chill`. Returns the seconds
-  // it actually holds, 0 when it doesn't take.
-  freeze(seconds: number): number {
-    if (this.frozen > 0 || this.thaw > 0) return 0;
+  // legs. A hold doesn't stack on one still holding, and a chain of them
+  // runs out: see `chill`. Returns the seconds it actually holds, 0 when it
+  // doesn't take. A grip (below) is on the same chain.
+  freeze(seconds: number): number { const s = this.restrain(seconds); if (s > 0) this.frozen = s; return s; }
+
+  // Takes this body in a grip for up to `seconds`, on the same chain as a
+  // freeze. Returns how long it is held: 0 when the hold does not take.
+  grip(seconds: number): number {
+    if (this.def.ai === 'rival') return 0;
+    const s = this.restrain(seconds);
+    if (s > 0) this.gripped = s;
+    return s;
+  }
+
+  // Lets go of a grip before it runs out; the moment after is the same as a thaw.
+  letGo(): void { if (this.gripped > 0) { this.gripped = 0; this.thaw = THAW; } }
+
+  // One more hold in the chain: how long it lasts, 0 when it doesn't take.
+  private restrain(seconds: number): number {
+    if (this.frozen > 0 || this.gripped > 0 || this.thaw > 0) return 0;
     const n = this.chill + (this.def.boss ? 1 : 0);
     if (n >= FREEZE_CHAIN) return 0;
-    this.frozen = seconds * 0.5 ** n;
     this.chill++;
     this.sinceChill = 0;
-    return this.frozen;
+    return seconds * 0.5 ** n;
   }
 
   // Heat melts the ice early. The body counts as just thawed, so the heat
@@ -307,9 +324,10 @@ export class Enemy {
   igniteFuel(at: THREE.Vector3, radius: number): number { return this.fuse?.light(at, radius) ?? 0; }
 
   protected tickFrost(dt: number): void {
-    if (this.frozen > 0 && this.frozen <= dt) this.thaw = THAW;
+    if ((this.frozen > 0 && this.frozen <= dt) || (this.gripped > 0 && this.gripped <= dt)) this.thaw = THAW;
     else this.thaw = Math.max(0, this.thaw - dt);
     this.frozen = Math.max(0, this.frozen - dt);
+    this.gripped = Math.max(0, this.gripped - dt);
     this.sinceChill += dt;
     if (this.sinceChill > CHILL_FADES) this.chill = 0;
   }
@@ -344,7 +362,7 @@ export class Enemy {
     for (let i = this.echoes.length - 1; i >= 0; i--) { this.echoes[i]!.update(dt); if (this.echoes[i]!.done) this.echoes.splice(i, 1); }
     const atk = this.attack;
 
-    if (this.alive && def.ai !== 'dummy' && this.locked <= 0) {
+    if (this.alive && def.ai !== 'dummy' && this.locked <= 0 && this.gripped <= 0) {
       switch (this.state) {
         case 'idle':
           if (dist < 26) this.setState('chase');
@@ -403,7 +421,7 @@ export class Enemy {
       const v = Math.hypot(this.velocity.x, this.velocity.z);
       const slow = this.grounded ? Math.max(0, v - KNOCK_FRICTION * dt) / (v || 1) : Math.exp(-0.4 * dt);
       this.velocity.x *= slow; this.velocity.z *= slow;
-    } else {
+    } else if (this.gripped <= 0) {
       this.velocity.x = THREE.MathUtils.lerp(this.velocity.x, move.x, 1 - Math.exp(-10 * dt));
       this.velocity.z = THREE.MathUtils.lerp(this.velocity.z, move.z, 1 - Math.exp(-10 * dt));
     }

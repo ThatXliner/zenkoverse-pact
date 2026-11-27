@@ -20,6 +20,20 @@ const PUSH_DECAY = 6;
 // steepest floor it stands on, and it falls to the next tread.
 const STEP_DOWN = 0.36;
 
+// How the body holds what it touches. Ordinary footing is `walk`. A
+// Technique that changes the skin's grip sets it each frame (Friction):
+// `slide`, the soles let go, so the body keeps its speed, the keys only lean
+// it round at `steer` radians a second and the floor drags `drag` of the
+// speed away each second; `plant`, it stops dead and a shove does not move
+// it; `cling`, the palms hold a wall and the body moves at `climb` (m/s, in
+// the world) with nothing pulling it down.
+export type Footing =
+  | { kind: 'walk' }
+  | { kind: 'slide'; steer: number; drag: number }
+  | { kind: 'plant' }
+  | { kind: 'cling'; climb: THREE.Vector3 };
+export const WALK: Footing = { kind: 'walk' };
+
 export class PlayerController {
   readonly position = new THREE.Vector3();
   readonly velocity = new THREE.Vector3();
@@ -50,6 +64,9 @@ export class PlayerController {
   rooted = 0;
   moveLock = 0;
   surface = 'concrete';
+  footing: Footing = WALK;
+  // The way the keys asked the body to go this frame, flat and at most unit length.
+  readonly wish = new THREE.Vector3();
   readonly planarSpeed = { value: 0 };
 
   constructor(private physics: Physics, start: THREE.Vector3, private events: MoveEvents) {
@@ -71,7 +88,7 @@ export class PlayerController {
 
   // A blow's shove: carried on top of the walk and dying away on its own, so
   // the keys keep control while the body is pushed back a step.
-  shove(v: THREE.Vector3): void { this.push.add(v.clone().setY(0)); }
+  shove(v: THREE.Vector3): void { if (this.footing.kind !== 'plant' && this.footing.kind !== 'cling') this.push.add(v.clone().setY(0)); }
 
   teleport(p: THREE.Vector3): void {
     this.position.copy(p);
@@ -96,15 +113,23 @@ export class PlayerController {
     const right = new THREE.Vector3(-forward.z, 0, forward.x);
     const facing = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const wish = locked ? new THREE.Vector3() : new THREE.Vector3().addScaledVector(forward, axis.y).addScaledVector(right, axis.x);
+    this.wish.copy(wish);
+    if (this.wish.lengthSq() > 1) this.wish.normalize();
+    const footing = this.footing;
     const targetSpeed = (wantsSprint ? 6.6 : 4.1) * this.speedScale * this.fieldScale;
     const planar = new THREE.Vector3(this.velocity.x, 0, this.velocity.z);
     // Reversing at speed, the body has to brake its own weight first: the
     // pivot takes a beat longer than starting from a standstill.
     const reversing = wish.lengthSq() > 0.01 && planar.lengthSq() > 2.5 * 2.5 && planar.dot(wish) < -0.3 * planar.length() * wish.length();
     const accel = this.grounded ? (reversing ? 12 : 22) : 7;
-    const target = wish.multiplyScalar(targetSpeed);
-    planar.lerp(target, 1 - Math.exp(-accel * dt));
-    if (this.grounded && wish.lengthSq() < 0.01) planar.multiplyScalar(Math.exp(-14 * dt));
+    if (footing.kind === 'slide' && this.grounded) this.glide(planar, wish, footing.steer, footing.drag, dt);
+    else {
+      const target = wish.multiplyScalar(targetSpeed);
+      planar.lerp(target, 1 - Math.exp(-accel * dt));
+      // Planted, the feet stop the body dead.
+      if (this.grounded && wish.lengthSq() < 0.01) planar.multiplyScalar(Math.exp(-(footing.kind === 'plant' ? 40 : 14) * dt));
+    }
+    if (footing.kind === 'cling') planar.set(footing.climb.x, 0, footing.climb.z);
 
     if (this.dashTimer > 0) {
       this.dashTimer -= dt;
@@ -118,7 +143,8 @@ export class PlayerController {
     }
 
     this.velocity.x = planar.x; this.velocity.z = planar.z;
-    this.velocity.y -= 20 * dt;
+    if (footing.kind === 'cling') this.velocity.y = footing.climb.y;
+    else this.velocity.y -= 20 * dt;
     if (this.grounded) this.coyote = 0.12; else this.coyote -= dt;
     if (input.hit('jump') && this.coyote > 0 && !locked && this.mantleT <= 0) {
       this.velocity.y = 6.6;
@@ -179,6 +205,20 @@ export class PlayerController {
   }
 
   get stepCycle(): number { return this.stepPhase; }
+
+  // On slick footing the speed carries: the keys turn it toward them by at
+  // most `steer` radians a second, the floor drags at it, and only a body
+  // nearly at rest can shuffle itself up to a walk.
+  private glide(planar: THREE.Vector3, wish: THREE.Vector3, steer: number, drag: number, dt: number): void {
+    const speed = planar.length();
+    if (wish.lengthSq() > 0.01 && speed > 0.2) {
+      const have = Math.atan2(planar.x, planar.z), want = Math.atan2(wish.x, wish.z);
+      const turn = THREE.MathUtils.clamp(Math.atan2(Math.sin(want - have), Math.cos(want - have)), -steer * dt, steer * dt);
+      planar.applyAxisAngle(new THREE.Vector3(0, 1, 0), turn);
+    }
+    planar.multiplyScalar(Math.exp(-drag * dt));
+    if (speed < 1.2 && wish.lengthSq() > 0.01) planar.lerp(wish.clone().normalize().multiplyScalar(1.2), 1 - Math.exp(-2 * dt));
+  }
 
   // How far the body can move straight down, up to `max`, before it touches something.
   private clearBelow(max: number): number {

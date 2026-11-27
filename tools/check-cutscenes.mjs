@@ -118,7 +118,7 @@ if (!only || only === 'sp') {
     return { trace, log: (await view()).log.at(-1), before, after, frames: n };
   }
 
-  const MODES = { recoil: 'top', shift: 'third', rime: 'first', blink: 'top', echo: 'third', heat: 'first', tension: 'top', electro: 'third' };
+  const MODES = { recoil: 'top', shift: 'third', rime: 'first', blink: 'top', echo: 'third', heat: 'first', tension: 'top', electro: 'third', friction: 'top' };
   for (const [tech, mode] of Object.entries(MODES)) {
     const id = `max-${tech}`;
     const d = defs[id];

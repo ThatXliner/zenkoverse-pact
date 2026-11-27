@@ -64,6 +64,9 @@ const SPECIFIC: Template[] = [
   { id: 'bowstring', name: 'Bowstring', only: 'tension', kinds: ['secondary'], shape: 'draw', behaviors: ['quick'], restrict: ['trigger:grounded', 'resource:half'] },
   { id: 'livewire', name: 'Live Wire', only: 'electro', kinds: ['primary'], shape: 'discharge', behaviors: ['relay', 'seize'], restrict: ['target:conductive', 'trigger:grounded'] },
   { id: 'groundfault', name: 'Ground Fault', only: 'electro', kinds: ['secondary'], shape: 'convert', behaviors: ['earth', 'bank'], restrict: ['direction:front', 'resource:half'] },
+  { id: 'clinch', name: 'Clinch', only: 'friction', kinds: ['primary'], shape: 'grip', behaviors: ['carry'], restrict: ['range:touch', 'trigger:grounded'] },
+  { id: 'longglide', name: 'Long Glide', only: 'friction', kinds: ['secondary'], shape: 'slip', behaviors: ['glance'], restrict: ['duration:held', 'resource:half'] },
+  { id: 'skaters', name: 'Skater\'s Line', only: 'friction', kinds: ['primary'], shape: 'railstep', behaviors: ['heel'], restrict: ['direction:line', 'target:people'] },
 ];
 
 // Two sacrifices are the same surrender when they name the same tag, or when

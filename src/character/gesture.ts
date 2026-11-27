@@ -79,6 +79,15 @@ const STAGED: Partial<Record<PoseName, { pos: [number, number, number]; rot?: [n
   gripDown: { pos: [0.46, -0.66, -0.12] },
   tent: { pos: [0.03, -0.32, -0.34] },
   arcSpread: { pos: [0.66, -0.22, -0.3] },
+  collar: { pos: [0.1, -0.24, -0.78] },
+  wrench: { pos: [-0.22, -0.58, 0.08] },
+  glideOut: { pos: [0.74, -0.42, -0.08], rot: [-0.1, -0.6, 0.6] },
+  wallPress: { pos: [0.27, 0.22, -0.44] },
+  skateFwd: { pos: [-0.12, -0.36, -0.58] },
+  skateBack: { pos: [0.33, -0.62, 0.42] },
+  heave: { pos: [0.22, 0.28, 0.04] },
+  hookLock: { pos: [0.035, -0.26, -0.3] },
+  hookPull: { pos: [0.12, -0.25, -0.3] },
 };
 const BODY_POSES = Object.fromEntries(Object.entries(POSES).map(([name, pose]) => {
   const st = STAGED[name as PoseName];

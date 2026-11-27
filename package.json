@@ -23,6 +23,7 @@
     "check:locomotion": "node tools/check-locomotion.mjs",
     "check:multiplayer": "node tools/check-multiplayer.mjs",
     "check:navigation": "node tools/check-navigation.mjs",
+    "check:pause": "node tools/check-pause.mjs",
     "check:regen-online": "node tools/check-regen-online.mjs",
     "check:rooftop": "node tools/check-rooftop.mjs",
     "check:scenes": "node tools/check-scenes.mjs",

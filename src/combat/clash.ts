@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { signal } from '@preact/signals';
 import type { Game } from '../app/game';
 import { banner } from '../app/game';
-import { uiBlocksInput } from '../app/state';
+import { uiBlocksInput, worldRuns } from '../app/state';
 import type { Enemy } from './enemies';
 import type { RemotePlayer } from '../net/remote';
 import type { Avatar } from '../character/avatar';
@@ -326,6 +326,9 @@ export class Clash {
     }
     const r = this.run;
     if (!r) return;
+    // Offline a menu holds the clash with the world: its exchanges run on
+    // the real clock, and would otherwise be decided, unpicked, under the pause.
+    if (!g.net && !worldRuns.value) return;
     r.t += raw;
     r.ms += raw * 1000;
     // The two stand where they are and nothing touches them.

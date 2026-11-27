@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { signal, effect } from '@preact/signals';
 import type { Game } from '../app/game';
 import { toast } from '../app/game';
+import { worldRuns } from '../app/state';
 import { keyLabel } from '../app/keymap';
 import type { TechniqueKit, AbilityContext, CastResult, TechniqueId } from './kit';
 import type { Pact, TriggerValue } from '../pacts/schema';
@@ -344,8 +345,12 @@ export class Techniques {
   update(dt: number, raw: number): void {
     const g = this.game;
     const inp = g.input;
-    for (const k of KEY_SLOTS) this.cooldown[k] = Math.max(0, this.cooldown[k] - raw * g.aura.recovery);
-    this.sealed = Math.max(0, this.sealed - raw);
+    // Cooldowns and a seal run on real time, so a hit-stop does not stretch
+    // them, but not under a menu offline: the world waits there, and a lost
+    // Wager's seal would otherwise run out on the pause screen.
+    const live = worldRuns.value || g.net ? raw : 0;
+    for (const k of KEY_SLOTS) this.cooldown[k] = Math.max(0, this.cooldown[k] - live * g.aura.recovery);
+    this.sealed = Math.max(0, this.sealed - live);
     this.struckRecently = Math.max(0, this.struckRecently - dt);
     const regen = this.def.resource.regen * (1 + g.mastery.get(this.def.id, 'efficiency') * 0.5);
     if (!this.cast_?.held) this.resource = Math.min(this.def.resource.max, this.resource + regen * dt);

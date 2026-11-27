@@ -7,7 +7,9 @@ import { KITS } from '../techniques/techniques';
 import type { TechniqueId } from '../techniques/kit';
 import type { Enemy } from './enemies';
 import type { RemotePlayer } from '../net/remote';
-import { RULES } from '../net/protocol';
+import { RULES, type Vec3 } from '../net/protocol';
+import type { Mark } from '../techniques/mark';
+import { DANGER } from './bosses';
 import { AURA, AuraField, auraPotential, fieldFor, hasArea, pressure, reinforcement, shapeOf, type FieldBudget, type FieldEnd, type FieldState } from './field';
 import { fieldsContest } from '../net/clash';
 import { FieldView } from './fieldView';
@@ -38,6 +40,11 @@ const CLASH_FILL = 0.35;
 const GATHER = 0.3;
 const SETTLE = 0.4;
 const DUST = 0x9c8b72;
+// A sensed player's blow is ruled as a lane this wide along their aim.
+const SENSE_LANE = 1.2;
+
+// A blow another player has begun, sensed in the player's field.
+interface SensedBlow { r: RemotePlayer; mark: Mark; yaw: number; t: number; windup: number }
 
 // Aura Expansion on F (issue #4): the player's field, the fields of the
 // Master and of other players, what an open field does to the bodies in it,
@@ -70,9 +77,13 @@ export class Aura {
   // Whether this expansion's release (the shockwave) has played.
   private released = true;
   private pushDrawn = 0;
+  private sensedBlows: SensedBlow[] = [];
+  // How many other players' blows the field has sensed, for the checks.
+  sensedCount = 0;
 
   constructor(private game: Game) {
-    this.mine = new FieldView(game.renderer.scene, 0xffffff, game.avatar.model);
+    // The layer wraps the body and, in first person, the arms in view.
+    this.mine = new FieldView(game.renderer.scene, 0xffffff, [{ body: game.avatar.model }, { body: game.hands.root, scale: 1.6 }]);
     this.clash = new Clash(game);
     game.mastery.capBy('refinement', (t) => this.potential(t));
     game.drills.register(fieldReading(game));
@@ -99,6 +110,8 @@ export class Aura {
   leanToward(p: THREE.Vector3): void { this.lean = 0.35; this.leanTo.copy(p).sub(this.game.player.position); }
 
   get open(): boolean { return this.field.open; }
+  // How far the field being pushed out can go, 0 when it is not being pushed.
+  get pushLimit(): number { return this.pushing ? this.budget.wide.reach : 0; }
   // How dense the player's open field is, 0 when it is not open.
   get density(): number { return this.field.open ? this.field.density : 0; }
 
@@ -113,6 +126,44 @@ export class Aura {
   hinder(e: Enemy): number { return this.inField(e.position) && !e.field?.open ? pressure(this.field.density) : 1; }
   // Whether the player senses what a body at `p` is about to do.
   senses(p: THREE.Vector3): boolean { return this.inField(p); }
+  // Another player inside the field began a blow or a cast: its wind-up
+  // plays on their body here as `windup` seconds from now. Sensing can only
+  // read what this screen already has, so unlike an enemy's, a player's blow
+  // is not read before it begins: nobody knows what a player will choose.
+  // What the field adds is where it goes and when it lands, the lit lane
+  // along their aim out to the field's edge, swept as the wind-up runs.
+  senseBlow(r: RemotePlayer, dir: Vec3, windup: number): void {
+    if (!r.alive || !this.senses(r.position) || !(windup > 0.05)) return;
+    const flat = Math.hypot(dir[0], dir[2]);
+    const yaw = flat > 0.2 ? Math.atan2(-dir[0], -dir[2]) : r.yaw;
+    const mark = this.game.vfx.mark({ kind: 'rect', length: this.laneIn(r.position, yaw), width: SENSE_LANE }, DANGER, r.position, yaw);
+    mark.glow = AURA.sense.glow;
+    this.sensedBlows.push({ r, mark, yaw, t: 0, windup });
+    this.sensedCount++;
+  }
+
+  // How far a lane from `p` heading `yaw` runs before it leaves the field.
+  private laneIn(p: THREE.Vector3, yaw: number): number {
+    const me = this.game.player.position;
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+    const rx = p.x - me.x, rz = p.z - me.z;
+    const b = rx * fx + rz * fz, c = rx * rx + rz * rz - this.field.radius * this.field.radius;
+    return Math.max(1, -b + Math.sqrt(Math.max(0, b * b - c)));
+  }
+
+  // The sensed lanes follow their thrower and sweep to the blow; one whose
+  // thrower leaves the field, falls or goes is no longer sensed.
+  private senseUpdate(raw: number): void {
+    for (let i = this.sensedBlows.length - 1; i >= 0; i--) {
+      const s = this.sensedBlows[i]!;
+      s.t += raw;
+      if (s.r.disposed || !s.r.alive || !this.senses(s.r.position)) { s.mark.cancel(); this.sensedBlows.splice(i, 1); continue; }
+      s.mark.place(s.r.position, s.yaw);
+      s.mark.progress = s.t / s.windup;
+      if (s.t >= s.windup) { s.mark.fire(); this.sensedBlows.splice(i, 1); }
+    }
+  }
+
   // The player's wind-ups inside their own field: quicker the further it is
   // pushed out, so the body layer, all defence, gives none.
   get castSpeed(): number { return 1 + AURA.sharper.speed * this.density * (this.field.open ? this.spread : 0); }
@@ -270,6 +321,7 @@ export class Aura {
     this.shaping = this.pushing = false;
     this.released = true;
     this.clash.cancel();
+    for (const s of this.sensedBlows.splice(0)) s.mark.cancel();
     this.field.reset();
     this.guardBroken = 0;
     this.game.player.fieldScale = 1;
@@ -298,16 +350,19 @@ export class Aura {
       if (inside && !this.field.open) pressed = Math.min(pressed, pressure(density));
       this.touch(o, radius, d);
       let view = this.views.get(o);
-      if (!view && radius > 0.05) { view = new FieldView(g.renderer.scene, this.colorOf(o), o.def.ai === 'rival' ? (o as RemotePlayer).avatar.model : undefined); this.views.set(o, view); }
+      const rival = o.def.ai === 'rival' ? o as RemotePlayer : null;
+      if (!view && radius > 0.05) { view = new FieldView(g.renderer.scene, this.colorOf(o), rival ? [{ body: rival.avatar.model }] : []); this.views.set(o, view); }
       if (!view) continue;
       const zone = g.world.zoneAt(o.position);
-      view.draw(raw, g.clock.time, o.position, radius, density, { inside, dome: this.clash.active ? CLASH_DOME : inside ? 0.5 : 0.9, fill: this.clash.active ? CLASH_FILL : 1, ceiling: zone?.indoors ? zone.max.y - o.position.y : undefined });
+      // Another player pushing their field out is drawn as their own screen draws it.
+      view.draw(raw, g.clock.time, o.position, radius, density, { inside, dome: this.clash.active ? CLASH_DOME : inside ? 0.5 : 0.9, fill: this.clash.active ? CLASH_FILL : 1, ceiling: zone?.indoors ? zone.max.y - o.position.y : undefined, push: rival?.fieldPush ?? 0, limit: rival && rival.fieldPush > 0.01 ? rival.fieldLimit : 0 });
     }
     for (const [o, v] of this.views) if (!owners.includes(o)) { v.dispose(); this.views.delete(o); }
     // Pushing a field out takes the body's attention: it barely walks.
     g.player.fieldScale = this.pushing ? Math.min(pressed, AURA.push.slow) : pressed;
 
     this.clash.update(raw);
+    this.senseUpdate(raw);
     const me = g.player.position;
     const zone = g.world.zoneAt(me);
     this.mine.color = this.colorOf(null);

@@ -34,6 +34,10 @@ export class RemotePlayer extends Enemy {
   // Their aura field as their own screen draws it.
   fieldRadius = 0;
   fieldDensity = 0;
+  // While they push it out: how far it can go, and 0..1 how far into the push
+  // it is drawn (eased, as their own screen eases it).
+  fieldLimit = 0;
+  fieldPush = 0;
   private buf: PlayerState[] = [];
   // The sender's clock minus ours, from recent arrivals. The largest is the
   // least delayed sample, so it tracks the sender without the jitter.
@@ -42,6 +46,7 @@ export class RemotePlayer extends Enemy {
   private events: Timed[] = [];
   private lastFrozen = 0;
   private signShown: PlayerState['sign'] = 0;
+  private wasPushing = false;
   private sample: PlayerState | null = null;
   // Their installed Eye, marked on the body; what it shows them is theirs alone.
   private eyeMark: EyeMark;
@@ -182,6 +187,7 @@ export class RemotePlayer extends Enemy {
     this.cine = s.cine;
     this.fieldRadius = this.alive ? s.f?.[0] ?? 0 : 0;
     this.fieldDensity = s.f?.[1] ?? 0;
+    this.pushField(this.alive && this.fieldRadius > 0 ? s.f?.[2] ?? 0 : 0, dt);
     this.eyeMark.set(eyeFromCode(s.e));
     this.position.set(s.p[0], s.p[1], s.p[2]);
     this.velocity.set(s.v[0], s.v[1], s.v[2]);
@@ -209,6 +215,17 @@ export class RemotePlayer extends Enemy {
       if (s.cine && this.game.cutscenes.partner !== this.id) this.avatar.flash(0.55);
     }
     this.avatar.update(dt);
+  }
+
+  // A field being pushed out: the pulse is drawn from `fieldPush`, and the
+  // body holds its arms out unless a clash has given it a stance of its own.
+  private pushField(limit: number, dt: number): void {
+    const pushing = limit > 0;
+    if (pushing) this.fieldLimit = limit;
+    this.fieldPush += ((pushing ? 1 : 0) - this.fieldPush) * (1 - Math.exp(-(pushing ? 14 : 5) * dt));
+    if (pushing && this.avatar.stance === null) this.avatar.stance = 'push';
+    else if (!pushing && this.wasPushing && this.avatar.stance === 'push' && !this.game.aura.clash.involves(this)) this.avatar.stance = null;
+    this.wasPushing = pushing;
   }
 
   // The drawn position, for the checks.

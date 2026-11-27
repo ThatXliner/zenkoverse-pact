@@ -146,7 +146,12 @@ export class BodyLayer {
   private res = new THREE.Vector2(1920, 1080);
   private built = false;
 
-  constructor(private body: THREE.Object3D, color: number) {
+  // `body` is what the layer wraps: an avatar's model, or the first-person
+  // arms. Whichever of them is hidden takes its layer with it, so the
+  // player's one field can wrap both and each camera draws the one it shows.
+  // `scale` widens the band: the arms fill the frame, and a rim as wide as a
+  // whole body's would read as a hairline round them.
+  constructor(private body: THREE.Object3D, color: number, private scale = 1) {
     const make = (c: number, order: number) => new THREE.ShaderMaterial({
       uniforms: { color: { value: new THREE.Color(c) }, strength: { value: 1 }, flash: { value: 0 }, width: { value: 4 }, res: { value: this.res }, time: { value: 0 } },
       vertexShader: layerVert, fragmentShader: layerFrag, side: THREE.BackSide, transparent: true, depthWrite: false,
@@ -198,8 +203,8 @@ export class BodyLayer {
     if (!show) return;
     this.ink.uniforms.strength!.value = Math.min(1, strength * 1.15);
     this.paint.uniforms.strength!.value = strength;
-    this.ink.uniforms.width!.value = width + 2.2;
-    this.paint.uniforms.width!.value = width;
+    this.ink.uniforms.width!.value = (width + 2.2) * this.scale;
+    this.paint.uniforms.width!.value = width * this.scale;
     this.ink.uniforms.time!.value = this.paint.uniforms.time!.value = time;
     this.paint.uniforms.flash!.value = flash;
   }
@@ -225,11 +230,12 @@ export class FieldView {
   private toward = new THREE.Vector3(0, 0, -1);
   // The owner's body layer, for a field that belongs to a body (the player's
   // and other players'); the Master never wears one.
-  private layer: BodyLayer | null;
+  private layers: BodyLayer[];
 
-  // `body` is the owner's model, to draw a body layer round.
-  constructor(scene: THREE.Object3D, color: number, body?: THREE.Object3D) {
-    this.layer = body ? new BodyLayer(body, color) : null;
+  // `bodies` are what the owner's body layer wraps: their model, and for the
+  // player their first-person arms too, each with its band's `scale`.
+  constructor(scene: THREE.Object3D, color: number, bodies: { body: THREE.Object3D; scale?: number }[] = []) {
+    this.layers = bodies.map((b) => new BodyLayer(b.body, color, b.scale));
     const shared = () => ({ color: { value: new THREE.Color(color) }, time: { value: 0 }, strength: { value: 1 }, density: { value: 0.5 }, crack: { value: 0 }, bulge: { value: 0 }, squeeze: { value: 0 }, flicker: { value: 0 }, push: { value: 0 } });
     this.domeMat = new THREE.ShaderMaterial({ uniforms: { ...shared(), toward: { value: new THREE.Vector3(0, 0, -1) } }, vertexShader: domeVert, fragmentShader: domeFrag, transparent: true, depthWrite: false, side: THREE.FrontSide });
     this.ringMat = new THREE.ShaderMaterial({
@@ -250,7 +256,7 @@ export class FieldView {
   // The far wall tints the frame only for someone standing inside the field.
   get side(): THREE.Side { return this.domeMat.side; }
 
-  set color(c: number) { this.domeMat.uniforms.color!.value.set(c); this.ringMat.uniforms.color!.value.set(c); if (this.layer) this.layer.color = c; }
+  set color(c: number) { this.domeMat.uniforms.color!.value.set(c); this.ringMat.uniforms.color!.value.set(c); for (const l of this.layers) l.color = c; }
 
   // A clash tell, held until cleared. `toward` is where the opponent stands.
   tell(kind: Pick | null, toward?: THREE.Vector3): void {
@@ -261,7 +267,7 @@ export class FieldView {
   // The field breaks: a white flash through the band as it is crushed in.
   crack(): void { this.crackT = 1; }
 
-  hide(): void { this.dome.visible = this.ring.visible = false; this.layer?.draw(0, 0, 0, 0); this.tellKind = null; }
+  hide(): void { this.dome.visible = this.ring.visible = false; for (const l of this.layers) l.draw(0, 0, 0, 0); this.tellKind = null; }
 
   // `feet` is the owner's ground point. `ceiling` is how far the dome may
   // rise (indoors it stops at the room's ceiling). `inside` is whether the
@@ -276,12 +282,12 @@ export class FieldView {
     this.crackT = Math.max(0, this.crackT - dt * 3);
     for (const k of ['push', 'hold', 'feint'] as const) this.tellAmt[k] += ((this.tellKind === k ? 1 : 0) - this.tellAmt[k]) * (1 - Math.exp(-12 * dt));
     const layer = RULES.field.layer;
-    const worn = this.layer ? THREE.MathUtils.smoothstep(radius, 0.1, layer * 0.9) * (1 - THREE.MathUtils.smoothstep(radius, layer * 1.05, layer + 1.6)) : 0;
+    const worn = this.layers.length ? THREE.MathUtils.smoothstep(radius, 0.1, layer * 0.9) * (1 - THREE.MathUtils.smoothstep(radius, layer * 1.05, layer + 1.6)) : 0;
     const peel = THREE.MathUtils.clamp((radius - layer) / 1.6, 0, 1);
-    this.layer?.draw(time, worn, (5 + 4 * density) * (1 + 1.5 * peel) * (1 + 0.5 * this.tellAmt.hold), Math.max(this.crackT * this.crackT, 0.35 * (opts.push ?? 0)));
+    for (const l of this.layers) l.draw(time, worn, (5 + 4 * density) * (1 + 1.5 * peel) * (1 + 0.5 * this.tellAmt.hold), Math.max(this.crackT * this.crackT, 0.35 * (opts.push ?? 0)));
     // The ground ring and the dome grow out of the layer: a body owner's
     // field shows them only once it has left the body.
-    const grown = this.layer ? THREE.MathUtils.smoothstep(radius, layer, layer + 1) : 1;
+    const grown = this.layers.length ? THREE.MathUtils.smoothstep(radius, layer, layer + 1) : 1;
     const show = radius > 0.05 && grown > 0.01;
     this.dome.visible = this.ring.visible = show;
     if (!show) return;
@@ -318,7 +324,7 @@ export class FieldView {
   }
 
   dispose(): void {
-    this.layer?.dispose();
+    for (const l of this.layers) l.dispose();
     this.dome.removeFromParent();
     this.ring.removeFromParent();
     this.dome.geometry.dispose();

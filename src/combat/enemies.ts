@@ -53,6 +53,10 @@ const POISE: Partial<Record<EnemyAi, number>> = { kuroda: 70, ancient: 130 };
 const FREEZE_CHAIN = 3;
 const CHILL_FADES = 6;
 const THAW = 1;
+// Seconds a body that has just got up from a knockdown keeps its feet:
+// blows still push it, but neither throw it down again nor stagger it, so
+// knockdowns can't be chained into a lock any more than freezes can.
+const STEADY = 1.5;
 const POISE_DECAY = 14;
 // How far the Enforcer wants to stand from the player when he pours.
 const POUR_RANGE = 5;
@@ -107,6 +111,8 @@ export class Enemy {
   private chill = 0;
   private sinceChill = 0;
   private thaw = 0;
+  // Counts down from STEADY when the body gets up from a knockdown.
+  steady = 0;
   readonly def: EnemyDef;
   // The Master's aura field (issue #4), null for everyone without one.
   field: AuraField | null = null;
@@ -186,7 +192,9 @@ export class Enemy {
     this.avatar.flash(1.2);
     const from = opts.from ?? this.game.player.position;
     const away = this.position.clone().sub(from).setY(0).normalize();
-    const knock = (opts.knock ?? 0) * (this.isBoss ? 0.25 : 1);
+    // A body already thrown takes the blow where it lies: it is not thrown
+    // again, so blows can't juggle it along the ground for as long as they land.
+    const knock = this.state === 'knocked' ? 0 : (opts.knock ?? 0) * (this.isBoss ? 0.25 : 1);
     // The body rocks away from the blow, by its weight and the blow's: a jab
     // jolts the chest, a heavy blow throws it back on its heels.
     this.avatar.impact(away, (0.35 + Math.min(1, amount / 40) * 0.5 + knock * 0.12) * (this.def.ai === 'ancient' ? 0.35 : this.isBoss ? 0.6 : 1));
@@ -207,9 +215,10 @@ export class Enemy {
     if (knock > 0) {
       this.velocity.addScaledVector(away, knock);
       this.velocity.y += (opts.lift ?? knock * 0.35) * (this.isBoss ? 0.3 : 1);
-      if (knock > 4 && !this.isBoss) { this.setState('knocked'); this.airT = 0; this.lastCenter.copy(this.center()); this.avatar.playOneShot('Hit_Head'); }
+      if (this.steady > 0) { /* just up: it takes the push on its feet */ }
+      else if (knock > 4 && !this.isBoss) { this.setState('knocked'); this.airT = 0; this.lastCenter.copy(this.center()); this.avatar.playOneShot('Hit_Head'); }
       else if (opts.stagger !== false) { this.setState('stagger'); this.avatar.playOneShot('Hit_Chest'); }
-    } else if (opts.stagger !== false && this.state !== 'knocked') { this.setState('stagger'); this.avatar.playOneShot('Hit_Chest'); }
+    } else if (opts.stagger !== false && this.state !== 'knocked' && this.steady <= 0) { this.setState('stagger'); this.avatar.playOneShot('Hit_Chest'); }
     if (this.hp <= 0) this.die();
   }
 
@@ -304,6 +313,7 @@ export class Enemy {
     this.castCd -= dt * (this.field?.open ? 1 + AURA.recover * this.field.density : 1);
     this.tickFrost(dt);
     this.locked = Math.max(0, this.locked - dt);
+    this.steady = Math.max(0, this.steady - dt);
     this.guardBroken = Math.max(0, this.guardBroken - dt);
     this.resonance = Math.max(0, this.resonance - dt * 0.5);
     this.slow = THREE.MathUtils.lerp(this.slow, 1, 1 - Math.exp(-1.5 * dt));
@@ -361,7 +371,7 @@ export class Enemy {
           if (this.t > 0.45) this.setState('chase');
           break;
         case 'knocked':
-          if (this.grounded && this.t > 0.6 && Math.hypot(this.velocity.x, this.velocity.z) < 1) this.setState('recover');
+          if (this.grounded && this.t > 0.6 && Math.hypot(this.velocity.x, this.velocity.z) < 1) { this.setState('recover'); this.steady = STEADY; }
           break;
         case 'cast':
           this.face(p, dt, def.ai === 'ancient' ? 2.5 : 4);

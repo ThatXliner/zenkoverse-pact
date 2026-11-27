@@ -444,7 +444,7 @@ errors.length = 0;
 await page.goto(`${url}?debug&region=city`);
 await page.waitForFunction(() => window.game?.game?.ready, null, { timeout: 180000 });
 await api((g) => { g.loop(false); g.technique('friction'); g.game.startRun({ skipTutorial: true }); g.loop(false); g.step(5); g.god(true); });
-const edge = await api((g) => { const o = g.game.city.origin; return [o.x + 65.2, o.y, o.z + 23]; });
+const edge = await api((g) => { const [x, y, z] = g.world().origins.city; return [x + 65.2, y, z + 23]; });
 await api((g, at) => { g.teleport(at); g.camera('third'); g.look(-Math.PI / 2, 0.15); g.step(30); g.game.techniques.resource = 100; }, edge);
 await key('Digit1', true); await key('KeyW', true);
 let edgeTop = 0;

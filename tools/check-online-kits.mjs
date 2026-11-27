@@ -11,8 +11,10 @@
 //   it through on B's screen, and C sees it go;
 //   Friction: C sees A crouch into a Slip's glide, play Open Hand's own
 //   gesture and let it go when the key comes up, and Railstep's;
-//   Electro: the charge A leaves in a pot crackles on C's screen, and a
-//   discharge into the pond arcs over the water on C and hurts B wading in it.
+//   Electro: while A holds the right button, C sees A's line from A's hand
+//   to B and B takes it, and it goes when A lets go; the charge A's line
+//   leaves in a pot crackles on C's screen, and the line held into the pond
+//   arcs over the water on C and hurts B wading in it.
 // It saves C's view of each for review.
 // Usage: node tools/check-online-kits.mjs [url] [--latency 120] [--out captures/online-kits] [--port 4181]
 // Without a URL it serves dist/ through server/index.mjs (run `npm run build` first).
@@ -244,20 +246,50 @@ console.log('\nFriction: the glide and its own gestures');
 }
 
 // ------------------------------------------------------------------ Electro
-console.log('\nElectro: charge held in metal, the pond current');
+console.log('\nElectro: the held line, charge held in metal, the pond current');
 {
   await A.api((g) => g.technique('electro'));
+  // A holds the right button with the line on B; C watches from the side.
+  await stand(B, [0, 0, 2.5], null);
+  await stand(C, [5, 0, 5], [0, 1, 4], -0.2);
+  await stand(A, [0, 0, 6.5], [0, 1, 2.5], -0.12);
+  await wait(900);
+  const bHp = await B.api((g) => g.game.combat.hp);
+  await ready(A);
+  await A.api((g) => g.hold('secondary', true));
+  const line = () => C.api((g, a, b) => {
+    const G = g.game, ra = G.net.remotes.get(a), rb = G.net.remotes.get(b), c = G.vfx.liveCurrents[0];
+    if (!c) return { n: 0 };
+    const hand = ra.avatar.boneWorld('hand_r', G.player.position.clone()), bp = rb.drawn;
+    return { n: G.vfx.liveCurrents.length, fromHand: Math.hypot(c.from[0] - hand.x, c.from[1] - hand.y, c.from[2] - hand.z), toB: Math.hypot(c.to[0] - bp.x, c.to[2] - bp.z) };
+  }, A.id, B.id);
+  const seen = await until(line, (v) => v.n === 1 && v.toB < 1, 2500);
+  check(seen.n === 1, `while A holds the right button, C sees A's line (${seen.n} drawn)`);
+  check(seen.fromHand < 0.05 && seen.toB < 1, `from A's hand on C's screen to B (${seen.fromHand?.toFixed(3)} m off the hand, ${seen.toB?.toFixed(2)} m from B)`);
+  shots.push(await shot(C, 'electro-line-c'));
+  await wait(600);
+  const still = await line();
+  check(still.n === 1, 'it stays drawn on C for as long as A holds it');
+  const bHit = await until(() => B.api((g) => g.game.combat.hp), (h) => h < bHp);
+  check(bHit < bHp, `and B, on the line, takes it (${bHp} to ${bHit})`);
+  await A.api((g) => g.hold('secondary', false));
+  const gone = await until(line, (v) => v.n === 0, 1500);
+  check(gone.n === 0, 'A lets go: the line is gone on C too');
+  // The pot: A holds the line on it, and the charge it keeps crackles on C.
   await settled('pot', 5.4, 8.3, (at) => [[B, [-3, 0, 4], null], [C, [at[0] + 2.5, 0, at[2] + 3.2], at, -0.25], [A, [at[0], 0, at[2] + 1.7], at, -0.3]]);
   await C.api(() => { window.__fx.length = 0; });
-  await ready(A); await cast(A, 'secondary');
-  await wait(1600);
+  await ready(A);
+  await A.api((g) => g.hold('secondary', true));
+  await wait(800);
+  await A.api((g) => g.hold('secondary', false));
+  await wait(1200);
   const held = await A.api((g) => g.electro().held);
   const charged = props.find((p) => p.id === held[0]?.id);
   const arcs = charged ? await C.api((g, at) => window.__fx.filter((c) => c.f === 'arc' && c.a[0]?.v && Math.hypot(c.a[0].v[0] - at[0], c.a[0].v[2] - at[2]) < 1).length, charged.at) : 0;
-  check(!!charged?.traits.includes('metal'), `A's discharge leaves charge in a pot (${held.map((h) => h.charge.toFixed(1)).join(', ')})`);
-  check(arcs >= 3, `the charge held in it crackles on C's screen (${arcs} arcs at the pot in 1.6 s)`);
+  check(!!charged?.traits.includes('metal'), `A's line held on a pot leaves charge in it (${held.map((h) => h.charge.toFixed(1)).join(', ')})`);
+  check(arcs >= 3, `the charge held in it crackles on C's screen (${arcs} arcs at the pot)`);
   shots.push(await shot(C, 'electro-pot-c'));
-  // B wades into the pond; A discharges into the water from the rim.
+  // B wades into the pond; A holds the line into the water from the rim.
   const P = await A.api((g) => { const p = g.game.world.pond; return [p.center.x, p.surfaceY, p.center.z]; });
   await stand(B, [P[0] + 0.9, -0.9, P[2] - 0.7], null);
   await stand(C, [P[0] + 4.5, 0.25, P[2] + 4.5], P, -0.35);
@@ -265,13 +297,15 @@ console.log('\nElectro: charge held in metal, the pond current');
   await wait(1700);
   await C.api(() => { window.__fx.length = 0; });
   const hp0 = await B.api((g) => g.game.combat.hp);
-  await ready(A); await cast(A, 'secondary');
+  await ready(A);
+  await A.api((g) => g.hold('secondary', true));
   const hp1 = await until(() => B.api((g) => g.game.combat.hp), (h) => h < hp0);
   await wait(300);
+  shots.push(await shot(C, 'electro-pond-c'));
+  await A.api((g) => g.hold('secondary', false));
   const water = await C.api((g, P) => window.__fx.filter((c) => c.f === 'arc' && c.a[0]?.v && Math.abs(c.a[0].v[1] - P[1]) < 0.2 && Math.hypot(c.a[0].v[0] - P[0], c.a[0].v[2] - P[2]) < 4).length, P);
   check(water >= 3, `the current arcs over the pond on C's screen (${water} arcs on the water)`);
   check(hp1 < hp0, `and B, wading in it, takes it (${hp0} to ${hp1})`);
-  shots.push(await shot(C, 'electro-pond-c'));
 }
 
 check(!errors.length, `no page errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);

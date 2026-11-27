@@ -5,10 +5,11 @@ import type { Enemy } from '../../combat/enemies';
 import type { PropInstance } from '../../world/props';
 import type { PointSource } from '../../render/lightPool';
 import { signGesture, gestureSet, frontOnly, targetsAllowed } from './shared';
+import { toast } from '../../app/game';
 import { restriction, type Pact } from '../../pacts/schema';
 import { opening, blow, type CutsceneDef } from '../../cutscene/cutscene';
 import { surfaceAt } from '../../audio/surfaces';
-import { GROUP_WORLD } from '../../physics/world';
+import { GROUP_WORLD, GROUP_PROP, GROUP_ENEMY } from '../../physics/world';
 import { wetStone } from '../../drills/wetStone';
 import { kindle } from '../ignition';
 
@@ -22,10 +23,7 @@ import { kindle } from '../ignition';
 const COLOR = 0xffe45c;
 const HOT = 0xfff6c8;
 const DOWN = new THREE.Vector3(0, -1, 0);
-const UP = new THREE.Vector3(0, 1, 0);
 
-// Charge one discharge draws, at most.
-const DRAW = 30;
 // Charge leaks away on its own, faster while you stand in water.
 const LEAK = 1;
 const LEAK_WET = 10;
@@ -47,8 +45,12 @@ const STRUCK_SHARE = 0.5;
 
 // What the drill and the checks read, in game time: when the current last
 // ran through the player, when they last fed on their own body, when Impact
-// Conversion last took something in, and the last discharge's shape.
-export const electroState = { backlashAt: -Infinity, suppliedAt: -Infinity, convertedAt: -Infinity, last: null as null | { at: number; length: number; wanted: number; spent: number; cost: number; hits: number; nodes: number; ended: string } };
+// Conversion last took something in, when the held line began and ended (and
+// ran dry), and its last tick.
+export const electroState = {
+  backlashAt: -Infinity, suppliedAt: -Infinity, convertedAt: -Infinity, beganAt: -Infinity, endedAt: -Infinity, dryAt: -Infinity,
+  last: null as null | { at: number; length: number; ends: string; hits: number; ticks: number; spent: number; frames: number; start: [number, number, number]; end: [number, number, number]; air: number },
+};
 
 const catalogue: Pact[] = [
   { id: 'electro.discharge', technique: 'electro', name: 'Discharge', slot: 'secondary', grant: { shape: 'discharge', behaviors: ['seize'] }, clauses: [
@@ -147,9 +149,16 @@ function surfaceOver(w: Wet, p: THREE.Vector3): THREE.Vector3 {
   return new THREE.Vector3(p.x, w.kind === 'melt' || w.kind === 'stream' ? p.y + 0.03 : w.surfaceY + 0.02, p.z);
 }
 
+// The right hand. In first person it is the hand on screen: its fingertip,
+// carried from the hands' own camera into the world along the same line of
+// sight, so what leaves it leaves the hand the player sees.
 function handAt(g: Game): THREE.Vector3 {
-  if (g.cam.isFirst) return g.player.eye().addScaledVector(g.cam.aimDirection(), 0.6).add(new THREE.Vector3(0, -0.25, 0));
-  return g.avatar.boneWorld('hand_r', new THREE.Vector3());
+  if (!g.cam.isFirst) return g.avatar.boneWorld('hand_r', new THREE.Vector3());
+  const tip = g.hands.fingertip(new THREE.Vector3());
+  const cam = g.renderer.camera;
+  const ndc = tip.clone().applyMatrix4(g.renderer.overlayCamera.projectionMatrix);
+  const ray = new THREE.Vector3(ndc.x, ndc.y, 0.5).unproject(cam).sub(cam.position).normalize();
+  return cam.position.clone().addScaledVector(ray, Math.max(0.3, tip.length()));
 }
 
 const rnd = (k: number) => (Math.random() - 0.5) * 2 * k;
@@ -286,23 +295,27 @@ function backlash(g: Game, amount: number): void {
   const a = amount * (1 - g.mastery.get('electro', 'control') * 0.5);
   if (a <= 0.5) return;
   g.combat.hurtPlayer(a, { self: true });
+  g.avatar.flash(1.2);
+  // A held line runs it through in ticks: the jolt comes with the first, then twice a second.
+  const jolt = g.clock.time - electroState.backlashAt > 0.5;
+  electroState.backlashAt = g.clock.time;
+  if (!jolt) return;
   g.player.rooted = Math.max(g.player.rooted, 0.3);
   g.cam.shake(0.3);
   g.cam.kick({ fov: -3, roll: (Math.random() - 0.5) * 0.04 });
   g.hands.pulse(1);
-  g.avatar.flash(1.2);
   crawl(g, g.player.position.clone().add(new THREE.Vector3(0, 1.0, 0)), 6, 0.7, 0.08);
   g.audio.play('electro.backlash', { at: g.player.position });
-  electroState.backlashAt = g.clock.time;
 }
 
 // A metal prop the current ran into and stopped in holds it for a while:
 // the next body to touch it takes it, the player included.
-const held = new Map<PropInstance, { charge: number; left: number; next: number }>();
+const held = new Map<PropInstance, { charge: number; left: number; next: number; at: number }>();
 function charge(g: Game, p: PropInstance, amount: number): void {
   const was = held.get(p);
-  held.set(p, { charge: Math.min(60, (was?.charge ?? 0) + amount), left: HELD_FOR, next: 0 });
-  // It jumps where it stands as the current goes in.
+  held.set(p, { charge: Math.min(60, (was?.charge ?? 0) + amount), left: HELD_FOR, next: was?.next ?? 0, at: was && g.clock.time - was.at < 0.5 ? was.at : g.clock.time });
+  if (was && g.clock.time - was.at < 0.5) return;
+  // It jumps where it stands as the current goes in (a held line jolts it twice a second).
   g.props.push(p, new THREE.Vector3(0, p.def.mass * 1.2, 0), new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).multiplyScalar(p.def.mass * 0.15));
   g.audio.play('electro.metal', { at: p.mesh.position });
 }
@@ -310,8 +323,12 @@ function charge(g: Game, p: PropInstance, amount: number): void {
 // `spare` is a body the current starts from without hurting it again.
 // `per` turns power into charge: what metal at the end of a route keeps is
 // never more than the charge that went into it.
-interface Conduct { hops: number; falloff: number; seize: number; people: boolean; props: boolean; single: boolean; per: number; strong: number; within?: { at: THREE.Vector3; radius: number }; spare?: Enemy }
-interface Reached { bodies: Enemy[]; through: boolean; nodes: number; water: boolean }
+// `held`: a tick of the held line. Bodies take a sting, not the whole blow;
+// the heavier marks come only on a surge; and the bolt the line already
+// draws to a route is not drawn again. `touched` is every body this hold has run through.
+interface Conduct { hops: number; falloff: number; seize: number; people: boolean; props: boolean; single: boolean; per: number; strong: number; within?: { at: THREE.Vector3; radius: number }; spare?: Enemy; held?: { touched: Set<Enemy>; surge: boolean } }
+// `fresh`: bodies a held line reached for the first time this hold.
+interface Reached { bodies: Enemy[]; through: boolean; nodes: number; water: boolean; fresh: number }
 
 // Runs a current from each of `starts` along every route it finds, breadth first,
 // weaker at each hop. Bodies take it as damage; metal it ends in holds it;
@@ -319,7 +336,8 @@ interface Reached { bodies: Enemy[]; through: boolean; nodes: number; water: boo
 function conduct(g: Game, starts: { n: Node; from: THREE.Vector3; power: number }[], o: Conduct): Reached {
   const frozen = pondFrozen(g);
   const bodies = new Set<Enemy>(), props = new Set<PropInstance>(), waters = new Set<string>();
-  const out: Reached = { bodies: [], through: false, nodes: 0, water: false };
+  const out: Reached = { bodies: [], through: false, nodes: 0, water: false, fresh: 0 };
+  const quiet = !!o.held && !o.held.surge;
   const targets = g.targets().filter((e) => e.alive);
   const near = (p: THREE.Vector3) => !o.within || flat(p, o.within.at) < o.within.radius;
   const metals = () => g.props.instances.filter((p) => isMetal(p) && !props.has(p) && near(p.mesh.position));
@@ -337,22 +355,28 @@ function conduct(g: Game, starts: { n: Node; from: THREE.Vector3; power: number 
       const here = nodeAt(n);
       // Drawn at once: the hit-stop holds the frame with the whole route lit in it.
       const d = depth > 1 ? depth * 0.02 : 0;
-      // The bolt from where the current came from, drawn as it travels.
-      if (n.kind !== 'water') g.vfx.after(d, () => g.vfx.arc(at, here, COLOR, n.kind === 'body' ? 0.3 : 0.22, width * (n.kind === 'body' ? 1 : 0.8), 0.24));
+      // The bolt from where the current came from, drawn as it travels (a
+      // held line's forks flicker, redrawn each tick).
+      if (n.kind !== 'water' && (!o.held || at.distanceTo(here) > 0.6)) g.vfx.after(d, () => g.vfx.arc(at, here, COLOR, o.held ? 0.15 : n.kind === 'body' ? 0.3 : 0.22, width * (n.kind === 'body' ? 1 : 0.8), 0.24));
       out.nodes++;
       if (n.kind === 'body') {
         if (o.people && n.e !== o.spare && (!o.single || out.bodies.length === 0)) {
-          shock(g, n.e, power, at, o.strong, o.seize, d);
+          if (o.held) {
+            const first = !o.held.touched.has(n.e);
+            o.held.touched.add(n.e);
+            if (first) out.fresh++;
+            sting(g, n.e, power, at, o.seize, first, o.held.surge, o.strong);
+          } else shock(g, n.e, power, at, o.strong, o.seize, d);
           out.bodies.push(n.e);
         }
-        igniteNear(g, n.e.position);
+        if (!quiet) igniteNear(g, n.e.position);
       } else if (n.kind === 'metal') {
         const p = n.p;
-        g.vfx.after(d, () => {
+        if (!quiet) g.vfx.after(d, () => {
           strikeLight(g, p.mesh.position, o.strong * 0.7);
           crawl(g, p.mesh.position, 3, Math.max(0.4, p.half.y * 2), 0.06);
         });
-        igniteNear(g, n.p.mesh.position);
+        if (!quiet) igniteNear(g, n.p.mesh.position);
       } else if (n.kind === 'fuel') {
         igniteNear(g, n.at);
       } else {
@@ -361,17 +385,21 @@ function conduct(g: Game, starts: { n: Node; from: THREE.Vector3; power: number 
         const entry = surfaceOver(w, at);
         g.vfx.after(d, () => {
           const span = Math.min(7, w.radius * 1.2);
-          g.vfx.ring(surfaceOver(w, here), COLOR, 0.3, span, 0.45);
-          g.vfx.ring(entry, HOT, 0.2, span * 0.6, 0.3);
+          if (!quiet) {
+            g.vfx.ring(surfaceOver(w, here), COLOR, 0.3, span, 0.45);
+            g.vfx.ring(entry, HOT, 0.2, span * 0.6, 0.3);
+          }
           // Arcs skitter across the surface from where it went in.
-          for (let i = 0; i < 4; i++) {
+          for (let i = 0; i < (quiet ? 2 : 4); i++) {
             const a = Math.random() * Math.PI * 2, r = (0.5 + Math.random() * 0.5) * Math.min(w.radius, 6) * 0.95;
             const end = (w.kind === 'canal' || w.kind === 'stream' ? entry : here).clone().add(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r));
             g.vfx.arc(entry, surfaceOver(w, end), COLOR, 0.2, 0.04, 0.22, 1);
           }
         });
-        g.vfx.flash(here.clone().add(new THREE.Vector3(0, 0.6, 0)), HOT, 25 + 40 * o.strong, 0.15, 10);
-        g.audio.play('electro.water', { at: here });
+        if (!quiet) {
+          g.vfx.flash(here.clone().add(new THREE.Vector3(0, 0.6, 0)), HOT, 25 + 40 * o.strong, 0.15, 10);
+          g.audio.play('electro.water', { at: here });
+        }
         if (!out.through && inWet(g, w, g.player.position, frozen)) { out.through = true; backlash(g, power * 0.6); }
       }
       // Metal holds the current only where it ends: what it passes on, it does not keep.
@@ -420,289 +448,270 @@ function igniteNear(g: Game, at: THREE.Vector3): void {
   kindle(at, 1.2);
 }
 
-// ---------------------------------------------------------------- the Abilities
+// ---------------------------------------------------------------- the line
 
-// ---------------------------------------------------------------- the chain
-
-// A discharge runs from the hand to the point aimed at, as far as the charge
-// can carry it. Air takes it only a short gap for free; past that it is
-// pushed hop by hop through the air, and each metre of air costs charge.
-// Whatever lies on the line is a route: a body near it is stung on the way
-// and passes it on, metal carries it a stretch for free and sends it on
-// stronger, and water takes it across for nothing and gives it to everyone
-// standing in it. Whatever the chain ends on takes the full blow; with
-// nothing there it strikes the floor.
+// Held, the right click is a live line of current from the hand to the
+// aim: drawn the frame the key goes down, redrawn every frame it is held,
+// gone when it comes up. It ends at the aim, on the first body or solid
+// thing in the way, or in the air at its reach. Air carries it only a short
+// gap for nothing: every metre of air past that costs Charge for each second
+// it is held. What it touches takes it in ticks. Metal on the way carries
+// it on harder and forks it to the bodies near; water takes everyone in it.
 const REACH = 18;
 const FREE_AIR = 3;
-const PER_METRE = 1;
-// How near the line a body or a piece of metal must be for the chain to take it.
-const BODY_SIDE = 0.9;
-const METAL_SIDE = 0.9;
-// Metal carries the current this far each side of it without cost.
+// Charge a second while it is held, and more a second for each metre of air past the free gap.
+const DRAIN = 10;
+const DRAIN_PER_METRE = 0.8;
+// A tick of current through what the line touches, every TICK seconds, at
+// TICK_POWER before potency. Every SURGE ticks it surges: the scorch and the
+// rumble come with that, not with every tick.
+const TICK = 0.12;
+const TICK_POWER = 6;
+const SURGE = 5;
+// How long a held line seizes a body each time the freeze chain lets it (Enemy.freeze halves each in a row).
+const SEIZE = 0.45;
+// How near the line a body's middle, or a piece of metal, must come for the line to take it.
+const BODY_RADIUS = 0.5;
+const METAL_SIDE = 0.6;
+// Metal carries it this far each side without the air's cost; each one on the way sends it on harder.
 const METAL_CARRY = 1.25;
-// Charge kept back for the blow at the end, whatever the distance.
-const KEEP = 8;
+const METAL_AMP = 0.25;
+// The line's width, and how long one call keeps it drawn if the next does not come.
+const WIDTH = 0.16;
+const KEEP = 0.25;
+// Below this much Charge the line thins and gutters.
+const LOW = 25;
 
-interface Plan {
-  from: THREE.Vector3;
-  dir: THREE.Vector3;
-  // Where the chain ends, how far it got, and how far it was asked to go.
+type Ends = 'body' | 'metal' | 'water' | 'solid' | 'air';
+interface Line {
+  start: THREE.Vector3;
   end: THREE.Vector3;
+  ends: Ends;
+  // The points it runs through after the hand: each piece of metal on the way, then the end.
+  pts: THREE.Vector3[];
+  body: Enemy | null;
+  metal: PropInstance[];
+  water: Wet | null;
   length: number;
-  wanted: number;
-  // The routes on the way, in order, each at its distance along the line.
-  nodes: { n: Node; s: number; at: THREE.Vector3 }[];
-  // What the chain ends on: the last route when it lies at the end.
-  target: Node | null;
-  cost: number;
-  metals: number;
+  air: number;
 }
 
-function chainRange(g: Game, pact: Pact | null, behaviors: readonly string[]): number {
+function lineRange(g: Game, pact: Pact | null, behaviors: readonly string[]): number {
+  // A conductive Pact gives up the air: it reaches as far as a touch.
+  if (pact && restriction(pact, 'target') === 'conductive') return TOUCH + HAND + 0.4;
   const r = pact ? restriction(pact, 'range') : undefined;
   const f = r === 'touch' ? 0.35 : r === 'short' ? 0.65 : r === 'long' ? 1.25 : 1;
   return REACH * f * (1 + g.mastery.get('electro', 'range') * 0.4) * (behaviors.includes('arc') ? 1.3 : 1);
 }
 
-// The chain a discharge would run now toward `aim`, without running it: the
-// cast follows it, and the aim preview draws it.
-function planChain(g: Game, aim: THREE.Vector3, range: number, budget: number, allow: { people: boolean; props: boolean }, frozen: boolean): Plan {
-  const from = g.player.position.clone();
-  const dir = aim.clone().sub(from).setY(0);
-  const wanted = Math.min(range, Math.max(0.6, dir.length()));
-  if (dir.lengthSq() < 1e-4) dir.set(-Math.sin(g.cam.yaw), 0, -Math.cos(g.cam.yaw));
-  dir.normalize();
-  const along = (p: THREE.Vector3) => { const v = p.clone().sub(from); return { s: v.x * dir.x + v.z * dir.z, side: Math.abs(v.x * dir.z - v.z * dir.x), dy: p.y - from.y }; };
-  const found: { n: Node; s: number; at: THREE.Vector3 }[] = [];
-  if (allow.people) for (const e of g.targets()) {
-    if (!e.alive) continue;
-    const a = along(e.position);
-    if (a.s > 0.2 && a.s < wanted + 0.6 && a.side < BODY_SIDE && Math.abs(a.dy) < 2.5) found.push({ n: { kind: 'body', e }, s: Math.min(a.s, wanted), at: e.center() });
+// Where the player aims now: the floor under the cursor from above, what
+// the crosshair is on otherwise, or far out along it.
+function aimNow(g: Game): THREE.Vector3 {
+  if (g.cam.isTop && g.cam.floorPoint) {
+    const c = g.cam.floorPoint;
+    const floor = g.physics.castRay(new THREE.Vector3(c.x, g.player.position.y + 2.5, c.z), DOWN, 8, GROUP_WORLD | GROUP_PROP, g.player.body);
+    return floor ? floor.point : c.clone();
   }
-  if (allow.props) for (const p of g.props.instances) {
-    if (!isMetal(p)) continue;
-    const a = along(p.mesh.position);
-    if (a.s > 0.2 && a.s < wanted + 0.6 && a.side < METAL_SIDE + p.half.x && Math.abs(a.dy) < 3) found.push({ n: { kind: 'metal', p }, s: Math.min(a.s, wanted), at: p.mesh.position.clone() });
-  }
-  // Water on the line: where it first goes into each body of it.
-  const pond = g.world.pond;
-  const seen = new Set<string>();
-  const wetSpans: [number, number][] = [];
-  for (let s = 0.3; s <= wanted + 0.01; s += 0.25) {
-    const p = from.clone().addScaledVector(dir, s);
-    let w: Wet | null = null;
-    if (!frozen && Math.hypot(p.x - pond.center.x, p.z - pond.center.z) < pond.radius && Math.abs(p.y - pond.surfaceY) < 2.5) w = { kind: 'pond', at: new THREE.Vector3(pond.center.x, pond.surfaceY, pond.center.z), radius: pond.radius + 0.5, surfaceY: pond.surfaceY };
-    else { const r = regionWater(g, p, 2.5); if (r) w = r.kind === 'canal' ? { ...r, at: p.clone().setY(r.surfaceY) } : r; }
-    if (!w) continue;
-    const last = wetSpans.at(-1);
-    if (last && s - last[1] < 0.3) last[1] = s; else wetSpans.push([s, s]);
-    const k = w.kind === 'canal' ? 'canal' : wetKey(w);
-    if (seen.has(k)) continue;
-    seen.add(k);
-    found.push({ n: { kind: 'water', w }, s, at: surfaceOver(w, p) });
-  }
-  // The aim itself: a stream, a paddy or meltwater under it, or the Kuroda's waiting pour.
-  if (flat(aim, from) <= wanted + 0.3) {
-    const w = seen.size ? null : wetAt(g, aim, frozen);
-    if (w) found.push({ n: { kind: 'water', w }, s: wanted, at: surfaceOver(w, aim) });
-    for (const e of g.encounters.enemies) if (e.pour.some((q) => flat(q, aim) < 2.3)) found.push({ n: { kind: 'fuel', at: aim.clone() }, s: wanted, at: aim.clone() });
-  }
-  found.sort((x, y) => x.s - y.s);
-  // A body standing in water on the line is the water's to reach, with everyone else in it.
-  const wets = found.flatMap((f) => f.n.kind === 'water' ? [f.n.w] : []);
-  for (let i = found.length - 2; i >= 0; i--) { const n = found[i]!.n; if (n.kind === 'body' && wets.some((w) => inWet(g, w, n.e.position, frozen))) found.splice(i, 1); }
-  // Walk out along the line paying for the air, until the charge runs out.
-  const carried = (s: number) => wetSpans.some(([a, b]) => s >= a - 0.2 && s <= b + 0.2) || found.some((f) => f.n.kind === 'metal' && Math.abs(f.s - s) < METAL_CARRY);
-  let cost = 0, length = wanted;
-  for (let s = 0; s < wanted; s += 0.25) {
-    if (s > FREE_AIR && !carried(s)) cost += PER_METRE * 0.25;
-    if (cost > budget) { length = s; cost = budget; break; }
-  }
-  const nodes = found.filter((f) => f.s <= length + 0.3);
-  const end = from.clone().addScaledVector(dir, length);
-  // It ends on what lies at the end of the line: the body or metal there, or water it runs into.
-  const last = nodes.at(-1);
-  const target = last && last.n.kind !== 'water' && length - last.s < 1.5 ? last.n : last && last.n.kind === 'water' && length - last.s < 0.3 ? last.n : null;
-  if (target && target.kind !== 'water' && target.kind !== 'fuel') end.copy(nodeAt(target)).setY(from.y);
-  return { from, dir, end, length, wanted, nodes, target, cost, metals: nodes.filter((f) => f.n.kind === 'metal').length };
-}
-
-// Where the player aims now, as a cast would read it: the floor under the
-// cursor from above, what the crosshair is on otherwise.
-function aimNow(g: Game): THREE.Vector3 | null {
-  if (g.cam.isTop) return g.cam.floorPoint?.clone() ?? null;
   const eye = g.player.eye(), dir = g.cam.aimDirection();
-  const hit = g.physics.castRay(eye, dir, 60, GROUP_WORLD, g.player.body);
-  return hit ? hit.point.clone() : eye.addScaledVector(dir, 30);
+  const hit = g.physics.castRay(eye, dir, 60, GROUP_WORLD | GROUP_PROP | GROUP_ENEMY, g.player.body);
+  return hit ? hit.point : eye.addScaledVector(dir, 60);
 }
 
-// The kinks where the bolt jumps the air between two routes that stand
-// farther apart than a hop.
-function hopPoints(a: THREE.Vector3, b: THREE.Vector3, height: number): THREE.Vector3[] {
-  const d = flat(a, b);
-  const n = Math.max(1, Math.ceil(d / 2.2));
-  const out: THREE.Vector3[] = [];
-  const side = new THREE.Vector3(-(b.z - a.z), 0, b.x - a.x).normalize();
-  for (let i = 1; i < n; i++) out.push(a.clone().lerp(b, i / n).setY(height + rnd(0.25)).addScaledVector(side, rnd(0.45)));
-  return out;
-}
-
-function discharge(ctx: AbilityContext): ReturnType<TechniqueKit['effects']['cast']> {
-  const g = ctx.game, t = g.techniques;
-  const allow = targetsAllowed(ctx);
-  const frozen = pondFrozen(g);
-  const hand = handAt(g);
-  const aim = ctx.aim ?? g.player.position.clone().addScaledVector(ctx.dir.clone().setY(0).normalize(), 3);
-  const plan = planChain(g, aim, chainRange(g, ctx.pact, ctx.behaviors), Math.max(0, t.resource - KEEP), allow, frozen);
-  // A conductive Pact gives up the air: the chain runs only from a touch or along a route.
-  const conductive = ctx.pact ? restriction(ctx.pact, 'target') === 'conductive' : false;
-  if (conductive && !plan.nodes.some((f) => f.s < TOUCH + HAND + 0.35)) { plan.nodes.length = 0; plan.target = null; plan.length = Math.min(plan.length, TOUCH + HAND); plan.end = plan.from.clone().addScaledVector(plan.dir, plan.length); plan.cost = 0; }
-  const spent = Math.min(t.resource, plan.cost + DRAW);
-  t.resource -= spent;
-  const payload = Math.max(0, spent - plan.cost);
-  const strong = payload / DRAW;
-  // Metal on the way sends it on stronger.
-  const amp = Math.min(1.6, 1 + 0.2 * plan.metals);
-  const power = (10 + 1.6 * payload) * ctx.potency * amp;
-  const seize = ctx.behaviors.includes('seize') && payload >= 12 ? Math.min(0.8, 0.2 + payload / 50) : 0;
-  const relay = ctx.behaviors.includes('relay');
-  const opts: Conduct = { hops: relay ? 6 : 3, falloff: relay ? 0.85 : 0.75, seize, people: allow.people, props: allow.props, single: allow.single, per: power > 0 ? payload / power : 0, strong };
-  const y = hand.y - 0.1;
-  // The bolt: hand to each route in turn, kinking through the air between them.
-  const starts: { n: Node; from: THREE.Vector3; power: number }[] = [];
-  let at = hand.clone(), width = 0.11 + 0.11 * strong;
-  const air = (to: THREE.Vector3): THREE.Vector3 => {
-    let p = at;
-    for (const k of hopPoints(at, to, y)) {
-      g.vfx.arc(p, k, COLOR, 0.3, width, 0.3, 2);
-      if (Math.random() < 0.6) g.vfx.arc(k, k.clone().setY(g.player.position.y + 0.03).add(new THREE.Vector3(rnd(0.4), 0, rnd(0.4))), COLOR, 0.18, width * 0.5, 0.4, 0);
-      p = k;
+// The line as it runs now, from the hand toward the aim. Metal it meets
+// or passes close by is a route: the line kinks through it and runs on to
+// the aim from there, unless the aim is the metal itself.
+function trace(g: Game, range: number, allow: { people: boolean; props: boolean }, frozen: boolean): Line {
+  const start = handAt(g), aim = aimNow(g);
+  const metal: PropInstance[] = [], pts: THREE.Vector3[] = [];
+  const top = (p: PropInstance) => p.mesh.position.clone().setY(p.mesh.position.y + p.half.y * 0.6);
+  let from = start, travelled = 0, ends: Ends = 'air', body: Enemy | null = null, water: Wet | null = null, end = start;
+  for (let leg = 0; leg < 4; leg++) {
+    const dir = aim.clone().sub(from);
+    let length = dir.length();
+    if (length < 0.3) { dir.copy(leg ? aim.clone().sub(start) : g.cam.aimDirection()); length = 0.3; }
+    dir.normalize();
+    ends = 'solid';
+    if (length > range - travelled) { length = Math.max(0.1, range - travelled); ends = 'air'; }
+    const o = from;
+    const at = (s: number) => o.clone().addScaledVector(dir, s);
+    // The first solid thing on the way: a wall, a prop, the floor.
+    // A prop is met a little past the aim too: aimed at, the aim lies on its skin.
+    const hit = g.physics.castRay(from, dir, length + 0.3, GROUP_WORLD | GROUP_PROP, leg ? metal.at(-1)!.body : g.player.body);
+    const handle = hit?.collider.parent()?.handle;
+    const struck = hit ? g.props.instances.find((p) => p.alive && p.body.handle === handle) ?? null : null;
+    let prop: PropInstance | null = null;
+    if (hit && (hit.toi < length - 0.02 || struck)) {
+      length = Math.min(length, hit.toi); ends = 'solid';
+      prop = struck;
     }
-    return p;
-  };
-  for (const f of plan.nodes) {
-    const last = air(f.at);
-    // A body on the way is stung in passing; water takes it whole and gives it to everyone in it.
-    starts.push({ n: f.n, from: last, power: f.n === plan.target || f.n.kind === 'water' ? power : power * 0.5 });
-    // Through metal it comes out stronger: the bolt thickens past it.
-    if (f.n.kind === 'metal') width *= 1.25;
-    at = f.n.kind === 'water' ? f.at : nodeAt(f.n);
+    // The first body it meets before that.
+    if (allow.people) {
+      const bodies = g.targets().filter((e) => e.alive);
+      for (let s = 0.25; s < length && !body; s += 0.12) {
+        const p = at(s);
+        body = bodies.find((e) => flat(p, e.position) < BODY_RADIUS && p.y > e.position.y - 0.2 && p.y < e.position.y + e.height + 0.1) ?? null;
+        if (body) { length = s; ends = 'body'; }
+      }
+    }
+    // Metal it passes close by on the way, in order.
+    const passed: { p: PropInstance; s: number }[] = [];
+    if (allow.props) for (const p of g.props.instances) {
+      if (!isMetal(p) || p === prop || metal.includes(p)) continue;
+      const v = p.mesh.position.clone().sub(from);
+      const s = v.dot(dir);
+      if (s < 0.3 || s > length - 0.2) continue;
+      if (v.addScaledVector(dir, -s).length() < METAL_SIDE + Math.max(p.half.x, p.half.y, p.half.z)) passed.push({ p, s });
+    }
+    passed.sort((a, b) => a.s - b.s);
+    for (const { p } of passed) { metal.push(p); pts.push(top(p)); }
+    // Into metal: through it and on, or into it, when that is what was aimed at.
+    if (!body && prop && isMetal(prop) && allow.props) {
+      metal.push(prop);
+      end = top(prop);
+      pts.push(end);
+      travelled += from.distanceTo(end);
+      if (aim.distanceTo(prop.mesh.position) < Math.max(prop.half.x, prop.half.y, prop.half.z) + 0.6 || travelled >= range - 0.3) { ends = 'metal'; break; }
+      from = end;
+      continue;
+    }
+    // Water where it lands takes it: the line ends at the surface.
+    if (ends === 'solid') {
+      water = wetAt(g, at(length), frozen);
+      if (water) {
+        const y = water.kind === 'melt' || water.kind === 'stream' ? at(length).y : water.surfaceY;
+        if (dir.y < -0.02 && from.y > y) length = Math.min(length, (from.y - y) / -dir.y);
+        ends = 'water';
+      }
+    }
+    end = body ? at(length).lerp(body.center(), 0.6) : at(length);
+    pts.push(end);
+    travelled += length;
+    break;
   }
+  return { start, end, ends, pts, body, metal, water, length: travelled, air: Math.max(0, travelled - metal.length * METAL_CARRY * 2) };
+}
+
+// A body the line is on: a tick of current, the first one landing as a
+// blow (a stagger, but no shove off the line), the rest as a buzz it can
+// fight through. It is seized only through the freeze chain, so it is never held long.
+function sting(g: Game, e: Enemy, power: number, from: THREE.Vector3, seize: number, first: boolean, surge: boolean, strong: number): void {
+  g.combat.hitEnemy(e, power, { from, kind: 'shock', knock: 0, stagger: first, tick: true });
+  if (seize > 0) e.freeze(seize);
+  convulse(e, 0.3);
+  if (!first && !surge) return;
+  const c = e.center();
+  g.vfx.glint(c.clone().add(new THREE.Vector3(0, 0.2, 0)), 0.7 + 0.4 * strong, 0.18);
+  strikeLight(g, c, strong * 0.6);
+  crawl(g, c, 3 + Math.round(3 * strong), 0.6, 0.05 + 0.03 * strong);
+  if (surge) scorch(g, e.position, 0.45 + 0.3 * strong, 5);
+  else g.vfx.ring(e.position.clone().add(new THREE.Vector3(0, 0.06, 0)), COLOR, 0.3, 1.2 + strong, 0.25);
+}
+
+interface Channel {
+  tickIn: number;
+  ticks: number;
+  // The bodies it has run through in this hold: the first touch on each lands as a blow.
+  touched: Set<Enemy>;
+  // What it has spent and dealt, for the checks.
+  spent: number;
+  hits: number;
+  frames: number;
+  line: Line | null;
+}
+let channel: Channel | null = null;
+
+// Pressed: the line is drawn now, on this frame, and its first tick lands.
+function begin(ctx: AbilityContext): ReturnType<TechniqueKit['effects']['cast']> {
+  const g = ctx.game;
+  channel = { tickIn: 0, ticks: 0, touched: new Set(), spent: 0, hits: 0, frames: 0, line: null };
+  electroState.beganAt = g.clock.time;
+  g.audio.play('electro.snap', { at: handAt(g) });
+  g.mastery.gainPassive('electro', 'precision', 0.003);
+  if (g.techniques.resource > 0) channelFor(ctx, 0);
+  return { cameraKick: { fov: 3, pitch: 0.006 } };
+}
+
+// One frame of the line held: traced again from the hand to the aim,
+// drawn, paid for, and every tick run through what it touches.
+function channelFor(ctx: AbilityContext, dt: number): void {
+  const g = ctx.game, t = g.techniques, ch = channel;
+  if (!ch) return;
+  const frozen = pondFrozen(g);
+  const line = trace(g, lineRange(g, ctx.pact, ctx.behaviors), targetsAllowed(ctx), frozen);
+  ch.line = line;
+  ch.frames++;
+  g.vfx.current(g.avatar.model, line.pts, COLOR, WIDTH * (1 + 0.15 * line.metal.length), THREE.MathUtils.clamp(t.resource / LOW, 0.2, 1), KEEP, line.start);
+  g.audio.play('electro.current', { at: line.start });
+  if (g.cam.isFirst) g.hands.pulse(0.25 + Math.random() * 0.25);
+  // Paid by the second: a flat draw, and more for the air it crosses.
+  const rate = (DRAIN + DRAIN_PER_METRE * Math.max(0, line.air - FREE_AIR)) * (1 - g.mastery.get('electro', 'efficiency') * 0.3);
+  const paid = Math.min(t.resource, rate * dt);
+  t.resource -= paid;
+  ch.spent += paid;
+  if ((ch.tickIn -= dt) > 0) return;
+  ch.tickIn = Math.max(0, ch.tickIn + TICK);
+  tick(ctx, ch, line, rate * TICK, frozen);
+}
+
+// A tick of current through whatever the line touches now.
+function tick(ctx: AbilityContext, ch: Channel, line: Line, spent: number, frozen: boolean): void {
+  const g = ctx.game;
+  const allow = targetsAllowed(ctx);
+  const surge = ch.ticks % SURGE === 0;
+  ch.ticks++;
+  const strong = Math.min(1, g.techniques.resource / 60);
+  const power = TICK_POWER * ctx.potency * Math.min(1.6, 1 + METAL_AMP * line.metal.length);
+  const relay = ctx.behaviors.includes('relay');
+  const starts: { n: Node; from: THREE.Vector3; power: number }[] = [];
+  // Metal on the way passes some of it to whoever stands near; the end takes
+  // it whole. Each starts where the line already reaches it, so no second bolt is drawn there.
+  line.metal.forEach((p, i) => {
+    const last = i === line.metal.length - 1 && line.ends === 'metal';
+    starts.push({ n: { kind: 'metal', p }, from: p.mesh.position.clone(), power: last ? power : power * 0.6 });
+  });
+  if (line.body) starts.push({ n: { kind: 'body', e: line.body }, from: line.end, power });
+  if (line.water) starts.push({ n: { kind: 'water', w: line.water }, from: line.end, power });
   // Standing in water, the current goes down through you as well.
   const under = wetAt(g, g.player.position, frozen);
-  if (under) {
-    starts.push({ n: { kind: 'water', w: under }, from: g.player.position.clone().add(new THREE.Vector3(0, 0.1, 0)), power: power * 0.8 });
-    crawl(g, g.player.position.clone().add(new THREE.Vector3(0, 0.5, 0)), 4, 0.6);
-  }
-  const reached = conduct(g, starts, opts);
-  if (!plan.target) {
-    // Nothing at the end: it strikes the floor there, and whoever stands on it.
-    const end = plan.end.clone().setY(y);
-    const last = air(end);
-    g.vfx.arc(last, end, COLOR, 0.3, width, 0.3, 2);
-    const hit = g.physics.castRay(end.clone().setY(end.y + 1), DOWN, 6, GROUP_WORLD);
-    const floor = hit ? hit.point.clone() : plan.end.clone();
-    for (let i = 0; i < 4; i++) g.vfx.arc(end, floor.clone().add(new THREE.Vector3(rnd(0.6), 0.03, rnd(0.6))), COLOR, 0.24, width * 0.7, 0.4, 1);
-    g.vfx.ring(floor.clone().setY(floor.y + 0.05), COLOR, 0.2, 1.4 + strong, 0.3);
-    scorch(g, floor, 0.5 + 0.4 * strong, 6);
-    strikeLight(g, floor, strong * 0.6);
-    igniteNear(g, floor);
-    g.audio.play('electro.gap', { at: floor });
-    if (allow.people) for (const e of g.targets()) if (e.alive && !reached.bodies.includes(e) && flat(e.position, floor) < 1.1 && Math.abs(e.position.y - floor.y) < 1.5) {
-      shock(g, e, power * 0.6, floor, strong * 0.6, 0, 0);
-      reached.bodies.push(e);
-    }
-  }
-  const hits = reached.bodies.length;
-  g.vfx.flash(hand.clone().addScaledVector(ctx.dir, 0.4), HOT, 10 + 20 * strong, 0.1, 5);
-  g.audio.play(payload >= 8 ? 'electro.discharge' : 'electro.snap', { at: hand, weight: strong });
-  if (hits && strong > 0.5) g.audio.play('electro.thunder', { at: hand, gain: 0.6 + 0.4 * strong });
-  if (reached.nodes > 1 || plan.length > FREE_AIR) g.audio.play('electro.jump', { at: hand });
-  // The whole frame catches on it, harder the more it spent and the more it found.
-  if (hits) g.cam.shake(0.15 + 0.35 * strong + 0.06 * Math.min(4, hits - 1));
-  g.mastery.gainPassive('electro', 'precision', 0.003);
-  if (plan.length > FREE_AIR) g.mastery.gainPassive('electro', 'range', 0.002);
-  electroState.last = { at: g.clock.time, length: plan.length, wanted: plan.wanted, spent, cost: plan.cost, hits, nodes: reached.nodes, ended: plan.target?.kind ?? 'floor' };
-  return {
-    hits,
-    hitStop: hits ? Math.min(0.2, 0.05 + 0.08 * strong + 0.025 * Math.min(4, hits - 1)) : 0,
-    impactFrame: hits >= 3 ? 3 : hits && payload >= DRAW * 0.9 ? 2 : 0,
-    cameraKick: { fov: 4 + 6 * strong, pitch: 0.012 + 0.01 * strong, roll: rnd(0.012 * strong) },
-  };
+  if (under) starts.push({ n: { kind: 'water', w: under }, from: g.player.position.clone().add(new THREE.Vector3(0, 0.1, 0)), power: power * 0.8 });
+  // Into the floor with no route on: it stings whoever stands right there.
+  if (line.ends === 'solid' && allow.people) for (const e of g.targets()) if (e.alive && flat(e.position, line.end) < 0.9 && Math.abs(e.position.y - line.end.y) < 1.5) starts.push({ n: { kind: 'body', e }, from: line.end, power: power * 0.6 });
+  const reached = conduct(g, starts, { hops: relay ? 3 : 2, falloff: relay ? 0.85 : 0.6, seize: ctx.behaviors.includes('seize') ? SEIZE : 0, people: allow.people, props: allow.props, single: allow.single, per: spent / power, strong, held: { touched: ch.touched, surge } });
+  ch.hits += reached.bodies.length;
+  // Where it lands it throws sparks, and from above the floor shows it.
+  if (line.ends !== 'body') g.vfx.burst(line.end, 3, 'spark', 3, COLOR);
+  if (surge && (line.ends === 'solid' || line.ends === 'metal')) { scorch(g, line.end, 0.35 + 0.2 * strong, 4); igniteNear(g, line.end); }
+  if (surge && line.ends === 'solid') g.audio.play('electro.gap', { at: line.end });
+  if (Math.random() < 0.5) g.audio.play('electro.crackle', { at: line.end, gain: 0.8 });
+  // The frame catches on a fresh body, harder for more at once; a held
+  // line only rumbles, a little more for each body on it.
+  const fresh = reached.fresh;
+  if (fresh) {
+    g.clock.hitStop(Math.min(0.09, 0.03 + 0.02 * fresh));
+    g.cam.shake(0.12 + 0.08 * Math.min(3, fresh));
+    g.cam.kick({ fov: 2 + 2 * Math.min(3, fresh), roll: rnd(0.01) });
+    g.audio.play('electro.discharge', { at: line.end, weight: 0.4 + 0.2 * fresh });
+    if (fresh >= 3) g.renderer.impactFrame(2, new THREE.Color(COLOR), line.end);
+    g.mastery.gainPassive('electro', 'precision', 0.004);
+  } else if (surge && reached.bodies.length) g.cam.shake(0.04 + 0.025 * Math.min(4, reached.bodies.length));
+  if (surge && line.air > FREE_AIR) g.mastery.gainPassive('electro', 'range', 0.002);
+  electroState.last = { at: g.clock.time, length: line.length, ends: line.ends, hits: ch.hits, ticks: ch.ticks, spent: ch.spent, frames: ch.frames, start: [line.start.x, line.start.y, line.start.z], end: [line.end.x, line.end.y, line.end.z], air: line.air };
 }
 
-// ---------------------------------------------------------------- the aim preview
-
-// Before the click the chain shows where it would run: a dotted line on the
-// floor from the feet to where it would end, a ring round each route it
-// would take on the way, and a ring where it lands. Past where the charge
-// gives out, the line runs on faint to the cursor.
-let preview: { group: THREE.Group; dots: THREE.Mesh; faint: THREE.Mesh; end: THREE.Mesh; marks: THREE.Mesh[] } | null = null;
-let previewNext = 0;
-// What the preview last showed, for the checks.
-let aimShown: null | { end: [number, number]; length: number; wanted: number; routes: string[]; ends: string } = null;
-const DOT_GEO = new THREE.CircleGeometry(0.1, 6).rotateX(-Math.PI / 2);
-const RING_GEO = new THREE.RingGeometry(0.42, 0.52, 32).rotateX(-Math.PI / 2);
-const MARK_GEO = new THREE.RingGeometry(0.5, 0.57, 24).rotateX(-Math.PI / 2);
-
-function dotsGeometry(from: THREE.Vector3, dir: THREE.Vector3, s0: number, s1: number, y: number): THREE.BufferGeometry {
-  const pos: number[] = [], index: number[] = [];
-  const base = DOT_GEO.getAttribute('position'), idx = DOT_GEO.getIndex()!;
-  for (let s = s0; s <= s1; s += 0.45) {
-    const c = from.clone().addScaledVector(dir, s), o = pos.length / 3;
-    for (let i = 0; i < base.count; i++) pos.push(base.getX(i) + c.x, y, base.getZ(i) + c.z);
-    for (let i = 0; i < idx.count; i++) index.push(idx.getX(i) + o);
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setIndex(index);
-  return geo;
-}
-
-function tickPreview(g: Game, dt: number): void {
-  const t = g.techniques;
-  // The chain is the right click's: shown while that key holds a discharge (the raw Technique's, or a Pact's).
-  const pact = t.pactFor('secondary');
-  const show = g.input.enabled && !g.cutscenes.active && !g.cam.isFirst && (pact?.grant.shape ?? 'discharge') === 'discharge';
-  if (!preview) {
-    const mat = (opacity: number) => new THREE.MeshBasicMaterial({ color: COLOR, transparent: true, opacity, depthWrite: false, depthTest: false, toneMapped: false });
-    const group = new THREE.Group();
-    const dots = new THREE.Mesh(new THREE.BufferGeometry(), mat(0.8));
-    const faint = new THREE.Mesh(new THREE.BufferGeometry(), mat(0.22));
-    const end = new THREE.Mesh(RING_GEO, mat(0.9));
-    const marks = Array.from({ length: 6 }, () => new THREE.Mesh(MARK_GEO, mat(0.65)));
-    for (const m of [dots, faint, end, ...marks]) { m.renderOrder = 19; m.frustumCulled = false; group.add(m); }
-    g.renderer.scene.add(group);
-    preview = { group, dots, faint, end, marks };
-  }
-  preview.group.visible = show;
-  if (!show || (previewNext -= dt) > 0) return;
-  previewNext = 1 / 20;
-  const aim = aimNow(g);
-  if (!aim) { preview.group.visible = false; return; }
-  const plan = planChain(g, aim, chainRange(g, pact, pact?.grant.behaviors ?? []), Math.max(0, t.resource - KEEP), { people: true, props: true }, pondFrozen(g));
-  aimShown = { end: [plan.end.x, plan.end.z], length: plan.length, wanted: plan.wanted, routes: plan.nodes.map((f) => f.n.kind), ends: plan.target?.kind ?? 'floor' };
-  const y = g.player.position.y + 0.06;
-  preview.dots.geometry.dispose();
-  preview.dots.geometry = dotsGeometry(plan.from, plan.dir, 0.7, plan.length, y);
-  preview.faint.geometry.dispose();
-  preview.faint.geometry = dotsGeometry(plan.from, plan.dir, plan.length + 0.45, plan.wanted, y);
-  preview.end.position.set(plan.end.x, y, plan.end.z);
-  preview.end.scale.setScalar(plan.target ? 1.3 : 1);
-  const marks = preview.marks;
-  marks.forEach((m, i) => {
-    const f = plan.nodes[i];
-    m.visible = !!f && f.n !== plan.target;
-    if (f) { m.position.set(f.at.x, y, f.at.z); m.scale.setScalar(f.n.kind === 'water' ? 1.6 : 1); }
-  });
-}
-
-function dropPreview(): void {
-  if (!preview) return;
-  preview.group.removeFromParent();
-  preview.dots.geometry.dispose();
-  preview.faint.geometry.dispose();
-  preview = null;
+// Let go, or run dry: the line goes. Dry, it sputters out of the hand and says so.
+function end(g: Game): void {
+  const ch = channel;
+  channel = null;
+  g.vfx.current(g.avatar.model, [], COLOR, 0, 0, 0);
+  if (!ch) return;
+  electroState.endedAt = g.clock.time;
+  if (g.techniques.resource > 0.05) return;
+  const hand = handAt(g), to = ch.line?.end ?? hand.clone().addScaledVector(g.cam.aimDirection(), 2);
+  for (let i = 0; i < 4; i++) g.vfx.after(i * 0.06, () => g.vfx.arc(hand, hand.clone().lerp(to, 0.05 + Math.random() * (0.3 - i * 0.06)).add(new THREE.Vector3(rnd(0.2), rnd(0.2), rnd(0.2))), COLOR, 0.08, 0.05, 0.5, 0));
+  g.audio.play('electro.sputter', { at: hand });
+  g.hands.pulse(0.4);
+  electroState.dryAt = g.clock.time;
+  toast('Out of Charge', 'bad');
 }
 
 // Impact Conversion is open for a moment from its beat. What lands in it
@@ -937,12 +946,13 @@ export const electro: TechniqueKit = {
   id: 'electro', name: 'Electro', glyph: '電', color: COLOR, type: 'Conversion, Energy family', sfx: 'バチッ',
   blurb: 'Any energy in, only electricity out. A discharge needs a route: a touch, metal, water. You are never insulated from your own current.',
   breadth: 3,
-  resource: { name: 'Charge', max: 100, regen: 0, startsFull: false, free: ['primary', 'secondary'] },
+  // The held line pays for itself by the second (DRAIN, DRAIN_PER_METRE).
+  resource: { name: 'Charge', max: 100, regen: 0, startsFull: false, free: ['primary', 'secondary'], holdDrain: 0 },
   strikes: 'secondary',
   primitive: { name: 'Electro', short: 'a static snap', description: 'Turn a little of any energy you hold into a spark. It needs something to touch.' },
   parameters: ['direction', 'range', 'target', 'trigger', 'duration', 'resource', 'body'],
   shapes: {
-    discharge: { label: 'releases charge through whatever it touches', short: 'a chain to where you aim', kinds: ['secondary'], description: 'It runs to where you aim, as far as your charge can push it through the air. Metal and water carry it farther and harder. Water takes everyone standing in it, you too.' },
+    discharge: { label: 'runs a line of current from your hand to where you aim', short: 'a held line to where you aim', kinds: ['secondary'], held: 0.2, description: 'Hold it and a line of current runs from your hand to where you aim, into whatever it meets first. It burns Charge while held, more for each metre of open air. Metal and water carry it on and harder. Water takes everyone standing in it, you too.' },
     convert: { label: 'turns the blow that lands into charge', short: 'turn a blow into charge', kinds: ['primary'], description: 'Meet a blow as it lands. What you cannot take in still reaches you.' },
     supply: { label: 'burns your own body for charge', short: 'burn your body for charge', kinds: ['secondary'], description: 'Charge from your own fuel. It strains you and heals nothing.' },
     circuit: { label: 'closes one circuit through the target and every conductor near it', short: 'one circuit through it all', kinds: ['max'], description: 'Everything at once, through every route there is, and through you.' },
@@ -956,8 +966,8 @@ export const electro: TechniqueKit = {
   },
   catalogue,
   gestures: {
-    // A spear hand drawn back by the ear and driven out to touch.
-    secondary: gestureSet(0.55, 0.24, [{ t: 0, right: 'spearDraw', left: 'guard', slow: true }, { t: 0.2, right: 'spear', snap: true, camera: { fov: 5, pitch: 0.012 } }, { t: 0.34, right: 'spear' }, { t: 0.48, right: 'rest', left: 'rest' }]),
+    // The spear hand snaps straight out at the aim and stays there while the line runs.
+    secondary: gestureSet(0.3, 0, [{ t: 0, right: 'spear', left: 'guard', snap: true, camera: { fov: 3, pitch: 0.008 } }, { t: 0.2, right: 'spear', left: 'guard' }], true),
     // One palm meets the blow, the other goes to the floor.
     primary: gestureSet(0.5, 0.12, [{ t: 0, right: 'catchPalm', left: 'groundPalm', snap: true, camera: { fov: -3 } }, { t: 0.32, right: 'catchPalm', left: 'groundPalm' }, { t: 0.44, right: 'rest', left: 'rest' }]),
     // Hands wide, then the fists clench down by the hips and shake.
@@ -980,7 +990,7 @@ export const electro: TechniqueKit = {
   effects: {
     cast(ctx) {
       const g = ctx.game;
-      if (ctx.shape === 'discharge') return discharge(ctx);
+      if (ctx.shape === 'discharge') return begin(ctx);
       if (ctx.shape === 'convert') {
         const m = g.mastery.get('electro', 'tolerance');
         openFor = 0.42 + m * 0.25;
@@ -995,6 +1005,8 @@ export const electro: TechniqueKit = {
       if (ctx.shape === 'circuit') return circuit(ctx);
       return undefined;
     },
+    hold(ctx, dt) { if (ctx.shape === 'discharge') channelFor(ctx, dt); },
+    release(ctx) { if (ctx.shape === 'discharge') end(ctx.game); },
     passive(g, dt) {
       const t = g.techniques;
       if (!t.casting) heldAtCast = t.resource;
@@ -1016,8 +1028,9 @@ export const electro: TechniqueKit = {
         }
       }
       if (openFor > 0) { openFor -= dt; convertProps(g); }
+      // A cast cut short without its release (a seal) takes the line with it.
+      if (channel && !t.casting) end(g);
       tickBody(g, dt);
-      tickPreview(g, dt);
       tickSeizing(g, dt);
       tickScorches(dt);
       // The sign tears an arc between the hands on its release.
@@ -1032,13 +1045,12 @@ export const electro: TechniqueKit = {
       tickHeld(g, dt);
     },
     reset(g) {
-      openFor = 0; held.clear(); signAt = -1; heldAtCast = 0;
+      openFor = 0; held.clear(); signAt = -1; heldAtCast = 0; channel = null;
       seizing.clear();
       for (const s of scorches.splice(0)) { s.mesh.removeFromParent(); s.mat.dispose(); }
       if (glow) { g.renderer.lights.remove(glow); glow = null; }
       if (meter) { meter.removeFromParent(); meter.geometry.dispose(); (meter.material as THREE.Material).dispose(); meter = null; meterK = -1; }
       dropBody();
-      dropPreview();
     },
     onStruck(g, amount, from) {
       const dir = from.clone().sub(g.player.position).setY(0).normalize();
@@ -1105,7 +1117,14 @@ function tickHeld(g: Game, dt: number): void {
 
 // What the checks read: the props holding charge, whether the pond carries,
 // Impact Conversion's open moment, the bodies the current holds locked, the
-// marks it left, and the last discharge.
-export function electroView(g: Game): { held: { id: number; charge: number; left: number }[]; pondLive: boolean; open: number; seizing: number; scorches: number; last: typeof electroState.last; aim: typeof aimShown } {
-  return { held: [...held].map(([p, h]) => ({ id: p.id, charge: h.charge, left: h.left })), pondLive: !pondFrozen(g), open: openFor, seizing: seizing.size, scorches: scorches.length, last: electroState.last, aim: preview?.group.visible ? aimShown : null };
+// marks it left, the held line as it runs now (null when none), its last
+// tick, and when it began, ended and last ran dry.
+export function electroView(g: Game) {
+  const l = channel?.line;
+  const v = (p: THREE.Vector3): [number, number, number] => [p.x, p.y, p.z];
+  return {
+    held: [...held].map(([p, h]) => ({ id: p.id, charge: h.charge, left: h.left })), pondLive: !pondFrozen(g), open: openFor, seizing: seizing.size, scorches: scorches.length,
+    line: l && channel ? { start: v(l.start), end: v(l.end), ends: l.ends, length: l.length, air: l.air, metal: l.metal.length, ticks: channel.ticks, hits: channel.hits, spent: channel.spent, frames: channel.frames } : null,
+    last: electroState.last, beganAt: electroState.beganAt, endedAt: electroState.endedAt, dryAt: electroState.dryAt, time: g.clock.time,
+  };
 }

@@ -435,6 +435,25 @@ if (shots) {
 const control1 = await api((g) => g.game.mastery.get('friction', 'control'));
 check(scoredFirst >= 3 && reached === 1 && control1 >= 0.55 && control0 < 0.55, `Suriashi's first tier is cleared with real input (${scoredFirst} of 4 marks), and Control stands at ${control1.toFixed(2)} (from ${control0.toFixed(2)})`);
 
+// ------------------------------------------------------------------ the city's edge
+// The ward is closed by walls nobody can see, colliders with nothing drawn on
+// them: a palm finds nothing there to hold, so Open Hand can't climb out.
+console.log('The city');
+for (const e of [...errors, ...(await api((g) => g.errors))]) check(false, e);
+errors.length = 0;
+await page.goto(`${url}?debug&region=city`);
+await page.waitForFunction(() => window.game?.game?.ready, null, { timeout: 180000 });
+await api((g) => { g.loop(false); g.technique('friction'); g.game.startRun({ skipTutorial: true }); g.loop(false); g.step(5); g.god(true); });
+const edge = await api((g) => { const o = g.game.city.origin; return [o.x + 65.2, o.y, o.z + 23]; });
+await api((g, at) => { g.teleport(at); g.camera('third'); g.look(-Math.PI / 2, 0.15); g.step(30); g.game.techniques.resource = 100; }, edge);
+await key('Digit1', true); await key('KeyW', true);
+let edgeTop = 0;
+for (let f = 0; f < 120; f++) { await step(1); edgeTop = Math.max(edgeTop, (await pos())[1] - edge[1]); }
+// The wall is there, and tagged as stone, within the palms' reach.
+const wall = await api((g) => { const G = g.game, p = G.player.position, V = p.constructor; const h = G.physics.castRay(p.clone().add(new V(0, 1.15, 0)), new V(1, 0, 0), 0.75, 0x0001, G.player.body); return h ? { toi: h.toi, tag: h.collider.surfaceTag } : null; });
+await key('Digit1', false); await key('KeyW', false);
+check(wall?.tag === 'stone' && edgeTop < 0.6, `at the ward's east edge Open Hand finds nothing drawn to hold on the invisible wall ${wall ? `${wall.toi.toFixed(2)} m off, tagged ${wall.tag}` : '(not found)'}: rose ${edgeTop.toFixed(2)} m`);
+
 for (const e of [...errors, ...(await api((g) => g.errors))]) check(false, e);
 writeFileSync(join(out, 'report.json'), JSON.stringify({ url, failures, errors }, null, 2));
 await browser.close();

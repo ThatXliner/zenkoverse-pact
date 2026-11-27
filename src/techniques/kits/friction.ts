@@ -326,12 +326,36 @@ function slideFooting(g: Game): Footing {
 
 // ---------------------------------------------------------------- Open Hand
 // A face a palm can hold, `reach` along `dir` from `from`. Only a built face
-// takes one: plaster, stone and timber, never the bare ground or the rails
-// nobody can see.
+// takes one: plaster, stone and timber, never the bare ground. And only one
+// that is there to touch: the walls that keep everyone inside a place and
+// the rails nobody can see are colliders with nothing drawn on them, so a
+// palm finds nothing to hold (see `drawn`).
 function faceAt(g: Game, from: THREE.Vector3, dir: THREE.Vector3): { point: THREE.Vector3; normal: THREE.Vector3 } | null {
   const hit = g.physics.castRay(from, dir, WALL_REACH, GROUP_WORLD, g.player.body);
   const tag = hit ? (hit.collider as { surfaceTag?: string }).surfaceTag : undefined;
-  return hit && (tag === 'stone' || tag === 'wood') && Math.abs(hit.normal.y) < 0.4 ? hit : null;
+  if (!hit || (tag !== 'stone' && tag !== 'wood') || Math.abs(hit.normal.y) >= 0.4) return null;
+  return drawn(g, from, dir, hit.toi, hit.collider) ? hit : null;
+}
+
+// Whether something is drawn where the ray met a collider, read once per
+// collider and half metre of height (a wall's collider can rise past what is
+// drawn of it) and kept for as long as the collider is.
+const DRAWN = new WeakMap<object, Map<number, boolean>>();
+const SEEN = new THREE.Raycaster();
+function drawn(g: Game, from: THREE.Vector3, dir: THREE.Vector3, toi: number, collider: object): boolean {
+  let byHeight = DRAWN.get(collider);
+  if (!byHeight) DRAWN.set(collider, byHeight = new Map());
+  const key = Math.round((from.y + dir.y * toi) * 2);
+  const known = byHeight.get(key);
+  if (known !== undefined) return known;
+  SEEN.set(from, dir);
+  SEEN.near = Math.max(0, toi - 0.3);
+  SEEN.far = toi + 0.3;
+  SEEN.camera = g.renderer.camera;
+  const shown = (o: THREE.Object3D | null): boolean => { for (; o; o = o.parent) if (!o.visible || o === g.avatar.root) return false; return true; };
+  const there = SEEN.intersectObject(g.renderer.scene, true).some((i) => (i.object as THREE.Mesh).isMesh && shown(i.object));
+  byHeight.set(key, there);
+  return there;
 }
 
 function tickPalms(g: Game, h: Palms, dt: number): Footing {

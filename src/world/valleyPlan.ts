@@ -39,7 +39,9 @@ export const PATHS: readonly (readonly Pt[])[] = [
 
 // The stream: out of the pool under the falls, south past the west wall,
 // east under the road's bridge, and into a cleft in the east cliff.
-export const STREAM: readonly Pt[] = [[-46, -46], [-44, -36], [-41, -22], [-39, -6], [-38, 10], [-35, 24], [-28, 38], [-14, 45], [2, 48], [18, 47], [34, 42], [50, 40], [61, 42.5], [67.5, 44]];
+// The course is drawn as a few points and rounded (corner cutting), so the
+// banks curve instead of kinking where the line turns.
+export const STREAM: readonly Pt[] = rounded([[-46, -46], [-44, -36], [-41, -22], [-39, -6], [-38, 10], [-35, 24], [-28, 38], [-14, 45], [2, 48], [18, 47], [34, 42], [50, 40], [61, 42.5], [67.5, 44], [73.5, 45]], 3);
 // Half the flat bed, and the bank up from it.
 export const STREAM_HALF = 2.0;
 export const BANK = 2.4;
@@ -69,6 +71,22 @@ export const STONE_AT: Record<'field' | 'shrine' | 'falls' | 'grounds' | 'ginkgo
 };
 
 // ------------------------------------------------------------- geometry
+
+// A polyline with its corners cut `passes` times (Chaikin), ends kept.
+function rounded(line: readonly Pt[], passes: number): Pt[] {
+  let pts: Pt[] = [...line];
+  for (let k = 0; k < passes; k++) {
+    const next: Pt[] = [pts[0]!];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [ax, az] = pts[i]!, [bx, bz] = pts[i + 1]!;
+      if (i > 0) next.push([ax * 0.75 + bx * 0.25, az * 0.75 + bz * 0.25]);
+      if (i < pts.length - 2) next.push([ax * 0.25 + bx * 0.75, az * 0.25 + bz * 0.75]);
+    }
+    next.push(pts[pts.length - 1]!);
+    pts = next;
+  }
+  return pts;
+}
 
 const clamp01 = (t: number): number => Math.min(1, Math.max(0, t));
 const mix = (a: number, b: number, t: number): number => a + (b - a) * t;

@@ -6,7 +6,7 @@ import { toon, faceted, paintedSign } from '../render/materials';
 import { waterMaterial, fallMaterial, foamMaterial } from './water';
 import {
   type Pt, FLOOR_Y, WATER_Y, VALLEY, ROAD, ROAD_HALF, PATHS, PATH_HALF, STREAM, STREAM_HALF, BANK, FALLS, EXIT, BRIDGE, STONES,
-  FIELD, GROUNDS, GINKGO, TERRACES, MEADOW, SHRINE, STONE_AT, CLIFF, heightAt, cliffDistance, cliffRun, nearest, nearPath, tierY,
+  FIELD, GROUNDS, GINKGO, TERRACES, MEADOW, SHRINE, STONE_AT, CLIFF, heightAt, cliffDistance, cliffRun, nearest, nearPath, tierY, smooth,
 } from './valleyPlan';
 import type { Zone, Footprint } from './compound';
 
@@ -62,7 +62,15 @@ export function buildValley(k: ValleyKit): Valley {
   const straw = toon(0xd8bf86), rope = toon(0x8a6a44), paper = toon(0xf6eedc);
   const pine = toon(0x3e7d4a), pineDark = toon(0x2f6440), cedar = toon(0x2d5c45), maple = toon(0xe8713a), gold = toon(0xe6b83c);
   const ginkgo = toon(0xeebd3e), ginkgoLight = toon(0xf6d460), leafLitter = toon(0xf0c64a, { side: THREE.DoubleSide });
-  const bladeGold = toon(0xd9c27a, { side: THREE.DoubleSide }), bladeGreen = toon(0xacb86a, { side: THREE.DoubleSide }), plume = toon(0xf1e7cf, { side: THREE.DoubleSide }), rice = toon(0x74b04c, { side: THREE.DoubleSide });
+  const rice = toon(0x74b04c, { side: THREE.DoubleSide });
+  const grassMat = toon(0xffffff, { side: THREE.DoubleSide, transparent: true });
+  grassMat.vertexColors = true;
+  // The tall grass is painted without ink: it writes no depth, so the ink
+  // pass never sees it, and a field of a thousand outlined leaves no longer
+  // closes into a dark mass at a distance. It draws after everything solid
+  // (and after the water), still hidden behind whatever stands in front.
+  // Each leaf is one stroke, darker at its foot and pale at its tip.
+  grassMat.depthWrite = false;
   const terraceSide = toon(0x7d8a4e), bund = toon(0x8aab57);
   const meadowFill = toon(0xb7b36c);
   meadowFill.polygonOffset = true; meadowFill.polygonOffsetFactor = -1; meadowFill.polygonOffsetUnits = -2;
@@ -101,57 +109,120 @@ export function buildValley(k: ValleyKit): Valley {
   const ground = (x: number, z: number): number => heightAt(x, z);
 
   // ------------------------------------------------------------ terrain
-  // Heights at the grid's corners, one mesh of flat-shaded triangles coloured
-  // by what they are (grass, rock, bank, bed), and the same grid as the collider.
+  // Heights at the grid's corners and the same grid as the collider, then
+  // one mesh of flat-painted triangles over it. Where the ground bends
+  // faster than a 2 m cell can follow (the stream's banks, the pool, the
+  // cliff faces) a cell is cut into a finer grid that samples the plan's own
+  // height, so a bank curves and the waterline runs as a line instead of a
+  // row of teeth. A fine edge against a plain cell follows that cell's edge,
+  // so the two meet without a crack. The cliff faces in the fine grid also
+  // carry flutes and ledges; that is paint only (the wall below holds you).
   {
     const { x0, z0, cell, n } = GRID;
     const heights = new Float32Array((n + 1) * (n + 1));
     for (let i = 0; i <= n; i++) for (let j = 0; j <= n; j++) heights[i * (n + 1) + j] = heightAt(x0 + j * cell, z0 + i * cell);
     tag(physics.staticHeightfield(x0, z0, cell, n, heights), 'ground');
 
+    const F = 3, fc = cell / F, nf = n * F;
+    const fineCells = new Uint8Array(n * n);
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const cx = x0 + (j + 0.5) * cell, cz = z0 + (i + 0.5) * cell, d = cliffDistance(cx, cz);
+      const bank = d < 2 && nearest(cx, cz, STREAM) < STREAM_HALF + BANK + 2.2;
+      const pool = Math.hypot(cx - FALLS.x, cz - FALLS.z) < FALLS.rim + 2.4;
+      const face = d > -1.5 && d < cliffRun(cx, cz) + 2;
+      fineCells[i * n + j] = bank || pool || face ? 1 : 0;
+    }
+    const plain = (i: number, j: number): boolean => i >= 0 && j >= 0 && i < n && j < n && fineCells[i * n + j] === 0;
+    const H = (i: number, j: number): number => heights[Math.min(n, Math.max(0, i)) * (n + 1) + Math.min(n, Math.max(0, j))]!;
+    const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+    // The painted height: the plan's, with the cliff's flutes and ledges.
+    const painted = (x: number, z: number): number => {
+      const y = heightAt(x, z), d = cliffDistance(x, z), run = cliffRun(x, z);
+      if (d <= 0.25 || d >= run + 1.2) return y;
+      const w = smooth(0.25, 1.6, d) * smooth(run + 1.2, run - 0.4, d);
+      const flute = Math.sin(x * 0.62 + Math.sin(z * 0.37) * 1.8) * Math.sin(z * 0.66 + Math.sin(x * 0.29) * 1.8);
+      const band = (y - CLIFF.rise) / 2.3, ledge = (Math.floor(band) + smooth(0.45, 1, band - Math.floor(band))) * 2.3 + CLIFF.rise;
+      return y + w * (flute * 1.5 + (ledge - y) * 0.7);
+    };
+    const memo = new Float32Array((nf + 1) * (nf + 1)).fill(NaN);
+    // Height at a fine-grid vertex (I down z, J along x).
+    const at = (I: number, J: number): number => {
+      I = Math.min(nf, Math.max(0, I)); J = Math.min(nf, Math.max(0, J));
+      const key = I * (nf + 1) + J, hit = memo[key]!;
+      if (!Number.isNaN(hit)) return hit;
+      const i = Math.floor(I / F), j = Math.floor(J / F), a = I - i * F, b = J - j * F;
+      let y: number;
+      if (a === 0 && b === 0) y = plain(i - 1, j - 1) || plain(i - 1, j) || plain(i, j - 1) || plain(i, j) ? H(i, j) : painted(x0 + J * fc, z0 + I * fc);
+      else if (b === 0) y = plain(i, j - 1) || plain(i, j) ? lerp(H(i, j), H(i + 1, j), a / F) : painted(x0 + J * fc, z0 + I * fc);
+      else if (a === 0) y = plain(i - 1, j) || plain(i, j) ? lerp(H(i, j), H(i, j + 1), b / F) : painted(x0 + J * fc, z0 + I * fc);
+      else y = painted(x0 + J * fc, z0 + I * fc);
+      memo[key] = y;
+      return y;
+    };
+
     // Flat fills: grass on the floor, a darker green on the slopes above
-    // the cliffs, one rock colour on anything steep, the bed under the water.
-    // Level ground keeps its face normal; slopes and cliffs take the grid's
+    // the cliffs, rock on anything steep (laid in strata of five tones),
+    // wet earth where the banks meet the water, the bed under it. Level
+    // ground keeps its face normal; slopes and cliffs take the grid's
     // smoothed normal, so the tone turns across a cliff instead of in facets.
     const C = (c: number) => new THREE.Color(c);
-    const col = { grass: C(0x8fae58), slope: C(0x6a8f52), rock: C(0x9c9384), bed: C(0x58694c) };
-    const at = (i: number, j: number): number => heights[Math.min(n, Math.max(0, i)) * (n + 1) + Math.min(n, Math.max(0, j))]!;
-    const gridNormal = (i: number, j: number, out: THREE.Vector3): THREE.Vector3 => out.set(-(at(i, j + 1) - at(i, j - 1)) / (2 * cell), 1, -(at(i + 1, j) - at(i - 1, j)) / (2 * cell)).normalize();
-    const pos: number[] = [], nrm: number[] = [], clr: number[] = [];
+    const col = { grass: C(0x8fae58), slope: C(0x6a8f52), bed: C(0x58694c), wet: C(0x7e7a58) };
+    const strata = [C(0x9c9384), C(0xa89c86), C(0x8b877f), C(0x9a8a78), C(0x857b70)];
+    const rockAt = (x: number, y: number, z: number): THREE.Color => {
+      const band = Math.floor((y + 0.9 * Math.sin(x * 0.11 + z * 0.07) + 0.5 * Math.sin(x * 0.31 - z * 0.23)) / 1.9);
+      const stretch = Math.floor((x * 0.6 + z * 0.8) / 23);
+      return strata[(((band * 7 + stretch * 3) % strata.length) + strata.length) % strata.length]!;
+    };
+    const normalAtVertex = (I: number, J: number, step: number, out: THREE.Vector3): THREE.Vector3 =>
+      out.set(-(at(I, J + step) - at(I, J - step)) / (2 * step * fc), 1, -(at(I + step, J) - at(I - step, J)) / (2 * step * fc)).normalize();
+    let pos: number[] = [], nrm: number[] = [], clr: number[] = [];
     const p = new THREE.Vector3(), q = new THREE.Vector3(), r = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), nv = new THREE.Vector3();
-    const tri = (corners: [number, number][]): void => {
+    const tri = (corners: [number, number][], step: number): void => {
       const [[ia, ja], [ib, jb], [ic, jc]] = corners as [[number, number], [number, number], [number, number]];
-      p.set(x0 + ja * cell, at(ia, ja), z0 + ia * cell); q.set(x0 + jb * cell, at(ib, jb), z0 + ib * cell); r.set(x0 + jc * cell, at(ic, jc), z0 + ic * cell);
+      p.set(x0 + ja * fc, at(ia, ja), z0 + ia * fc); q.set(x0 + jb * fc, at(ib, jb), z0 + ib * fc); r.set(x0 + jc * fc, at(ic, jc), z0 + ic * fc);
       if (p.y < -2 && q.y < -2 && r.y < -2) return;
+      const mx = (p.x + q.x + r.x) / 3, mz = (p.z + q.z + r.z) / 3;
       // Past the crest of the ridge the ground is never seen from the valley.
-      if (cliffDistance((p.x + q.x + r.x) / 3, (p.z + q.z + r.z) / 3) > 50) return;
+      if (cliffDistance(mx, mz) > 50) return;
       const face = e1.subVectors(q, p).cross(e2.subVectors(r, p)).normalize();
       const h = (p.y + q.y + r.y) / 3;
-      const k = h < WATER_Y - 0.06 ? col.bed : face.y < 0.6 ? col.rock : h > CLIFF.rise + 2 ? col.slope : col.grass;
+      const wet = h < WATER_Y + 0.16 && Math.min(p.y, q.y, r.y) < WATER_Y + 0.02;
+      const k = h < WATER_Y - 0.06 ? col.bed : wet ? col.wet : face.y < 0.6 ? rockAt(mx, h, mz) : h > CLIFF.rise + 2 ? col.slope : col.grass;
       corners.forEach(([i, j], idx) => {
         const v = idx === 0 ? p : idx === 1 ? q : r;
         pos.push(v.x, v.y, v.z);
-        const nn = face.y > 0.94 ? face : gridNormal(i, j, nv);
+        const nn = face.y > 0.94 ? face : normalAtVertex(i, j, step, nv);
         nrm.push(nn.x, nn.y, nn.z);
         clr.push(k.r, k.g, k.b);
       });
     };
-    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
-      tri([[i, j], [i + 1, j], [i + 1, j + 1]]);
-      tri([[i, j], [i + 1, j + 1], [i, j + 1]]);
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(clr, 3));
+    const quad = (I: number, J: number, s: number): void => {
+      tri([[I, J], [I + s, J], [I + s, J + s]], s);
+      tri([[I, J], [I + s, J + s], [I, J + s]], s);
+    };
+    // In tiles, so the camera draws only the ground it can see.
     const mat = toon(0xffffff);
     mat.vertexColors = true;
-    const terrain = new THREE.Mesh(geo, mat);
-    terrain.receiveShadow = true;
-    terrain.castShadow = false;
-    // Its colours live in the vertices, which the bake does not carry.
-    terrain.userData.keep = true;
-    g.add(terrain);
+    const TILE = 29;
+    for (let ti = 0; ti < n; ti += TILE) for (let tj = 0; tj < n; tj += TILE) {
+      pos = []; nrm = []; clr = [];
+      for (let i = ti; i < Math.min(n, ti + TILE); i++) for (let j = tj; j < Math.min(n, tj + TILE); j++) {
+        if (plain(i, j)) { quad(i * F, j * F, F); continue; }
+        for (let a = 0; a < F; a++) for (let b = 0; b < F; b++) quad(i * F + a, j * F + b, 1);
+      }
+      if (!pos.length) continue;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(clr, 3));
+      geo.computeBoundingSphere();
+      const terrain = new THREE.Mesh(geo, mat);
+      terrain.receiveShadow = true;
+      terrain.castShadow = false;
+      // Its colours live in the vertices, which the bake does not carry.
+      terrain.userData.keep = true;
+      g.add(terrain);
+    }
   }
 
   // ------------------------------------------------------------ water
@@ -159,7 +230,7 @@ export function buildValley(k: ValleyKit): Valley {
   // close over its edges, and a round pool under the falls.
   {
     const pts = resample(STREAM, 1.2);
-    const half = STREAM_HALF + BANK * 0.62;
+    const half = STREAM_HALF + BANK * 0.8;
     const pos: number[] = [];
     for (let i = 0; i < pts.length - 1; i++) {
       const [ax, az] = pts[i]!, [bx, bz] = pts[i + 1]!;
@@ -426,7 +497,15 @@ export function buildValley(k: ValleyKit): Valley {
   // pale green with cream plumes. It thins to clumps along the foot of the
   // slopes, with reeds on the banks. Each leaf is a long flat diamond.
   {
-    const gold: number[] = [], green: number[] = [], plumes: number[] = [];
+    const leaves: number[] = [], tints: number[] = [];
+    const C = (c: number) => new THREE.Color(c);
+    const GOLD = [C(0x9c8f4e), C(0xeedb96)], GREEN = [C(0x76884a), C(0xcdd38c)], PLUME = [C(0xe2d6b8), C(0xfbf5e6)];
+    const stroke = (kind: THREE.Color[], ...v: number[]): void => {
+      leaves.push(...v);
+      // Foot, middle and tip by height within the leaf.
+      const ys = [v[1]!, v[4]!, v[7]!], lo = Math.min(...ys), hi = Math.max(...ys);
+      for (const y of ys) { const c = kind[0]!.clone().lerp(kind[1]!, hi > lo ? (y - lo) / (hi - lo) : 1); tints.push(c.r, c.g, c.b); }
+    };
     const rand = rng(5);
     const M2 = MEADOW, mx = (M2.x0 + M2.x1) / 2, mz = (M2.z0 + M2.z1) / 2 + 1, rx = (M2.x1 - M2.x0) / 2 - 2, rz = (M2.z1 - M2.z0) / 2 - 3.5;
     const radius = (a: number): number => 1 + 0.12 * Math.sin(3 * a + 0.4) + 0.08 * Math.sin(5 * a + 1.9);
@@ -447,15 +526,15 @@ export function buildValley(k: ValleyKit): Valley {
         const tx = x + Math.cos(a) * lean * h, tz = z + Math.sin(a) * lean * h;
         const mx2 = x + Math.cos(a) * lean * h * 0.45, mz2 = z + Math.sin(a) * lean * h * 0.45, my = y + h * 0.45;
         const px = -Math.sin(a) * w, pz = Math.cos(a) * w;
-        const leaf = rand() < 0.55 ? gold : green;
-        leaf.push(x, y, z, mx2 + px, my, mz2 + pz, tx, y + h, tz);
-        leaf.push(x, y, z, tx, y + h, tz, mx2 - px, my, mz2 - pz);
-        if (rand() < 0.4) plumes.push(tx - px * 0.8, y + h - 0.5, tz - pz * 0.8, tx + px * 0.8, y + h - 0.5, tz + pz * 0.8, tx + Math.cos(a) * 0.12, y + h + 0.12, tz + Math.sin(a) * 0.12);
+        const leaf = rand() < 0.55 ? GOLD : GREEN;
+        stroke(leaf, x, y, z, mx2 + px, my, mz2 + pz, tx, y + h, tz);
+        stroke(leaf, x, y, z, tx, y + h, tz, mx2 - px, my, mz2 - pz);
+        if (rand() < 0.4) stroke(PLUME, tx - px * 0.8, y + h - 0.5, tz - pz * 0.8, tx + px * 0.8, y + h - 0.5, tz + pz * 0.8, tx + Math.cos(a) * 0.12, y + h + 0.12, tz + Math.sin(a) * 0.12);
       }
     };
     const clear = (x: number, z: number, pad: number): boolean => nearest(x, z, ROAD) > ROAD_HALF + pad && nearPath(x, z) > PATH_HALF + pad && nearest(x, z, STREAM) > STREAM_HALF + BANK + 0.6;
-    for (let x = M2.x0; x < M2.x1; x += 2.3) for (let z = M2.z0; z < M2.z1; z += 2.3) {
-      const jx = x + (rand() - 0.5) * 1.8, jz = z + (rand() - 0.5) * 1.8;
+    for (let x = M2.x0; x < M2.x1; x += 1.8) for (let z = M2.z0; z < M2.z1; z += 1.8) {
+      const jx = x + (rand() - 0.5) * 1.5, jz = z + (rand() - 0.5) * 1.5;
       const m = inMeadow(jx, jz);
       if (m > 1.08 || (m > 0.9 && rand() < 0.5)) continue;
       if (cliffDistance(jx, jz) > -1.5 || !clear(jx, jz, 0.9)) continue;
@@ -471,9 +550,80 @@ export function buildValley(k: ValleyKit): Valley {
       if (inMeadow(jx, jz) < 1.1 || !clear(jx, jz, 0.8) || occupied(jx, jz, 2)) continue;
       clump(jx, jz, reed ? 1.1 : 0.9);
     }
-    meshFrom(gold, bladeGold, false, true);
-    meshFrom(green, bladeGreen, false, true);
-    meshFrom(plumes, plume, false, true);
+
+    // The open floor between the places: low tufts, a few white and yellow
+    // wild flowers, and red spider lilies along the banks and the paths, in
+    // the same unlined strokes.
+    const TUFT = [C(0x6f8e48), C(0xa9c46c)], LILY = [C(0xb8322a), C(0xe8503a)], BLOOM = [[C(0xe9e4d2), C(0xfffbef)], [C(0xd9b53c), C(0xf3da6a)]];
+    const tuft = (x: number, z: number, h: number): void => {
+      const y = ground(x, z), spin = rand() * 6;
+      for (let i = 0; i < 3; i++) {
+        const a = spin + i * 2.1, lean = 0.12 + rand() * 0.1, w = 0.06;
+        const px = -Math.sin(a) * w, pz = Math.cos(a) * w;
+        stroke(TUFT, x - px, y, z - pz, x + px, y, z + pz, x + Math.cos(a) * lean, y + h * (0.7 + rand() * 0.5), z + Math.sin(a) * lean);
+      }
+    };
+    // A spider lily: a bare stem and a head of thin red petals curling up and out.
+    const lily = (x: number, z: number, h: number): void => {
+      const y = ground(x, z) + h, spin = rand() * 6;
+      stroke(TUFT, x - 0.015, y - h, z, x + 0.015, y - h, z, x, y, z);
+      for (let i = 0; i < 6; i++) {
+        const a = spin + i * 1.05, ca = Math.cos(a), sa = Math.sin(a), w = 0.012;
+        stroke(LILY, x - sa * w, y, z + ca * w, x + sa * w, y, z - ca * w, x + ca * 0.1, y + 0.07, z + sa * 0.1);
+      }
+    };
+    const flower = (x: number, z: number, kind: THREE.Color[], h: number, r: number): void => {
+      const y = ground(x, z) + h;
+      stroke(TUFT, x - 0.02, y - h, z, x + 0.02, y - h, z, x, y, z);
+      for (let i = 0; i < 3; i++) {
+        const a = rand() * 6 + i * 2.1;
+        stroke(kind, x, y, z, x + Math.cos(a) * r, y + 0.03, z + Math.sin(a) * r, x + Math.cos(a + 0.9) * r, y - 0.02, z + Math.sin(a + 0.9) * r);
+      }
+    };
+    for (let x = VALLEY.x0; x < VALLEY.x1; x += 2.6) for (let z = VALLEY.z0; z < VALLEY.z1; z += 2.6) {
+      const jx = x + (rand() - 0.5) * 2.4, jz = z + (rand() - 0.5) * 2.4, roll = rand();
+      if (cliffDistance(jx, jz) > -1.5 || (Math.abs(jx) < 26.5 && Math.abs(jz) < 22.5) || inMeadow(jx, jz) < 1.05 || occupied(jx, jz, 0.5)) continue;
+      if (nearest(jx, jz, ROAD) < ROAD_HALF + 0.3 || nearPath(jx, jz) < PATH_HALF + 0.3 || nearest(jx, jz, STREAM) < STREAM_HALF + BANK - 0.6) continue;
+      const edge = Math.min(nearPath(jx, jz) - PATH_HALF, nearest(jx, jz, STREAM) - STREAM_HALF - BANK, nearest(jx, jz, ROAD) - ROAD_HALF);
+      if (edge < 1.6 && roll < 0.32) { for (let k = 0; k < 3 + Math.floor(rand() * 4); k++) lily(jx + (rand() - 0.5) * 1.4, jz + (rand() - 0.5) * 1.4, 0.3 + rand() * 0.12); continue; }
+      if (roll < 0.62) { for (let k = 0; k < 2 + Math.floor(rand() * 3); k++) tuft(jx + (rand() - 0.5) * 1.2, jz + (rand() - 0.5) * 1.2, 0.3 + rand() * 0.2); continue; }
+      if (roll < 0.72) { const kind = BLOOM[Math.floor(rand() * 2)]!; for (let k = 0; k < 4 + Math.floor(rand() * 4); k++) flower(jx + (rand() - 0.5) * 1.8, jz + (rand() - 0.5) * 1.8, kind, 0.16 + rand() * 0.08, 0.06); }
+    }
+    meshFrom(leaves, grassMat, false, true, tints).renderOrder = 2;
+
+    // Patches of a lighter and a deeper green laid over the open floor, so
+    // the grass between the places is painted, not one flat fill. Only on
+    // level ground, as one mesh under the paths.
+    {
+      const fills = [C(0x9cb862), C(0x83a453), C(0x96b05a)];
+      const pos: number[] = [], clr: number[] = [];
+      const level = (x: number, z: number): boolean => Math.abs(heightAt(x, z) - FLOOR_Y) < 0.005;
+      const laid: [number, number, number][] = [];
+      for (let tries = 0, made = 0; tries < 400 && made < 34; tries++) {
+        const x = VALLEY.x0 + rand() * (VALLEY.x1 - VALLEY.x0), z = VALLEY.z0 + rand() * (VALLEY.z1 - VALLEY.z0), r = 3 + rand() * 5.5;
+        if (cliffDistance(x, z) > -r - 14 || (Math.abs(x) < 24 + r && Math.abs(z) < 20 + r) || inMeadow(x, z) < 1.1 + r / 12 || occupied(x, z, r)) continue;
+        if (nearest(x, z, STREAM) < STREAM_HALF + BANK + r * 1.7) continue;
+        if (laid.some(([lx, lz, lr]) => Math.hypot(x - lx, z - lz) < (r + lr) * 1.7)) continue;
+        const k = fills[made % fills.length]!, spin = rand() * 6, wob = [rand() * 6, rand() * 6];
+        const ring: [number, number][] = [];
+        for (let i = 0; i < 20; i++) {
+          const a = spin + (i / 20) * Math.PI * 2, rr = r * (1 + 0.18 * Math.sin(3 * a + wob[0]!) + 0.1 * Math.sin(5 * a + wob[1]!));
+          ring.push([x + Math.cos(a) * rr * 1.3, z + Math.sin(a) * rr * 0.85]);
+        }
+        if (!ring.every(([px, pz]) => level(px, pz))) continue;
+        for (let i = 0; i < ring.length; i++) {
+          const [ax, az] = ring[i]!, [bx, bz] = ring[(i + 1) % ring.length]!;
+          pos.push(x, FLOOR_Y + 0.008, z, bx, FLOOR_Y + 0.008, bz, ax, FLOOR_Y + 0.008, az);
+          for (let v = 0; v < 3; v++) clr.push(k.r, k.g, k.b);
+        }
+        laid.push([x, z, r]);
+        made++;
+      }
+      const fill = toon(0xffffff);
+      fill.vertexColors = true;
+      fill.polygonOffset = true; fill.polygonOffsetFactor = -1; fill.polygonOffsetUnits = -2;
+      meshFrom(pos, fill, false, true, clr);
+    }
     zones.push(zone('meadow', M2.x0, M2.x1, M2.z0 + 3, M2.z1, 'Tall grass'));
   }
 
@@ -567,6 +717,46 @@ export function buildValley(k: ValleyKit): Valley {
     }
   }
 
+  // ------------------------------------------------------------ cliff dressing
+  // Buttresses of rock standing out of the cliff faces in the strata's
+  // tones, so the wall breaks into masses; scrub along the crest. All of it
+  // above head height or behind the wall that holds you.
+  {
+    const rand = rng(31);
+    const tones = [0x9c9384, 0xa89c86, 0x8b877f, 0x9a8a78, 0x857b70].map((c) => toon(c));
+    const scrub = [toon(0x55794a), toon(0x4a6b45), toon(0x6c8a4c)];
+    const quiet = (x: number, z: number): boolean => Math.hypot(x - FALLS.x, z - FALLS.z) < 10 || Math.hypot(x - EXIT.x, z - EXIT.z) < 7;
+    const V = VALLEY, cx = (V.x0 + V.x1) / 2, cz = (V.z0 + V.z1) / 2;
+    const perimeter = 2 * (V.x1 - V.x0 + V.z1 - V.z0);
+    for (let t = 0; t < perimeter; t += 4.2 + rand() * 3) {
+      const a = (t / perimeter) * Math.PI * 2;
+      // March out from the middle to the cliff line along this bearing.
+      const dx = Math.cos(a), dz = Math.sin(a);
+      let r = 30;
+      for (let k = 0; k < 60 && cliffDistance(cx + dx * r, cz + dz * r) < 0; k++) r += 1.5;
+      for (let k = 0; k < 8; k++) r -= cliffDistance(cx + dx * r, cz + dz * r);
+      const fx = cx + dx * r, fz = cz + dz * r;
+      if (quiet(fx, fz)) continue;
+      // The face's outward normal, from the gradient of the cliff line.
+      const gx = cliffDistance(fx + 0.5, fz) - cliffDistance(fx - 0.5, fz), gz = cliffDistance(fx, fz + 0.5) - cliffDistance(fx, fz - 0.5);
+      const gl = Math.hypot(gx, gz) || 1, nx = gx / gl, nz = gz / gl;
+      const run = cliffRun(fx, fz), back = run * (0.45 + rand() * 0.35);
+      const x = fx + nx * back, z = fz + nz * back, y = heightAt(x, z);
+      const size = 1.1 + rand() * 1.1;
+      const p = at(x, y, z, Math.atan2(nx, nz) + (rand() - 0.5) * 0.5);
+      const m = add(p, faceted(new THREE.IcosahedronGeometry(size, 0)), tones[Math.floor(rand() * tones.length)]!, 0, size * 0.2, 0, [rand() * 0.4 - 0.2, 0, rand() * 0.3 - 0.15], false);
+      m.scale.set(1.2 + rand() * 0.6, 1.3 + rand() * 0.9, 0.55);
+      if (rand() < 0.7) {
+        const up = run + 0.8 + rand() * 1.4, sx = fx + nx * up, sz = fz + nz * up;
+        for (let b = 0; b < 2 + Math.floor(rand() * 3); b++) {
+          const ox = sx + (rand() - 0.5) * 3, oz = sz + (rand() - 0.5) * 3, br = 0.5 + rand() * 0.5;
+          const bush = add(at(ox, heightAt(ox, oz) - 0.1, oz), faceted(new THREE.IcosahedronGeometry(br, 0)), scrub[b % scrub.length]!, 0, br * 0.5, 0, [0, rand() * 6, 0], false);
+          bush.scale.y = 0.75;
+        }
+      }
+    }
+  }
+
   // ------------------------------------------------------------ the edge
   // The cliffs are steeper than anyone can walk up, but a body pressed to
   // rock that steep still counts as standing and could jump its way up. So
@@ -657,16 +847,17 @@ export function buildValley(k: ValleyKit): Valley {
   // A mesh from raw triangles, flat-shaded; blades of grass are lit as the
   // ground under them is (`up`), so a thin leaf turned from the sun does not
   // read as a black sliver.
-  function meshFrom(pos: number[], mat: THREE.Material, shadow: boolean, up = false): void {
-    if (!pos.length) return;
+  function meshFrom(pos: number[], mat: THREE.Material, shadow: boolean, up = false, colours?: number[]): THREE.Mesh {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    if (colours) geo.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
     if (up) geo.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(pos.length).map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
     else geo.computeVertexNormals();
     const m = new THREE.Mesh(geo, mat);
     m.castShadow = shadow;
     m.receiveShadow = true;
     g.add(m);
+    return m;
   }
 
   // A tuft of thin blades (rice, reeds): `n` triangles leaning out from (x, y, z).
@@ -680,7 +871,8 @@ export function buildValley(k: ValleyKit): Valley {
   }
 
   function boulder(x: number, z: number, r: number, rotY: number, y?: number, collide = true): void {
-    const base = y ?? ground(x, z);
+    // On a bank it settles to the low side, so no edge hangs over the slope.
+    const base = y ?? Math.min(ground(x, z), ground(x + r, z), ground(x - r, z), ground(x, z + r), ground(x, z - r));
     const p = at(x, base, z, rotY);
     const m = add(p, faceted(new THREE.IcosahedronGeometry(r, 0)), (Math.floor(x * 3 + z * 7) & 1) ? rock : rockDark, 0, r * 0.3, 0);
     m.scale.set(1.3, 0.75, 1.0);

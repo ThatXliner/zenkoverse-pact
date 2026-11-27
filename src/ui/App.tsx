@@ -174,6 +174,7 @@ function Pause({ game, tab }: { game: Game; tab: PauseTab }) {
               <Range label="Master volume" value={s.volume} min={0} max={1} step={0.05} onChange={(v) => setSetting('volume', v)} />
               <Range label="Music" value={s.music} min={0} max={1} step={0.05} onChange={(v) => setSetting('music', v)} />
               <Range label="Effects" value={s.effects} min={0} max={1} step={0.05} onChange={(v) => setSetting('effects', v)} />
+              <Range label="Ambience" value={s.ambience} min={0} max={1} step={0.05} onChange={(v) => setSetting('ambience', v)} />
               <div class="row"><label>Quality</label><Seg value={s.quality} options={['low', 'medium', 'high']} onChange={(v) => { setSetting('quality', v as Quality); game.renderer.setQuality(v as Quality); }} /><span /></div>
               <div class="row"><label>Camera</label><Seg value={s.camera} options={CAMERA_MODES} labels={CAMERA_LABEL} onChange={(v) => game.setCamera(v as CameraMode)} /><span /></div>
               <div class="row"><label>Invert Y</label><Seg value={s.invertY ? 'on' : 'off'} options={['off', 'on']} onChange={(v) => setSetting('invertY', v === 'on')} /><span /></div>

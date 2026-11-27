@@ -17,7 +17,8 @@ import { STEP_CUE, type Surface } from './surfaces';
 // the room reverbs and the ambience start, and the recordings begin to load.
 //
 //   master ── music  (settings.music):  the score
-//          ── world  (settings.effects): cues, the ambience bed, both reverbs
+//          ── world  (settings.effects): cues, both reverbs, and the ambience bed
+//                                      (also under settings.ambience)
 //          ── ui     (settings.effects): menus, toasts, the Workshop
 //
 // Cues placed in the world (`at`) go through a panner; the listener is the
@@ -51,7 +52,7 @@ export interface AudioView {
   gestureAt: number | null;
   state: string;
   library: { loaded: number; total: number; failed: number };
-  volumes: { master: number; music: number; effects: number };
+  volumes: { master: number; music: number; effects: number; ambience: number };
   muffle: number;
   ambience: AmbienceView | null;
   // The stream and the falls as heard where the listener stands.
@@ -66,6 +67,7 @@ export class Audio {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
   private musicBus!: GainNode;
+  private bedBus!: GainNode;
   private worldBus!: GainNode;
   private uiBus!: GainNode;
   private duckBed!: GainNode;
@@ -131,7 +133,8 @@ export class Audio {
     this.dry = ctx.createGain();
     this.dry.connect(this.muffleFilter);
     this.duckBed = ctx.createGain();
-    this.duckBed.connect(this.muffleFilter);
+    this.bedBus = ctx.createGain();
+    this.duckBed.connect(this.bedBus).connect(this.muffleFilter);
 
     // Two rooms: the hall (long, wooden) and the walled yard (short slap off the walls).
     this.send = ctx.createGain();
@@ -294,7 +297,7 @@ export class Audio {
     return {
       unlocked: this.unlocked, gestureAt: this.gestureAt, state: this.ctx?.state ?? 'none',
       library: { loaded: this.library.loaded, total: this.library.total, failed: this.library.failed },
-      volumes: { master: s.volume, music: s.music, effects: s.effects }, muffle: this.muffle,
+      volumes: { master: s.volume, music: s.music, effects: s.effects, ambience: s.ambience }, muffle: this.muffle,
       ambience: this.ambience?.view() ?? null, log: this.log.map((e) => ({ ...e })),
       heard: this.ambience && this.ctx ? this.ambience.heard({ x: this.ctx.listener.positionX?.value ?? 0, y: this.ctx.listener.positionY?.value ?? 0, z: this.ctx.listener.positionZ?.value ?? 0 }) : null,
     };
@@ -360,6 +363,7 @@ export class Audio {
     this.musicBus.gain.setTargetAtTime(s.music * s.music, t, 0.03);
     this.worldBus.gain.setTargetAtTime(s.effects * s.effects, t, 0.03);
     this.uiBus.gain.setTargetAtTime(s.effects * s.effects, t, 0.03);
+    this.bedBus.gain.setTargetAtTime(s.ambience * s.ambience, t, 0.03);
   }
 
   private panner(at: THREE.Vector3): PannerNode {

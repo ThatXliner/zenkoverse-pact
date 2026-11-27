@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { signal } from '@preact/signals';
 import type { Game } from '../app/game';
-import { setState, appState, type DrillId } from '../app/state';
+import { setState, appState, leaveScene, type DrillId } from '../app/state';
 import { toast, banner } from '../app/game';
 import type { TechniqueId } from '../pacts/schema';
 import type { MasteryStat } from '../mastery/mastery';
@@ -202,6 +202,6 @@ export class Drills {
     g.tutorial.notify(`${passed ? 'drill-passed' : 'drill-failed'}:${c.def.id}`);
     this.current = null;
     drillUi.active.value = null;
-    setState({ kind: c.resume === 'tutorial' ? 'tutorial' : 'explore', ...(c.resume === 'tutorial' ? { step: g.tutorial.stepId } : {}) } as never);
+    leaveScene('drill', c.resume === 'tutorial' ? { kind: 'tutorial', step: g.tutorial.stepId } : { kind: 'explore' });
   }
 }

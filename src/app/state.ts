@@ -36,6 +36,15 @@ export function setState(next: AppState): void {
   appState.value = next;
 }
 
+// A scene that ends (a fight, a drill) leaves its state wherever that state
+// is: the current one, or the one waiting under a cutscene, the pause menu
+// or the Workshop to be resumed. A fight won by a Maximum Output ends inside
+// its cutscene, which must then hand back to `next`, not to the fight.
+export function leaveScene(kind: AppState['kind'], next: AppState): void {
+  const swap = (s: AppState): AppState => s.kind === kind ? next : 'resume' in s ? { ...s, resume: swap(s.resume) } as AppState : s;
+  appState.value = swap(appState.value);
+}
+
 export function pause(tab: PauseTab = 'menu'): void {
   const cur = appState.value;
   if (cur.kind === 'paused') { appState.value = { ...cur, tab }; return; }

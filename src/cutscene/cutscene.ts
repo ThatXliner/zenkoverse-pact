@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { signal } from '@preact/signals';
 import type { Game } from '../app/game';
-import { appState, setState, worldRuns, type AppState } from '../app/state';
+import { appState, setState, worldRuns } from '../app/state';
 import { settings, type CutscenePlay } from '../app/settings';
 import type { Avatar } from '../character/avatar';
 import type { Enemy } from '../combat/enemies';
@@ -222,7 +222,8 @@ interface Live {
   resolved: boolean;
   confirmed: boolean;
   events: Timed[];
-  resume: AppState | null;
+  // The cutscene put the app in its 'cinematic' state, so it hands back on its end.
+  cinematic: boolean;
   log: CutsceneLog;
 }
 
@@ -284,10 +285,10 @@ export class Cutscenes {
     this.log.push(log);
     this.live = {
       run, origin, fwd, right, aim, t: 0, hold: 0, beat, endAt: short ? beat! + SHORT_TAIL : total, starts, shot: -1,
-      presenting: mode !== 'never', resolved: false, confirmed: !g.net || run.role === 'target', events, resume: null, log,
+      presenting: mode !== 'never', resolved: false, confirmed: !g.net || run.role === 'target', events, cinematic: false, log,
     };
     if (worldRuns.value && appState.value.kind !== 'cinematic') {
-      this.live.resume = appState.value;
+      this.live.cinematic = true;
       setState({ kind: 'cinematic', resume: appState.value });
     }
     g.input.clear();
@@ -472,7 +473,10 @@ export class Cutscenes {
     // The two come out of it a beat apart: whoever took the blow reels first.
     if (r.target?.local) r.target.hold?.(0);
     if (r.caster.local && r.caster !== r.target) r.caster.hold?.(0);
-    if (l.resume && appState.value.kind === 'cinematic') setState(l.resume);
+    // Back to the state the cinematic now resumes, which the blow may have
+    // changed: a fight it won has already handed its state back.
+    const cur = appState.value;
+    if (l.cinematic && cur.kind === 'cinematic') setState(cur.resume);
     g.input.clear();
     r.end?.(l.resolved);
   }

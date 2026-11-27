@@ -66,6 +66,9 @@ function clearMessages(): void {
   hud.banner.value = null;
 }
 
+// Where Tab opens the Workshop from: play, or the pause menu over it.
+const WORKSHOP_FROM: ReadonlySet<AppState['kind']> = new Set(['explore', 'tutorial', 'encounter']);
+
 // The Architect's desk in the hall, where the Workshop can also be opened by hand.
 const ARCHITECT_DESK = new THREE.Vector3(-10, 0.3, -16.4);
 const CUTAWAY_OPACITY = 0.28;
@@ -189,6 +192,7 @@ export class Game {
     this.cutscenes.cancel();
     this.net?.leave();
     this.rooftop.abandon();
+    this.drills.abandon();
     this.combat.resetPlayer();
     this.techniques.reset();
     this.encounters.reset();
@@ -232,6 +236,7 @@ export class Game {
   // effects, its enemies and its messages go with it.
   endScene(): void {
     this.endEffects();
+    this.drills.abandon();
     this.encounters.reset();
     clearMessages();
   }
@@ -263,6 +268,12 @@ export class Game {
     if (announce) toast(`Camera: ${CAMERA_LABEL[mode]}`);
   }
 
+  // A fight, a drill or the rooftop trial is running.
+  get inScene(): boolean { return this.encounters.fighting || this.drills.running !== null || this.rooftop.active; }
+
+  // A real fight, which a draft never goes into; the dummy room is where drafts are tried.
+  get inRealFight(): boolean { return this.encounters.fighting && !this.encounters.inDummyRoom; }
+
   // The pointer is locked only in the views the mouse turns.
   requestLock(): void { if (!this.cam.isTop) this.input.requestLock(); }
 
@@ -284,7 +295,7 @@ export class Game {
   // room, until the Workshop opens again or the player leaves the room.
   tryDraft(p: Pact): void {
     // Only on the dummies: a draft never goes into a real fight.
-    if (appState.value.kind === 'workshop' && appState.value.resume.kind === 'encounter' && !this.encounters.inDummyRoom) { toast('Finish this fight before trying a draft.', 'bad'); return; }
+    if (this.inRealFight) { toast('Finish this fight before trying a draft.', 'bad'); return; }
     this.closeWorkshop();
     this.book.preview.value = p;
     if (appState.value.kind !== 'encounter') this.encounters.begin('dummy-room', true);
@@ -318,8 +329,9 @@ export class Game {
       else if (st.kind === 'workshop') this.closeWorkshop();
       else if (worldRuns.value) { pause(); this.input.releaseLock(); }
     }
-    // The key that opens the Workshop closes it too.
+    // The key that opens the Workshop closes it too, and opens it from the pause menu, as its footer says.
     else if (st.kind === 'workshop' && this.input.hitAny('workshop')) this.closeWorkshop();
+    else if (st.kind === 'paused' && this.input.hitAny('workshop') && WORKSHOP_FROM.has(st.resume.kind)) this.openWorkshop();
     if (worldRuns.value && !this.cam.isTop && !this.input.locked && !this.cam.inShot && this.input.canvasPressed) this.input.requestLock();
 
     if (st.kind === 'title' || st.kind === 'boot') {
@@ -359,7 +371,7 @@ export class Game {
     if (this.cam.isTop) {
       if (!this.cam.inShot) this.aimAtCursor();
     } else if (this.input.enabled && !this.cam.inShot) this.cam.look(look.x, look.y, s.sensitivity, s.invertY);
-    if (this.input.hit('workshop') && (st.kind === 'explore' || st.kind === 'tutorial' || st.kind === 'encounter')) this.openWorkshop();
+    if (this.input.hit('workshop') && WORKSHOP_FROM.has(st.kind)) this.openWorkshop();
 
     this.player.yaw = this.cam.yaw;
     this.player.moveYaw = this.cam.heading;
@@ -465,8 +477,9 @@ export class Game {
       ? { text: 'Open the Pact Workshop', act: () => { hud.plaque.value = null; this.openWorkshop(); } }
       : { text: 'Speak with the Pact Architect', act: () => { hud.plaque.value = ARCHITECT; } };
     else if (hud.plaque.value?.title === ARCHITECT.title && ARCHITECT_DESK.distanceTo(this.player.position) > 4.5) hud.plaque.value = null;
-    // The fights, the rooftop trial and the drills are single-player.
-    if (!this.net) {
+    // The fights, the rooftop trial and the drills are single-player, and
+    // one at a time: none is offered while another is running.
+    if (!this.net && !this.inScene) {
       const enc = this.encounters.interactable(this.player.position);
       if (!best && enc) best = enc;
       const roof = this.rooftop.interactable(this.player.position);

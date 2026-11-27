@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Game } from '../app/game';
-import { appState, setState, type EncounterId } from '../app/state';
+import { appState, setState, leaveScene, type EncounterId } from '../app/state';
 import { banner, toast } from '../app/game';
 import { Enemy, NO_SCALE, type EnemyScale } from './enemies';
 import { combatUi } from './combat';
@@ -46,6 +46,7 @@ export class Encounters {
     this.enemies.length = 0;
     this.active = null;
     this.done.clear();
+    this.cooldown = 0;
     combatUi.boss.value = null;
   }
 
@@ -153,6 +154,6 @@ export class Encounters {
       g.mastery.gainPassive(g.techniqueId, 'control', 0.04);
       if (d.id === 'ancient') toast('Five thousand years, and she still bowed. Aurabending unlocked in the codex.', 'good');
     }
-    if (appState.value.kind === 'encounter') setState({ kind: 'explore' });
+    leaveScene('encounter', { kind: 'explore' });
   }
 }

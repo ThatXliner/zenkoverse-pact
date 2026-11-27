@@ -74,6 +74,8 @@ export interface World {
   pond: { center: THREE.Vector3; radius: number; surfaceY: number };
   // Water beyond the pond that Rime can freeze into a floor (a region's canal).
   waters: FreezableWater[];
+  // The stone lanterns' flames, in the compound and the valley: vapour that climbs to one catches.
+  flames: THREE.Vector3[];
   // Meshes that may stand between the top-down camera and the player. A
   // mesh's `userData.cutaway` names the roof it belongs to: when one piece
   // is in the way the whole roof and what stands on it fade together.
@@ -117,6 +119,7 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   const occluders: THREE.Mesh[] = [];
   const footprints: Footprint[] = [];
   const animated: { update(time: number): void }[] = [];
+  const flames: THREE.Vector3[] = [];
 
   const paving = toon(0xffffff, { map: flagstones(PALETTE.paving, PALETTE.pavingLine, 0xa08d70) });
   paving.map!.repeat.set(12, 10);
@@ -569,6 +572,7 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
     add(new THREE.CylinderGeometry(0.4, 0.4, 0.12, 6), 1.18);
     add(new THREE.CylinderGeometry(0.26, 0.26, 0.42, 6), 1.45, lanternMat);
     add(new THREE.ConeGeometry(0.62, 0.4, 6), 1.86, stoneDark);
+    flames.push(new THREE.Vector3(x, 1.45, z));
     physics.staticBox(new THREE.Vector3(x, 1, z), new THREE.Vector3(0.4, 1, 0.4));
   }
   // A flight of 0.28 m steps from (x, y, z) along `dx`/`dz` (one of them ±1)
@@ -672,7 +676,7 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   }
 
   dressCompound({ g, physics, lights, onRoof, mats: { wood, woodDark, woodLight, stone, stoneDark, plaster, iron, tile, tileEdge, lantern: lanternMat } });
-  const valley = buildValley({ g, physics, lights, onRoof, tag, mats: { woodDark, woodLight, stone, stoneDark, iron, tile, tileEdge, lantern: lanternMat } });
+  const valley = buildValley({ g, physics, lights, onRoof, tag, flames, mats: { woodDark, woodLight, stone, stoneDark, iron, tile, tileEdge, lantern: lanternMat } });
   zones.push(...valley.zones);
   footprints.push(...valley.footprints);
   animated.push(valley);
@@ -699,6 +703,7 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
     group: g, backdrop, zones, footprints, plaques, craneHook: hook, occluders, onRoof,
     pond: { center: P.center, radius: P.radius, surfaceY: P.surfaceY },
     waters: [],
+    flames,
     zoneAt(p) {
       // Specific places first, the roofs by height, the courtyard as the
       // ground floor's default inside the walls, the valley outside them.

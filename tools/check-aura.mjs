@@ -384,7 +384,7 @@ await page.evaluate(() => { const g = window.game; g.game.encounters.reset(); g.
 console.log('\nrefinement and potential');
 const pot = await page.evaluate(() => {
   const G = window.game.game;
-  const ids = ['blink', 'recoil', 'rime', 'shift', 'echo', 'heat', 'tension', 'electro', 'friction', 'dark'];
+  const ids = ['blink', 'recoil', 'rime', 'shift', 'echo', 'heat', 'tension', 'electro', 'friction', 'dark', 'fuel'];
   return Object.fromEntries(ids.map((t) => [t, { potential: G.aura.potential(t), breadth: G.aura.breadth(t), pacts: G.aura.pacts(t) }]));
 });
 console.log(`    ${Object.entries(pot).map(([t, p]) => `${t} ${Math.round(p.potential * 100)} (breadth ${p.breadth}, ${p.pacts} Pacts)`).join(', ')}`);

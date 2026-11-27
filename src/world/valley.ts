@@ -24,6 +24,8 @@ export interface ValleyKit {
   lights: LightPool;
   onRoof(mesh: THREE.Mesh, roof: string, ghost?: boolean): void;
   tag(col: RAPIER.Collider, surface: string): RAPIER.Collider;
+  // The stone lanterns' flames go in here.
+  flames: THREE.Vector3[];
   mats: Record<'woodDark' | 'woodLight' | 'stone' | 'stoneDark' | 'iron' | 'tile' | 'tileEdge' | 'lantern', THREE.Material>;
 }
 
@@ -893,6 +895,7 @@ export function buildValley(k: ValleyKit): Valley {
     cyl(p, M.stone, 0, 0.67, 0, 0.16, 0.22, 0.9, 8);
     cyl(p, M.stone, 0, 1.18, 0, 0.4, 0.4, 0.12, 6);
     cyl(p, lanternGlow, 0, 1.45, 0, 0.26, 0.26, 0.42, 6);
+    k.flames.push(new THREE.Vector3(x, y + 1.45, z));
     add(p, new THREE.ConeGeometry(0.62, 0.4, 6), M.stoneDark, 0, 1.86, 0);
     solid(p, 0, 1, 0, 0.4, 1, 0.4);
   }

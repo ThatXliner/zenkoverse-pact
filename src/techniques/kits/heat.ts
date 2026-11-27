@@ -11,6 +11,7 @@ import type { PropInstance } from '../../world/props';
 import { QUENCH } from '../../world/compound';
 import { surfaceAt } from '../../audio/surfaces';
 import { meltPond } from './rime';
+import { kindle } from '../ignition';
 
 // Heat (issue #18): any energy the user can reach goes in, a blow, a moving
 // thing, their own body, and it comes out only as heat. Nothing here pushes:
@@ -115,17 +116,22 @@ function waterAt(g: Game, at: THREE.Vector3): 'water' | 'wet' | 'ice' | null {
   return s === 'water' || s === 'wet' || s === 'ice' ? s : null;
 }
 
-function burn(e: Enemy, seconds: number, dmg: number): void {
+// Sets a body burning for `seconds`, `dmg` a tick. Anything that burns a body
+// does it through here (Fuel's vapour too), and the burns tick in `tickBurns`.
+export function burn(e: Enemy, seconds: number, dmg: number): void {
   const b = burns.get(e);
   // A burn is refreshed, never stacked: a second hit keeps it going, no more.
   if (b) { b.left = Math.max(b.left, seconds); b.dmg = Math.max(b.dmg, dmg); return; }
   burns.set(e, { left: seconds, tick: 0, dmg });
 }
 
-function ignite(g: Game, p: PropInstance): boolean {
+// Sets a flammable prop alight: it burns where it stands (`tickFires`).
+export function ignite(g: Game, p: PropInstance): boolean {
   if (!p.alive || fires.some((f) => f.prop === p)) return false;
   fires.push({ prop: p, left: HEAT.fire.seconds, tick: 0, age: 0 });
-  g.vfx.flames(p.mesh.position.clone().setY(p.mesh.position.y - p.half.y), Math.max(p.half.x, p.half.z), 10, 1.1);
+  const base = p.mesh.position.clone().setY(p.mesh.position.y - p.half.y);
+  g.vfx.flames(base, Math.max(p.half.x, p.half.z), 10, 1.1);
+  kindle(base, Math.max(p.half.x, p.half.z) + 0.6);
   g.vfx.flash(p.mesh.position.clone(), EMBER, 30, 0.35, 7);
   g.audio.play('heat.ignite', { at: p.mesh.position });
   return true;
@@ -173,6 +179,7 @@ function deliver(ctx: AbilityContext, at: THREE.Vector3, radius: number, dose: n
   const water = waterAt(g, at);
   if (water) { boil(g, at, water, ctx.potency); took++; }
   for (const e of g.encounters.enemies) took += e.igniteFuel(at, radius);
+  kindle(at, radius);
   return took;
 }
 
@@ -241,6 +248,7 @@ function sear(ctx: AbilityContext) {
   const best = wet.find((w) => w.kind !== 'wet') ?? wet[0];
   if (best) { boil(g, best.at, best.kind!, ctx.potency); took++; }
   for (const e of g.encounters.enemies) took += e.igniteFuel(ground, range * 0.55);
+  kindle(ground, range * 0.55);
   // Releasing into a body pressed against you puts some of it back into you.
   const close = bodies.some((e) => Math.hypot(e.position.x - me.x, e.position.z - me.z) < HEAT.pointBlank.within);
   spill(g, took ? HEAT.spill.landed : HEAT.spill.wasted, ctx.behaviors.includes('steady'));
@@ -312,6 +320,7 @@ function whiteHeat(ctx: AbilityContext) {
   const water = waterAt(g, center.clone().addScaledVector(flat, 2));
   if (water) boil(g, center.clone().addScaledVector(flat, 2), water, ctx.potency);
   for (const e of g.encounters.enemies) e.igniteFuel(center, radius);
+  kindle(center, radius);
   for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; g.vfx.steam(center.clone().add(new THREE.Vector3(Math.cos(a) * radius * 0.7, 0, Math.sin(a) * radius * 0.7)), 0.6, 1, 1.6, 1.2); }
   g.vfx.ring(center.clone().add(new THREE.Vector3(0, 0.08, 0)), COLOR, 0.5, radius * 1.25, 0.7);
   g.vfx.ring(center.clone().add(new THREE.Vector3(0, 1.2, 0)).addScaledVector(flat, 1.2), 0xfff2d0, 0.2, 3.2, 0.45, flat);
@@ -455,6 +464,50 @@ const drill: DrillDef = {
   },
 };
 
+// Burns run their course. Heat's passive runs this, and so does any kit
+// whose own fire burns bodies (Fuel's vapour).
+export function tickBurns(g: Game, dt: number): void {
+  for (const [e, b] of burns) {
+    if (!e.alive || e.disposed) { e.avatar.heat = 0; burns.delete(e); continue; }
+    b.left -= dt;
+    e.avatar.heat = Math.min(1, b.left) * 0.9;
+    if ((b.tick += dt) >= HEAT.burn.tick) {
+      b.tick -= HEAT.burn.tick;
+      const n = Math.max(1, Math.round(b.dmg));
+      e.hurt(n, { from: e.position, stagger: false });
+      g.combat.number(e.center(), String(n), '#ffa04a', false);
+      g.vfx.steam(e.center().add(new THREE.Vector3(0, 0.4, 0)), 0.2, 1, 0.7, 0.45);
+    }
+    if (b.left <= 0) { e.avatar.heat = 0; burns.delete(e); }
+  }
+}
+
+// Props on fire burn where they caught, spread to what is close, and burn
+// anyone in them, the player included.
+export function tickFires(g: Game, dt: number): void {
+  const me = g.player.position;
+  for (let i = fires.length - 1; i >= 0; i--) {
+    const f = fires[i]!, p = f.prop;
+    if (!p.alive) { fires.splice(i, 1); continue; }
+    f.left -= dt; f.age += dt;
+    p.heat = Math.max(p.heat, 0.7);
+    if ((f.tick += dt) < HEAT.fire.tick) continue;
+    f.tick -= HEAT.fire.tick;
+    const at = p.mesh.position;
+    const base = at.clone().setY(at.y - p.half.y);
+    g.vfx.flames(base, Math.max(p.half.x, p.half.z), 6, 1.1);
+    g.audio.play('heat.burn', { at });
+    kindle(base, Math.max(p.half.x, p.half.z) + 0.6);
+    for (const e of g.encounters.enemies) if (e.alive && Math.hypot(e.position.x - at.x, e.position.z - at.z) < HEAT.fire.radius) { e.hurt(HEAT.fire.enemy, { from: at, stagger: false }); burn(e, 1, HEAT.burn.dmg); }
+    if (Math.hypot(me.x - at.x, me.z - at.z) < HEAT.fire.radius && Math.abs(me.y - base.y) < 1.5) g.combat.hurtPlayer(HEAT.fire.player, { from: at });
+    if (f.age > 1.2) for (const q of g.props.instances) if (q !== p && q.def.traits.includes('flammable') && q.mesh.position.distanceTo(at) < HEAT.fire.spread) { g.props.warm(q, 0.3); if (q.heat >= HEAT.ignite) ignite(g, q); }
+    if (f.left <= 0) {
+      fires.splice(i, 1);
+      if (p.def.breakable) breakProp(g, p, at); else { p.heat = 0.3; g.vfx.steam(at, p.half.x, 4, 1); }
+    }
+  }
+}
+
 export const heat: TechniqueKit = {
   id: 'heat', name: 'Heat', glyph: '熱', color: COLOR, type: 'Conversion, Energy family', sfx: 'ジュッ',
   blurb: 'Take in energy from a blow, a moving thing or your own body. It comes out only as heat, and the heat has to go somewhere.',
@@ -561,40 +614,8 @@ export const heat: TechniqueKit = {
         if (!g.cam.isFirst || g.cam.inShot) g.vfx.steam(me.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.5, 1.35 + Math.random() * 0.2, (Math.random() - 0.5) * 0.3)), 0.15, 1, 0.8, 0.35);
       }
       heatUi.core.value = st.core;
-      // Burns run their course.
-      for (const [e, b] of burns) {
-        if (!e.alive || e.disposed) { e.avatar.heat = 0; burns.delete(e); continue; }
-        b.left -= dt;
-        e.avatar.heat = Math.min(1, b.left) * 0.9;
-        if ((b.tick += dt) >= HEAT.burn.tick) {
-          b.tick -= HEAT.burn.tick;
-          const n = Math.max(1, Math.round(b.dmg));
-          e.hurt(n, { from: e.position, stagger: false });
-          g.combat.number(e.center(), String(n), '#ffa04a', false);
-          g.vfx.steam(e.center().add(new THREE.Vector3(0, 0.4, 0)), 0.2, 1, 0.7, 0.45);
-        }
-        if (b.left <= 0) { e.avatar.heat = 0; burns.delete(e); }
-      }
-      // Fires burn where they caught, spread to what is close, and burn anyone in them.
-      for (let i = fires.length - 1; i >= 0; i--) {
-        const f = fires[i]!, p = f.prop;
-        if (!p.alive) { fires.splice(i, 1); continue; }
-        f.left -= dt; f.age += dt;
-        p.heat = Math.max(p.heat, 0.7);
-        if ((f.tick += dt) < HEAT.fire.tick) continue;
-        f.tick -= HEAT.fire.tick;
-        const at = p.mesh.position;
-        const base = at.clone().setY(at.y - p.half.y);
-        g.vfx.flames(base, Math.max(p.half.x, p.half.z), 6, 1.1);
-        g.audio.play('heat.burn', { at });
-        for (const e of g.encounters.enemies) if (e.alive && Math.hypot(e.position.x - at.x, e.position.z - at.z) < HEAT.fire.radius) { e.hurt(HEAT.fire.enemy, { from: at, stagger: false }); burn(e, 1, HEAT.burn.dmg); }
-        if (Math.hypot(me.x - at.x, me.z - at.z) < HEAT.fire.radius && Math.abs(me.y - base.y) < 1.5) g.combat.hurtPlayer(HEAT.fire.player, { from: at });
-        if (f.age > 1.2) for (const q of g.props.instances) if (q !== p && q.def.traits.includes('flammable') && q.mesh.position.distanceTo(at) < HEAT.fire.spread) { g.props.warm(q, 0.3); if (q.heat >= HEAT.ignite) ignite(g, q); }
-        if (f.left <= 0) {
-          fires.splice(i, 1);
-          if (p.def.breakable) breakProp(g, p, at); else { p.heat = 0.3; g.vfx.steam(at, p.half.x, 4, 1); }
-        }
-      }
+      tickBurns(g, dt);
+      tickFires(g, dt);
       // Hot metal burns whatever it touches.
       for (const p of g.props.instances) {
         if (p.heat < HEAT.hot.at || !p.def.traits.includes('metal')) continue;

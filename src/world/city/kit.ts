@@ -44,6 +44,8 @@ const TILE = 36;
 export class CityKit {
   readonly root = new THREE.Group();
   readonly occluders: THREE.Mesh[] = [];
+  // Open flames at standing height (the stone lanterns), in the ward's frame.
+  readonly flames: THREE.Vector3[] = [];
   private bodies: RAPIER.RigidBody[] = [];
   private sources: PointSource[] = [];
   private spawned: PropInstance[] = [];

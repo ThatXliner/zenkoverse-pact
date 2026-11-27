@@ -583,6 +583,7 @@ function stoneLantern(k: CityKit, x: number, z: number): void {
   k.cyl(k.shared('lantern', () => emissive(0xffa25a, 2.2)), x, 1.45, z, 0.26, 0.26, 0.42, 6);
   k.mesh(new THREE.ConeGeometry(0.62, 0.4, 6), dark, x, 1.86, z);
   k.solid(x, 1, z, 0.4, 1, 0.4);
+  k.flames.push(new THREE.Vector3(x, 1.45, z));
 }
 
 // ------------------------------------------------------------ the park

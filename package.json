@@ -22,6 +22,7 @@
     "check:eyes": "node tools/check-eyes.mjs",
     "check:freeze": "node tools/check-freeze.mjs",
     "check:friction": "node tools/check-friction.mjs",
+    "check:fuel": "node tools/check-fuel.mjs",
     "check:heat": "node tools/check-heat.mjs",
     "check:hud": "node tools/check-hud.mjs",
     "check:keybinds": "node tools/check-keybinds.mjs",

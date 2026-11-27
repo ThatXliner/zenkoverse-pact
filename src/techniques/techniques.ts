@@ -26,13 +26,14 @@ import { tension } from './kits/tension';
 import { electro } from './kits/electro';
 import { friction } from './kits/friction';
 import { dark } from './kits/dark';
+import { fuel } from './kits/fuel';
 import { GROUP_PROP, GROUP_WORLD, GROUP_ENEMY } from '../physics/world';
 import { playerActor, enemyActor } from '../cutscene/cutscene';
 import { RULES } from '../net/protocol';
 import { Wagers, darkUi } from './wagers';
 import { Declarations } from './declarations';
 
-export const KITS: Record<TechniqueId, TechniqueKit> = { recoil, shift, rime, blink, echo, heat, tension, electro, friction, dark };
+export const KITS: Record<TechniqueId, TechniqueKit> = { recoil, shift, rime, blink, echo, heat, tension, electro, friction, dark, fuel };
 
 interface Cast { slot: KeySlot; ctx: AbilityContext; t: number; impactAt: number; duration: number; fired: boolean; held: boolean; result?: CastResult | void }
 

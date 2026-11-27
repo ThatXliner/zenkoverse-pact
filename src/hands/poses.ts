@@ -56,6 +56,8 @@ const cradle = f([0.05, 0.05, 0.12], [0.02, 0.06, 0.18], [0.02, 0.06, 0.18], [0.
 // A hand closed on cloth: the fingers wrap a collar, the thumb locks over them.
 const clutch = f([0.55, 0.6, 0.45], [0.7, 0.85, 0.6], [0.72, 0.88, 0.62], [0.74, 0.9, 0.62], [0.78, 0.9, 0.6]);
 // Fingers pressed out flat and wide, as on a wall: the whole palm and every pad in contact.
+// Every fingertip drawn in to meet the thumb's, as if pinching a pinch of salt.
+const bunch = f([0.45, 0.4, 0.3], [0.55, 0.55, 0.4], [0.55, 0.6, 0.4], [0.6, 0.6, 0.4], [0.62, 0.6, 0.4]);
 const flatSplay = f([0.0, -0.05, -0.05], [-0.05, 0, 0], [-0.05, 0, 0], [-0.05, 0, 0], [-0.05, 0, 0]);
 // Thumb and index out at a right angle, the rest curled: one corner of a frame.
 const corner = f([0, 0, 0], [0, 0, 0], [1, 1, 0.9], [1, 1, 0.9], [1, 1, 0.95]);
@@ -193,6 +195,23 @@ export const POSES = {
   doorsWide: { pos: [0.36, -0.13, -0.37], rot: [1.3, -0.5, 0.3], fingers: open, spread: 0.5 },
   frame: { pos: [0.08, -0.17, -0.42], rot: [1.3, 0.1, -0.3], fingers: corner, spread: 0.6 },
   frameTurn: { pos: [0.09, -0.2, -0.42], rot: [1.3, 0.1, -1.6], fingers: corner, spread: 0.6 },
+  // Fuel. `fanGather` cups the vapour palm up at the hip; `fanSweep` strews
+  // it, the arm out low and wide, palm down, fingers trailing. `flickReady`
+  // bunches the fingertips at the shoulder and `flickOpen` springs them open
+  // at arm's length, a fine spray. `herdCup` holds both hands out cupped to
+  // the air and `herdDraw` draws them in. `condense` cups the hands together
+  // on what they hold; `parting` throws them out wide. The sign stretches
+  // something clinging between the parted palms (`stretch`, `stretchWide`).
+  fanGather: { pos: [0.2, -0.29, -0.33], rot: [0.3, 0.4, -2.75], fingers: cup, spread: 0.25 },
+  fanSweep: { pos: [0.27, -0.24, -0.45], rot: [-0.25, -0.4, 0.15], fingers: fling, spread: 0.6 },
+  flickReady: { pos: [0.25, -0.15, -0.3], rot: [0.6, 0.2, -1.5], fingers: bunch, spread: 0 },
+  flickOpen: { pos: [0.12, -0.18, -0.47], rot: [0.35, 0.25, -0.6], fingers: fling, spread: 0.65 },
+  herdCup: { pos: [0.2, -0.21, -0.43], rot: [1.1, 0.55, -0.9], fingers: cup, spread: 0.3 },
+  herdDraw: { pos: [0.13, -0.23, -0.34], rot: [1.0, 0.8, -1.15], fingers: cup, spread: 0.25 },
+  condense: { pos: [0.05, -0.23, -0.39], rot: [1.15, 0.3, -1.95], fingers: cup, spread: 0.15 },
+  parting: { pos: [0.34, -0.19, -0.33], rot: [1.2, -0.55, -0.3], fingers: open, spread: 0.5 },
+  stretch: { pos: [0.075, -0.23, -0.4], rot: [1.3, 0.1, -1.5], fingers: cradle, spread: 0.45 },
+  stretchWide: { pos: [0.19, -0.22, -0.41], rot: [1.25, 0.2, -1.45], fingers: cradle, spread: 0.6 },
 } satisfies Record<string, HandPose>;
 
 export type PoseName = keyof typeof POSES;

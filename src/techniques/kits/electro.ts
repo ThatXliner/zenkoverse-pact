@@ -10,6 +10,7 @@ import { opening, blow, type CutsceneDef } from '../../cutscene/cutscene';
 import { surfaceAt } from '../../audio/surfaces';
 import { GROUP_WORLD } from '../../physics/world';
 import { wetStone } from '../../drills/wetStone';
+import { kindle } from '../ignition';
 
 // Electro (wiki: Electro, Energy family). Any energy in, only electricity
 // out: a blow, fire, the user's own body. The output is the hard part. A
@@ -412,9 +413,11 @@ function conduct(g: Game, starts: { n: Node; from: THREE.Vector3; power: number 
   return out;
 }
 
-// A spark that reaches the Kuroda's waiting fuel lights it, his or not.
+// A spark lights fuel where it lands: the Kuroda's waiting pour, his or not,
+// and any vapour lying there (src/techniques/ignition.ts).
 function igniteNear(g: Game, at: THREE.Vector3): void {
   for (const e of g.encounters.enemies) if (e.alive && e.igniteFuel(at, 1.8) > 0) g.audio.play('electro.ignite', { at });
+  kindle(at, 1.2);
 }
 
 // ---------------------------------------------------------------- the Abilities

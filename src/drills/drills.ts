@@ -15,7 +15,9 @@ import type { Enemy } from '../combat/enemies';
 // A tier pays in `gains` (added, with diminishing returns) or `raises` (the
 // stat stands at least that high once the tier is cleared, and clearing it
 // again adds nothing).
-export interface DrillTier { name: string; count: number; interval: number; pass: number; gains?: Partial<Record<MasteryStat, number>>; raises?: Partial<Record<MasteryStat, number>>; dropHeight?: number; window?: number }
+// `paced`: the next item comes a moment after the last is decided, instead of
+// on the rhythm, for a drill whose items take as long as the student needs.
+export interface DrillTier { name: string; count: number; interval: number; pass: number; gains?: Partial<Record<MasteryStat, number>>; raises?: Partial<Record<MasteryStat, number>>; dropHeight?: number; window?: number; paced?: boolean }
 export interface DrillItem {
   // Points once the item is decided, null while it is still live.
   update(dt: number): number | null;
@@ -165,6 +167,7 @@ export class Drills {
       if (pts === null) continue;
       c.live.splice(i, 1);
       this.score(pts);
+      if (t.paced && !c.live.length) c.timer = Math.min(c.timer, FIRST_ITEM * 2);
     }
     this.refresh();
     if (c.spawned >= t.count && c.live.length === 0) this.finish();

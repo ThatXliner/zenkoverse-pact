@@ -383,6 +383,37 @@ export const SYNTHS = {
     thump.connect(hit({ ...v, t: out ? v.t : v.t + dur - 0.01 }, n(p, 'thump', 0.6), 0.004, 0.22));
     return dur + 0.22;
   },
+  // Gas let out of a body or a bung: a soft breathy hiss that flutters, low
+  // and dark, nothing like a fire's crackle. `flutter` is how fast it wavers.
+  vent(v: Voice, p: SynthParams): number {
+    const dur = n(p, 'dur', 0.6);
+    const src = noiseSource(v, 'pink', dur);
+    const bp = filter(v, 'bandpass', n(p, 'f', 900) * v.pitch, n(p, 'q', 0.9));
+    if (p.glide) bp.frequency.exponentialRampToValueAtTime(p.glide * v.pitch, v.t + dur);
+    const wobble = v.ctx.createGain();
+    wobble.gain.value = 0.7;
+    const lfo = osc(v, 'sine', n(p, 'flutter', 7), dur);
+    const depth = v.ctx.createGain();
+    depth.gain.value = 0.3;
+    lfo.connect(depth).connect(wobble.gain);
+    src.connect(bp).connect(wobble).connect(hit(v, n(p, 'gain', 0.5), n(p, 'attack', 0.08), dur));
+    return dur;
+  },
+  // Vapour catching all at once: a deflagration. The air thumps as the
+  // flame front opens (a low-pass sweeping up through brown noise), then a
+  // ragged roar that dies away. `size` scales its weight and length.
+  whump(v: Voice, p: SynthParams): number {
+    const size = n(p, 'size', 1), dur = 0.35 + 0.5 * size;
+    const src = noiseSource(v, 'brown', dur);
+    const lp = filter(v, 'lowpass', 120 * v.pitch, 1.2);
+    lp.frequency.exponentialRampToValueAtTime((900 + 900 * size) * v.pitch, v.t + 0.07);
+    lp.frequency.exponentialRampToValueAtTime(220 * v.pitch, v.t + dur);
+    src.connect(lp).connect(hit(v, n(p, 'gain', 0.9), 0.012, dur));
+    const o = osc(v, 'sine', 70 + 20 / size, dur * 0.6);
+    o.frequency.exponentialRampToValueAtTime(32 * v.pitch, v.t + dur * 0.6);
+    o.connect(hit(v, n(p, 'gain', 0.9) * 0.7 * Math.min(1, size), 0.01, dur * 0.6));
+    return dur;
+  },
 } satisfies Record<string, (v: Voice, p: SynthParams) => number>;
 
 const plucks = new Map<string, AudioBuffer>();

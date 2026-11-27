@@ -34,6 +34,7 @@ interface Standing {
   zones: Zone[];
   water: { pts: Pt[]; y: number }[];
   waters: FreezableWater[];
+  flames: THREE.Vector3[];
   started: number;
   slices: number;
   worstSlice: number;
@@ -120,7 +121,7 @@ export class Regions {
     this.scene.add(group);
     const physics = new RegionPhysics(this.physicsWorld, def.origin);
     const lights = new RegionLights(this.lightPool, def.origin);
-    const s: Standing = { def, state: 'building', group, physics, lights, gen: null, content: null, zones: [], water: [], waters: [], started: performance.now(), slices: 0, worstSlice: 0, phase: 'start', phases: {} };
+    const s: Standing = { def, state: 'building', group, physics, lights, gen: null, content: null, zones: [], water: [], waters: [], flames: [], started: performance.now(), slices: 0, worstSlice: 0, phase: 'start', phases: {} };
     s.gen = def.build({ group, physics, lights, origin: def.origin.clone(), props: this.props, assets: this.assets, phase: (name) => { s.phase = name; } });
     this.all.set(def.id, s);
     this.note({ id: def.id, event: 'start', at: s.started });
@@ -143,6 +144,7 @@ export class Regions {
     s.waters = (c.waters ?? []).map((w): FreezableWater => (w.kind === 'channel'
       ? { ...w, x0: w.x0 + o.x, x1: w.x1 + o.x, z0: w.z0 + o.z, z1: w.z1 + o.z, surfaceY: w.surfaceY + o.y }
       : { ...w, center: w.center.clone().add(o), surfaceY: w.surfaceY + o.y }));
+    s.flames = (c.flames ?? []).map((f) => f.clone().add(o));
     s.state = 'standing';
     s.group.visible = true;
     this.note({ id: s.def.id, event: 'stand', at: performance.now(), ms: performance.now() - s.started, slices: s.slices, worstSlice: s.worstSlice });
@@ -271,6 +273,13 @@ export class Regions {
   get waters(): FreezableWater[] {
     const out = this.isStanding('home') ? [...this.home.waters] : [];
     for (const s of this.standing()) if (s.def.id !== 'home') out.push(...s.waters);
+    return out;
+  }
+
+  // Open flames at standing height, in every region drawn now.
+  get flames(): THREE.Vector3[] {
+    const out = this.isStanding('home') ? [...this.home.flames] : [];
+    for (const s of this.standing()) if (s.def.id !== 'home') out.push(...s.flames);
     return out;
   }
 

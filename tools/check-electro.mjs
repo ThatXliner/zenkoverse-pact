@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 // Proves Electro's rules in play and saves frame strips of every Ability
 // from the top-down camera and over the shoulder (issue #19). A discharge
-// needs a route: nothing in reach keeps the charge; a touch, a pot, the pond
-// and a frost patch's meltwater carry it, and the pond takes everyone in it,
-// the caster too. A pot the current ends in holds it for the next body.
+// runs as a chain to where it is aimed, as the preview shows it, paying
+// charge for each metre of air past a short free gap and stopping short when
+// it runs out; bodies on the line are stung, the end takes the blow. Routes
+// make it stronger: a touch, a pot, the pond and a frost patch's meltwater
+// carry it, and the pond takes everyone in it, the caster too. Charge also
+// comes from blows taken and from running. The last section plays the same
+// moments with the real cursor, button and keys in the top-down view. A pot the current ends in holds it for the next body.
 // Impact Conversion turns only the blow that lands in its moment into
 // charge, and only so much of it. Self-Supply strains the body and stops
 // when it is spent. Spamming a discharge can't hold a body: its seize runs
@@ -32,8 +36,15 @@ const check = (ok, what) => { if (!ok) failures.push(what); console.log(`  ${ok 
 const api = (fn, ...a) => page.evaluate(([f, ...rest]) => { const g = window.game; return new Function('g', 'a', `return (${f})(g, ...a)`)(g, rest); }, [fn.toString(), ...a]);
 const step = (n) => api((g, n) => g.step(n, 1 / 60), n);
 
+// In by the title with real keys: Begin takes the focus, Enter opens the
+// Technique select, Electro is picked and the tutorial skipped by clicks.
 await page.goto(`${url}?debug`);
 await page.waitForFunction(() => window.game?.game?.ready, null, { timeout: 180000 });
+await page.waitForFunction(() => document.activeElement?.textContent === 'Begin', null, { timeout: 20000 });
+await page.keyboard.press('Enter');
+await page.locator('.card', { hasText: 'Electro' }).click();
+await page.getByRole('button', { name: 'Skip tutorial' }).click();
+await page.waitForFunction(() => window.game.state() === 'explore', null, { timeout: 10000 });
 await api((g) => g.loop(false));
 
 // A fresh scene: Electro in hand, god mode, the catalogue Pacts bound.
@@ -86,15 +97,68 @@ async function strip(name, frames, every = 3, start) {
 
 const P = await api((g) => { const p = g.game.world.pond; return { x: p.center.x, z: p.center.z, r: p.radius, y: p.surfaceY }; });
 
-// ------------------------------------------------------------------ routes
-console.log('\na discharge needs a route');
+// ------------------------------------------------------------------ the chain
+console.log('\na discharge runs to where it is aimed, as far as the charge carries it');
 await fresh();
 await body([0, 0, 2.5]);
 await api((g) => { g.game.techniques.resource = 60; });
 await face([0, 1, 2.5]);
 await cast('primary'); await fire(); await step(20);
-let s = await api((g) => ({ res: g.game.techniques.resource, hp: g.game.encounters.enemies[0].hp }));
-check(s.res > 58 && s.hp >= 70, `with nothing in reach the charge stays (${s.res.toFixed(1)} of 60) and the body 4.5 m off is untouched`);
+let s = await api((g) => ({ res: g.game.techniques.resource, hp: g.game.encounters.enemies[0].hp, last: g.electro().last }));
+check(s.hp < 50 && s.last.ended === 'body', `the body 4.5 m off at the crosshair takes it (${s.hp.toFixed(0)} left, ended on ${s.last.ended})`);
+check(s.last.cost > 0 && 60 - s.res > 30, `past the free gap the air costs charge (${s.last.cost.toFixed(1)} for the air, ${(60 - s.res).toFixed(1)} spent)`);
+await fresh([0, 0, 9], 'top');
+for (const at of [[0.3, 0, 5.2], [-0.4, 0, 1.4], [0.2, 0, -2.2], [3.2, 0, 1.5]]) await body(at);
+await api((g) => { g.game.techniques.resource = 100; });
+await face([0.2, 0, -2.2]);
+await step(4);
+const shown = await api((g) => g.electro().aim);
+await cast('primary'); await fire(); await step(20);
+let hps = await hp();
+s = await api((g) => g.electro().last);
+check(!!shown && shown.ends === 'body' && shown.routes.filter((r) => r === 'body').length === 3, `top-down, the preview shows the chain through three bodies to the one at the cursor (${shown?.routes.join(', ')} → ${shown?.ends})`);
+check(shown && Math.abs(shown.length - s.length) < 0.6, `the cast runs where the preview showed (${shown?.length.toFixed(1)} vs ${s.length.toFixed(1)} m)`);
+check(hps[0] < 70 && hps[1] < 70 && hps[2] < hps[0] && hps[3] === 70, `the bodies on the line are stung, the end takes the blow, the one off the line is spared (${hps})`);
+check(await api((g) => g.electro().seizing > 0 && g.electro().scorches > 0), 'the bodies it ran through lock up, and it scorches the floor under them');
+await fresh([0, 0, 9], 'top');
+await body([0, 0, -6]);
+await api((g) => { g.game.techniques.resource = 14; });
+await face([0, 0, -6]);
+await step(4);
+const short = await api((g) => g.electro().aim);
+await cast('primary'); await fire(); await step(20);
+s = await api((g) => g.electro().last);
+check(short && short.length < short.wanted - 2 && s.ended === 'floor' && (await hp())[0] === 70, `short of charge, the preview and the chain stop short of the cursor (${short?.length.toFixed(1)} of ${short?.wanted.toFixed(1)} m) and the body there is untouched`);
+await fresh([0, 0, 7], 'top');
+await api((g) => { g.game.techniques.resource = 60; });
+await face([1, 0, 1]);
+await cast('primary'); await fire(); await step(10);
+s = await api((g) => g.electro().last);
+check(s.ended === 'floor' && Math.abs(s.length - s.wanted) < 0.3, `with nothing at the cursor it strikes the floor there (${s.length.toFixed(1)} m)`);
+// Routes make it stronger: the same blow through two pots lands harder than through air.
+const throughPots = async (pots) => {
+  await fresh([0, 0, 9], 'top');
+  if (pots) await api((g) => { const G = g.game, V = G.player.position.constructor; window.__spawned.push(G.props.spawn('pot', new V(0, 0.05, 5.0)), G.props.spawn('pot', new V(0.2, 0.05, 1.6))); });
+  await body([0, 0, -1.6]);
+  await api((g) => { g.game.techniques.resource = 100; });
+  await face([0, 0, -1.6]);
+  await cast('primary'); await fire(); await step(20);
+  return { hp: (await hp())[0], last: await api((g) => g.electro().last) };
+};
+const bare = await throughPots(false), potted = await throughPots(true);
+check(potted.hp < bare.hp && potted.last.cost < bare.last.cost, `through two pots it costs less and lands harder (${70 - bare.hp} through air for ${bare.last.cost.toFixed(1)}, ${70 - potted.hp} through metal for ${potted.last.cost.toFixed(1)})`);
+
+console.log('\ncharge comes in more ways than the two Abilities');
+await fresh([0, 0, 7]);
+await api((g) => { g.god(false); g.game.combat.invuln = 0; });
+const struck = await api((g) => { const G = g.game, V = G.player.position.constructor; const r0 = G.techniques.resource; G.combat.hurtPlayer(16, { from: new V(0, 1, 5.6), kinetic: true }); return G.techniques.resource - r0; });
+check(struck >= 7, `a blow taken unready still leaves charge in the body (${struck.toFixed(1)})`);
+await fresh([0, 0, 7], 'top');
+await page.keyboard.down('KeyW'); await page.keyboard.down('ShiftLeft');
+await step(150);
+await page.keyboard.up('ShiftLeft'); await page.keyboard.up('KeyW');
+const stat = await api((g) => g.game.techniques.resource);
+check(stat > 6 && stat <= 30.5, `running builds static, as far as static goes (${stat.toFixed(1)} after two and a half seconds)`);
 
 for (const view of ['third', 'top', 'first']) {
   await fresh([0, 0, 7], view);
@@ -288,8 +352,11 @@ for (const key of ['thug', 'kuroda']) {
       e.position.set(0, e.position.y, 5.7); e.hp = e.maxHp;
       G.techniques.resource = 100;
       G.techniques.cast('primary');
+      // Measured in game time: a hit-stop holds the body and its hold together.
+      const t0 = G.clock.time;
       g.step(1);
-      if (e.frozen > 0) { frozenFor += 1 / 60; run += 1 / 60; longest = Math.max(longest, run); free = 0; } else { run = 0; free += 1 / 60; longestFree = Math.max(longestFree, free); }
+      const dt = G.clock.time - t0;
+      if (e.frozen > 0) { frozenFor += dt; run += dt; longest = Math.max(longest, run); free = 0; } else { run = 0; free += dt; longestFree = Math.max(longestFree, free); }
     }
     return { frozenFor, longest, longestFree };
   });
@@ -478,6 +545,85 @@ for (const view of ['third', 'top']) {
   s = await api((g) => ({ res: g.game.techniques.resource, active: g.game.cutscenes.active }));
   check(s.res === 0 && !s.active, `${view}: it spends every bit of Charge and hands the camera back`);
 }
+
+// ------------------------------------------------------------------ played
+// The same moments as a player meets them: top-down, the real cursor moved
+// over the target, the real left button and keys. Each strip starts on the
+// aim preview, then runs from the frame the cast lands. Each is saved whole
+// and as a full-size crop round the player.
+console.log('\nplayed with the mouse, top-down');
+const cursorTo = async (at) => {
+  for (let i = 0; i < 4; i++) {
+    const [x, y] = await api((g, p) => { const v = new (g.game.player.position.constructor)(...p).project(g.game.renderer.camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; }, at);
+    await page.mouse.move(x, y);
+    await step(12);
+  }
+};
+const press = async (key) => { if (key === 'Mouse0') { await page.mouse.down(); await step(1); await page.mouse.up(); } else { await page.keyboard.down(key); await step(1); await page.keyboard.up(key); } };
+async function played(name, frames, every, start, { fired = true, pre = 1 } = {}) {
+  if (!shots) { if (start) await start(); await step(frames * every); return; }
+  const tiles = [], crops = [];
+  const grab = async () => {
+    const shot = await page.screenshot({ animations: 'disabled' });
+    const [px, py] = await api((g) => { const v = g.game.player.position.clone().setY(g.game.player.position.y + 1).project(g.game.renderer.camera); return [(v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight]; });
+    const left = Math.round(Math.min(1280 - 640, Math.max(0, px - 320))), top = Math.round(Math.min(720 - 360, Math.max(0, py - 200)));
+    tiles.push(await sharp(shot).resize(640, 360).png().toBuffer());
+    crops.push(await sharp(shot).extract({ left, top, width: 640, height: 360 }).png().toBuffer());
+  };
+  for (let i = 0; i < pre; i++) { await grab(); await step(4); }
+  if (start) await start();
+  if (fired) await fire();
+  for (let i = 0; i < frames; i++) { await grab(); await step(every); }
+  for (const [suffix, set] of [['', tiles], ['-close', crops]]) {
+    const file = join(out, `${name}${suffix}.png`);
+    await sharp({ create: { width: 640 * 4, height: 360 * Math.ceil(set.length / 4), channels: 3, background: '#000' } }).composite(set.map((b, i) => ({ input: b, left: (i % 4) * 640, top: Math.floor(i / 4) * 360 }))).png().toFile(file);
+    strips.push(file);
+  }
+}
+await fresh([0, 0, 9], 'top');
+for (const at of [[0.3, 0, 5.2], [-0.4, 0, 1.4], [0.2, 0, -2.2], [3.2, 0, 1.5]]) await body(at);
+await api((g) => { g.game.techniques.resource = 100; });
+await cursorTo([0.2, 1, -2.2]);
+await played('played-chain', 11, 3, () => press('Mouse0'));
+hps = await hp();
+check(hps[2] < 40 && hps[3] === 70, `a click at the far body runs the chain to it (${hps})`);
+await fresh([0, 0, 7], 'top');
+await body([0, 0, 5.2]);
+await api((g) => { g.game.techniques.resource = 60; });
+await cursorTo([0, 1, 5.2]);
+await played('played-close', 11, 3, () => press('Mouse0'));
+check((await hp())[0] < 40, 'a click on a body a pace off lands the whole blow');
+await fresh([0, 0, 9], 'top');
+await api((g) => { const G = g.game, V = G.player.position.constructor; window.__spawned.push(G.props.spawn('pot', new V(0, 0.05, 5.0)), G.props.spawn('pot', new V(0.2, 0.05, 1.6))); });
+await body([0, 0, -1.6]);
+await body([1.3, 0, -1.0]);
+await api((g) => { g.game.techniques.resource = 100; });
+await cursorTo([0, 1, -1.6]);
+await played('played-metal', 11, 3, () => press('Mouse0'));
+hps = await hp();
+check(hps.every((h) => h < 70), `through the pots to the body beyond, and on from it to its neighbour (${hps})`);
+await fresh([P.x, 0.25, P.z + 4.2], 'top');
+for (const at of [[P.x + 0.9, -0.9, P.z - 0.7], [P.x - 1.3, -0.9, P.z + 0.9], [P.x + 0.2, -0.9, P.z + 1.6], [P.x - 0.4, -0.9, P.z - 1.8], [P.x + 0.3, 0, P.z - 4.4]]) await body(at);
+await api((g) => { g.game.techniques.resource = 100; });
+await cursorTo([P.x + 0.3, 1, P.z - 4.4]);
+await played('played-water', 11, 3, () => press('Mouse0'));
+hps = await hp();
+check(hps.every((h) => h < 70), `across the pond: everyone in the water and the body beyond (${hps})`);
+await fresh([0, 0, 7], 'top');
+await cursorTo([0, 1, 4]);
+await played('played-charging', 8, 14, () => press('Digit1'), { fired: false, pre: 0 });
+for (let i = 0; i < 2; i++) { await press('Digit1'); await step(70); }
+await played('played-charged', 4, 6, null, { fired: false, pre: 0 });
+check(await api((g) => g.game.techniques.resource > 60), 'three draws on the body hold over sixty Charge');
+await fresh([P.x, 0.25, P.z + 3.6], 'top');
+for (const at of [[P.x + 0.3, -0.9, P.z + 1.9], [P.x - 1.3, -0.9, P.z - 0.9], [P.x + 1.2, -0.9, P.z - 1.6], [P.x + 2.4, 0, P.z + 3.6]]) await body(at);
+await api((g) => { g.game.techniques.resource = 100; g.game.techniques.charge = 1; });
+await cursorTo([P.x, 1, P.z]);
+await played('played-circuit', 16, 10, () => press('KeyQ'), { fired: false, pre: 0 });
+await step(60);
+await played('played-circuit-after', 4, 15, null, { fired: false, pre: 0 });
+hps = await hp();
+check(hps.slice(0, 3).every((h) => h < 20), `Closed Circuit, played: the bodies in the pond are spent (${hps})`);
 
 console.log(`\nstrips:\n${strips.map((f) => `  ${f}`).join('\n')}`);
 if (errors.length) { console.log(`\nerrors:\n  ${errors.slice(0, 10).join('\n  ')}`); failures.push(`${errors.length} page errors`); }

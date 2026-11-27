@@ -109,6 +109,13 @@ export const CUES = {
   'electro.supply': net([Y('heartbeat', { gain: 0.55 }), Y('buzz', { dur: 0.7, f: 80, band: 700, attack: 0.5 }, { gain: 0.25 }), S('powerUp9', 0.22, { pitch: 0.6 })]),
   'electro.spent': net([Y('heartbeat', { gain: 0.75 }), S('glitch_001', 0.3, { pitch: 0.7 }), Y('tone', { f: 220, glide: 90, dur: 0.4, lp: 600 }, { gain: 0.18 })]),
   'electro.ignite': net([Y('zap', { dur: 0.1, count: 6 }, { gain: 0.5 }), Y('whoosh', { dur: 0.5, f0: 200, f1: 1200, peak: 0.2 }, { gain: 0.6 }), Y('rumble', { dur: 1.0, lp: 500 }, { gain: 0.45 })], { wet: 0.3 }),
+  // A snap with nowhere to go: the air takes it a pace and no further.
+  'electro.gap': net([Y('crack', { dur: 0.04, hp: 4200 }, { gain: 0.55 }), Y('zap', { dur: 0.14, count: 9, hp: 3600 }, { gain: 0.5 }), S('tick_001', 0.3, { pitch: 1.2 })]),
+  // A heavy discharge landing: the crack in front, the thunder under it.
+  'electro.thunder': net([Y('crack', { dur: 0.08, hp: 1800 }, { gain: 0.9 }), S('zapTwoTone', 0.6, { pitch: 0.6, vary: 0.08 }), Y('zap', { dur: 0.5, count: 34, hp: 1400 }, { gain: 0.8 }), Y('boom', { f0: 120, f1: 36, dur: 0.9 }, { gain: 0.8, w: 0.8 })], { wet: 0.5, duck: 0.4, every: 0.06 }),
+  // A body locked by the current, and metal still holding it.
+  'electro.seize': net([Y('buzz', { dur: 0.5, f: 70, band: 1800 }, { gain: 0.35 }), Y('zap', { dur: 0.45, count: 18, hp: 2600 }, { gain: 0.45 })], { every: 0.15 }),
+  'electro.hum': sfx([Y('buzz', { dur: 0.45, f: 100, band: 900 }, { gain: 0.22 }), Y('zap', { dur: 0.2, count: 3, hp: 4500 }, { gain: 0.18 })], { every: 0.4 }),
   'electro.max.cast': sfx([Y('riser', { dur: 1.2, f0: 120, f1: 3600, tone: 0.3 }, { gain: 0.4 }), Y('buzz', { dur: 1.2, f: 50, band: 600, attack: 1.0 }, { gain: 0.3 })]),
   'electro.max.charge': sfx([Y('riser', { dur: 1.0, f0: 120, f1: 4200, tone: 0.35 }, { gain: 0.45 }), Y('buzz', { dur: 1.1, f: 50, band: 900, attack: 0.9 }, { gain: 0.4 }), Y('zap', { dur: 1.0, count: 26, hp: 3000 }, { gain: 0.35 })], { duck: 0.6 }),
   'electro.max.inhale': sfx([Y('inhale', { dur: 0.45, f1: 7000 }, { gain: 0.5 }), Y('buzz', { dur: 0.45, f: 100, band: 2400, attack: 0.4 }, { gain: 0.3 })]),

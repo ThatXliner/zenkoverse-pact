@@ -216,7 +216,7 @@ export function Workshop({ game }: { game: Game }) {
           {pact && isDraft && (
             <div class="actions">
               <button class="btn quiet" onClick={() => { book.deleteDraft(pact.id); selectedId.value = null; }}>Discard draft</button>
-              <button class={`btn ${tutorial && restrictions(pact).length ? 'primary pulse' : ''}`} disabled={!valid.ok} onClick={() => tryIt(pact)}>Try it on the dummies</button>
+              <button class={`btn ${tutorial && restrictions(pact).length ? 'primary pulse' : ''}`} disabled={!valid.ok || game.inRealFight} onClick={() => tryIt(pact)}>{game.inRealFight ? 'Finish this fight to try it' : 'Try it on the dummies'}</button>
               <button class={`btn ${tutorial ? '' : 'primary'}`} disabled={!valid.ok} onClick={() => setConfirm(true)}>Inscribe</button>
             </div>
           )}

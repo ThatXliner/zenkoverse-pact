@@ -25,6 +25,7 @@
     "check:navigation": "node tools/check-navigation.mjs",
     "check:regen-online": "node tools/check-regen-online.mjs",
     "check:rooftop": "node tools/check-rooftop.mjs",
+    "check:scenes": "node tools/check-scenes.mjs",
     "check:sign": "node tools/check-sign.mjs",
     "check:tints": "node tools/check-tints.mjs",
     "check:wagers": "node tools/check-wagers.mjs",

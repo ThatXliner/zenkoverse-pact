@@ -240,7 +240,12 @@ export class Net {
           const kind = m.kind as keyof typeof kit.gestures;
           // A Maximum Output's sign is already playing, from its start.
           // Their cast's sound comes over the effects wire, placed at them.
-          if (kind !== 'max') r.avatar.perform(pick(kit.gestures[kind] ?? kit.gestures.primary!, m.variant), m.speed);
+          if (kind !== 'max') {
+            const gesture = pick(kit.gestures[kind] ?? kit.gestures.primary!, m.variant);
+            r.avatar.perform(gesture, m.speed);
+            // An open field senses it: the same wind-up, read as where and when.
+            g.aura.senseBlow(r, m.dir, gesture.impactAt / m.speed);
+          }
           if (m.shout && m.name) this.game.techniques.declarations.shout(m.name, () => (r.disposed ? null : r.position.clone().add(new THREE.Vector3(0, 2.25, 0))), kit.color);
         });
         return;
@@ -427,7 +432,7 @@ export class Net {
       if (now - this.lastSend >= SEND_MS - 2) {
         this.lastSend = now;
         const s = g.techniques.sign;
-        this.send({ type: 'state', s: { ct: now, p: v3(g.player.position), v: v3(g.player.velocity), yaw: Math.round(g.bodyYaw * 1000) / 1000, pitch: g.cam.isTop ? 0 : Math.round(g.cam.pitch * 1000) / 1000, g: g.player.grounded, sign: s.kind === 'signing' || g.cutscenes.sealing ? 1 : s.kind === 'primed' ? 2 : 0, cine: g.cutscenes.active, f: [Math.round(g.aura.field.radius * 100) / 100, Math.round(g.aura.field.density * 100) / 100], e: eyeCode(g.combat.eye) } });
+        this.send({ type: 'state', s: { ct: now, p: v3(g.player.position), v: v3(g.player.velocity), yaw: Math.round(g.bodyYaw * 1000) / 1000, pitch: g.cam.isTop ? 0 : Math.round(g.cam.pitch * 1000) / 1000, g: g.player.grounded, sign: s.kind === 'signing' || g.cutscenes.sealing ? 1 : s.kind === 'primed' ? 2 : 0, cine: g.cutscenes.active, f: [Math.round(g.aura.field.radius * 100) / 100, Math.round(g.aura.field.density * 100) / 100, Math.round(g.aura.pushLimit * 100) / 100], e: eyeCode(g.combat.eye) } });
       }
     } else this.fx.take();
     this.props.update(raw);

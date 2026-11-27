@@ -32,8 +32,9 @@
 //   an untrained player who answers her tells wins too;
 //   a refined field pushed into her edge from just outside clashes as it is,
 //   nearly as dense as the layer, wins the ties, and then presses her.
-// It saves the field from the top-down and over-the-shoulder views (the body
-// layer, pushed out mid-hold, and wide) and the clash at its tell and its
+// It saves the field from the top-down, over-the-shoulder and first-person
+// views (the body layer, round the arms in first person, pushed out mid-hold,
+// and wide) and the clash at its tell and its
 // reveal.
 // Usage: node tools/check-aura.mjs [url] [--out captures/aura] [--port 4173]
 // Without a URL it serves dist/ itself (run `npm run build` first).
@@ -213,12 +214,16 @@ check(rt > 0.6 && near(shapes[1].tap.reach, LAYER, 1e-6) && near(shapes[1].tap.d
 check(near(shapes[1].wide.radius, wideReach, 0.3) && near(shapes[1].tap.radius, LAYER, 0.05), `the drawn field matches (${shapes[1].tap.radius.toFixed(2)} m and ${shapes[1].wide.radius.toFixed(1)} m)`);
 
 console.log('\nthe shapes on screen');
-for (const view of ['top', 'shoulder']) {
-  const cam = () => page.evaluate((v) => { const g = window.game; g.teleport([-1, 0, 8]); g.game.player.yaw = 0; if (v === 'top') g.camera('top'); else { g.camera('third'); g.look(0, -0.3); } g.step(40); }, view);
+// The layer's rim round the first-person arms: hulls drawn over the arms' meshes.
+const armRims = () => page.evaluate(() => { let n = 0; window.game.game.hands.root.traverse((o) => { if (o.userData.auraField && o.visible) n++; }); return n; });
+for (const view of ['top', 'shoulder', 'first']) {
+  const cam = () => page.evaluate((v) => { const g = window.game; g.teleport([-1, 0, 8]); g.game.player.yaw = 0; if (v === 'top') g.camera('top'); else if (v === 'first') { g.camera('first'); g.look(0, -0.1); } else { g.camera('third'); g.look(0, -0.3); } g.step(40); }, view);
   await fresh(0.7);
   await cam();
+  if (view === 'first') check((await armRims()) === 0, 'in first person, with no field open, nothing is drawn round the arms');
   await press('KeyF');
   await step(50);
+  if (view === 'first') check((await armRims()) > 0, `in first person, the body layer outlines the arms (${await armRims()} rims)`);
   await shot(`shape-layer-${view}`);
   await fresh(0.7);
   await cam();

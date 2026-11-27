@@ -41,8 +41,9 @@ export interface PlayerState {
   sign: 0 | 1 | 2;
   // In a Maximum Output cutscene, as caster or target: drawn glowing, held in place.
   cine: boolean;
-  // The aura field as drawn: radius in metres (0 when there is none) and density 0..1.
-  f?: [number, number];
+  // The aura field as drawn: radius in metres (0 when there is none), density
+  // 0..1, and while it is being pushed out, the radius it can reach (0 otherwise).
+  f?: [radius: number, density: number, limit?: number];
   // The installed Eye, as its place in EYE_IDS plus one (src/eyes/registry.ts), 0 for none.
   e?: number;
 }

@@ -12,9 +12,14 @@
 //   the same steps and winner; C keeps walking the whole time; the loser's
 //   field collapses and nobody loses health; then C leaves mid-clash with A
 //   and A wins it by forfeit;
+//   A pushes a field out and B draws the push as A does (the pulse, the line
+//   of the full push, the arms held out) until it commits; inside A's field,
+//   B's blow shows A a lit lane through its wind-up, and with no field, or
+//   only the body layer, nothing is sensed;
 //   the server restarts and both rejoin on their own (local server only);
 //   B leaves and disappears from A's screen.
-// It saves both screens at the hit, the down and the clash for review.
+// It saves both screens at the hit, the down and the clash, B's view of A's
+// push and A's view of a sensed blow, for review.
 // Usage: node tools/check-multiplayer.mjs [url] [--latency 120] [--out captures/multiplayer] [--port 4181]
 // Without a URL it serves dist/ through server/index.mjs (run `npm run build`
 // first); --latency delays every realtime message in each direction.
@@ -497,6 +502,71 @@ const lb = (await auraOf(B)).clash.log.filter((x) => x.ev.kind === 'end').at(-1)
 check(lb && lb.ev.reason === 'forfeit', 'B, watching, hears the forfeit');
 await wait(1200);
 check((await auraOf(A)).clash.stage === null && (await auraOf(A)).state === 'open', "A is released, field still open");
+
+console.log('\na field pushed out, seen from the other screen');
+// A holds F with B watching from 6 m: B draws the push as A's own screen
+// does (the pulse, the line of the full push, the arms held out), and lets it
+// go when A commits.
+await A.api((g) => { if (g.game.aura.field.open) g.game.aura.retract(); g.auraReady(); g.teleport([-3, 0, 6]); });
+await B.api((g) => { if (g.game.aura.field.open) g.game.aura.retract(); g.auraReady(); g.camera('top'); g.teleport([3, 0, 6]); });
+await wait(1000 * slack);
+const pushSeen = (p, id) => p.api((g, id) => { const r = g.game.net.remotes.get(id); return r ? { push: r.fieldPush, limit: r.fieldLimit, radius: r.fieldRadius, stance: r.avatar.stance } : null; }, id);
+await A.page.keyboard.down('KeyF');
+const pushes = [];
+let shotPush = false;
+for (let t1 = Date.now(); Date.now() - t1 < 1000; await wait(60)) {
+  const v = await pushSeen(B, idA);
+  if (v) pushes.push(v);
+  if (!shotPush && v?.push > 0.8 && v.radius > 3) { await shot(B, 'push-watched'); shotPush = true; }
+}
+const pushedA = await auraOf(A);
+await A.page.keyboard.up('KeyF');
+const peak = pushes.reduce((m, v) => (v.push > m.push ? v : m), { push: 0, limit: 0, radius: 0, stance: null });
+check(pushedA.pushing && peak.push > 0.8 && peak.limit > 7.5, `B draws A's push with its pulse and the line of the full push (push ${peak.push.toFixed(2)}, line at ${peak.limit.toFixed(1)} m)`);
+check(pushes.some((v) => v.stance === 'push'), "B sees A's arms held out while pushing");
+await wait(900 * slack);
+const settledA = await pushSeen(B, idA);
+check(settledA && settledA.push < 0.1 && settledA.stance === null && settledA.radius > 3, `once A commits, B draws a settled field (push ${settledA?.push.toFixed(2)}, ${settledA?.radius.toFixed(1)} m, stance ${settledA?.stance})`);
+
+console.log("\nA's field senses B's blows");
+// B steps inside A's pushed-out field, 3 m south of A, and throws a raw
+// primary at A: A's screen lights the lane along B's aim through the wind-up.
+// Without a field, or in the body layer, nothing is sensed.
+const sensed = () => A.api((g) => g.game.aura.sensedCount);
+const throwAtA = async () => {
+  await B.api((g) => { g.game.techniques.resource = g.game.techniques.def.resource.max; });
+  await B.page.mouse.move(480, 170);
+  await wait(200);
+  await B.page.mouse.down(); await B.page.mouse.up();
+};
+await A.api((g) => g.camera('top'));
+await B.api((g) => g.teleport([-3, 0, 9]));
+await wait(1200 * slack);
+const fieldA = await auraOf(A);
+const s0 = await sensed();
+await throwAtA();
+let s1 = s0;
+for (let t1 = Date.now(); Date.now() - t1 < 1500 * slack && s1 === s0; await wait(30)) s1 = await sensed();
+const lane = await A.api((g) => g.game.aura.sensedBlows.map((s) => s.mark.mat.uniforms.fill.value));
+if (s1 > s0) await shot(A, 'sensed');
+check(fieldA.state === 'open' && fieldA.radius > 3.5 && s1 === s0 + 1, `A's ${fieldA.radius.toFixed(1)} m field senses B's blow from 3 m (${s1 - s0} sensed)`);
+check(lane.length === 1 && lane[0] > 0.3, `A sees it as a lit lane through the wind-up (${lane.map((l) => l.toFixed(2)).join(', ') || 'none live'})`);
+await wait(1400);
+await A.api((g) => g.game.aura.retract());
+await wait(300);
+const s2 = await sensed();
+await throwAtA();
+await wait(1200 + latency * 2);
+check((await sensed()) === s2, "with no field open, B's blow is not sensed");
+await A.api((g) => g.auraReady());
+await A.page.keyboard.press('KeyF');
+await B.api((g) => g.teleport([-3, 0, 6.8]));
+await wait(900 * slack);
+const s3 = await sensed();
+await throwAtA();
+await wait(1200 + latency * 2);
+check((await auraOf(A)).radius < 0.7 && (await sensed()) === s3, "the body layer senses nothing, even at arm's length");
+await A.api((g) => { if (g.game.aura.field.open) g.game.aura.retract(); g.auraReady(); });
 
 if (restart) {
   console.log('\nthe server restarts');

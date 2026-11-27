@@ -228,6 +228,13 @@ export class Hands {
   stop(): void { this.clock.stop(); }
   get playing(): boolean { return this.clock.gesture !== null; }
 
+  // The right hand's middle fingertip in the hands camera's own space (x
+  // right, y up, -z ahead), for an effect that leaves the hand on screen.
+  fingertip(out: THREE.Vector3): THREE.Vector3 {
+    this.rig.arms.r.tips.middle.getWorldPosition(out);
+    return this.camera.worldToLocal(out);
+  }
+
   step(speed: number): void { this.landDip = Math.min(this.landDip + 0.004 * Math.min(1, speed / 6), 0.02); }
   land(v: number): void { this.landDip += Math.min(0.09, v * 0.012); }
   jump(): void { this.jumpLift = 0.05; }

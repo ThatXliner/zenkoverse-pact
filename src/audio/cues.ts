@@ -103,6 +103,9 @@ export const CUES = {
   'electro.jump': net([Y('zap', { dur: 0.1, count: 8, hp: 2800 }, { gain: 0.5 }), S('zapTwoTone', 0.18, { pitch: 1.3, vary: 0.1 })], { every: 0.03 }),
   'electro.water': net([Y('splash', { size: 0.8, bubbles: 3 }, { gain: 0.5 }), Y('zap', { dur: 0.45, count: 30, hp: 1800 }, { gain: 0.7 }), Y('buzz', { dur: 0.5, f: 100, band: 1200 }, { gain: 0.25 })], { wet: 0.4 }),
   'electro.metal': net([S(v('impactMetal_light_', 2), 0.45, { pitch: 1.3, vary: 0.1 }), Y('zap', { dur: 0.15, count: 10, hp: 3500 }, { gain: 0.5 }), Y('shimmer', { f: 1320, dur: 0.4 }, { gain: 0.06 })], { every: 0.04 }),
+  // The held line: a hum laid end to end while the key is down, and its sputter as the Charge runs out.
+  'electro.current': net([Y('buzz', { dur: 0.5, f: 110, band: 1400, attack: 0.04 }, { gain: 0.26 }), Y('zap', { dur: 0.25, count: 5, hp: 4200 }, { gain: 0.16 })], { every: 0.4 }),
+  'electro.sputter': net([Y('zap', { dur: 0.3, count: 6, hp: 3800 }, { gain: 0.4 }), Y('tone', { f: 180, glide: 60, dur: 0.35, lp: 700 }, { gain: 0.16 }), S('glitch_001', 0.25, { pitch: 1.2 })]),
   'electro.crackle': net([Y('zap', { dur: 0.1, count: 4, hp: 5000 }, { gain: 0.22 })], { every: 0.08 }),
   'electro.converted': net([S(v('impactPlate_heavy_', 2), 0.45, { pitch: 1.3 }), Y('buzz', { dur: 0.4, f: 90, band: 1400 }, { gain: 0.3 }), Y('zap', { dur: 0.2, count: 10 }, { gain: 0.45 })], { wet: 0.3 }),
   'electro.backlash': net([S('glitch_001', 0.45, { pitch: 0.9 }), Y('zap', { dur: 0.35, count: 24, hp: 1500 }, { gain: 0.75 }), Y('buzz', { dur: 0.4, f: 55, band: 700 }, { gain: 0.35 })]),

@@ -9,7 +9,10 @@ import { kindle, wireKindle } from '../techniques/ignition';
 // afterimages, from the same calls. The pool is wrapped, not changed, so a
 // kit never knows whether anyone is watching. The Techniques' sounds travel
 // the same way (`sfx`) and play on the other screens at the caster.
-const MIRRORED = ['ring', 'burst', 'flash', 'trail', 'patch', 'iceSpike', 'afterimage', 'steam', 'melt', 'flames', 'arc', 'seam'] as const;
+const MIRRORED = ['ring', 'burst', 'flash', 'trail', 'patch', 'iceSpike', 'afterimage', 'steam', 'melt', 'flames', 'arc', 'seam', 'current'] as const;
+// A held current is redrawn every frame here, but travels 20 times a second:
+// the latest call stands for the ones between. Letting go always travels.
+const CURRENT_MS = 50;
 type Mirrored = (typeof MIRRORED)[number];
 
 type Wire = { v: [number, number, number] } | { self: 1 } | number | string | null | Wire[];
@@ -41,6 +44,7 @@ export class FxWire {
   private calls: FxCall[] = [];
   private replaying = false;
   private originals = new Map<Mirrored, (...a: unknown[]) => unknown>();
+  private currentAt = -Infinity;
 
   constructor(private vfx: Vfx, private audio: Audio) {
     audio.mirror = (cue, at, gain, pitch) => {
@@ -56,10 +60,22 @@ export class FxWire {
       const original = pool[f].bind(vfx);
       this.originals.set(f, original);
       pool[f] = (...a: unknown[]) => {
-        if (!this.replaying && this.calls.length < 64) this.calls.push({ f, a: a.map(encode) });
+        if (f === 'current') this.current(a);
+        else if (!this.replaying && this.calls.length < 64) this.calls.push({ f, a: a.map(encode) });
         return original(...a);
       };
     }
+  }
+
+  // The hand it leaves is the body's on the other screens, so `from` (this
+  // screen's first-person hand) stays here.
+  private current(a: unknown[]): void {
+    if (this.replaying) return;
+    const now = performance.now(), letGo = !(Number(a[5]) > 0);
+    if (!letGo && now - this.currentAt < CURRENT_MS) return;
+    this.currentAt = now;
+    this.calls = this.calls.filter((c) => c.f !== 'current');
+    if (this.calls.length < 64) this.calls.push({ f: 'current', a: a.slice(0, 6).map(encode) });
   }
 
   // The calls recorded since the last take.

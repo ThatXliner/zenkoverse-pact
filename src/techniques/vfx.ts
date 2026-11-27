@@ -17,6 +17,19 @@ interface Timer { left: number; fire(): void }
 // edge, the colour and a white-hot core drawn over each other in one mesh.
 interface Arc { glow: THREE.Mesh; body: THREE.Mesh; glowMat: THREE.MeshBasicMaterial; bodyMat: THREE.MeshBasicMaterial; color: THREE.Color; from: THREE.Vector3; to: THREE.Vector3; life: number; max: number; width: number; jag: number; forks: number; next: number }
 interface Held { left: number; end(): void }
+// A current held from a body's hand (Electro's right click): one live bolt
+// through `pts`, re-kinked every few frames and moved to its ends every
+// frame between. Its owner keeps it alive by calling again before `left`
+// runs out. Without `from` it starts at the owner's right hand and eases to
+// new ends, as it does on another screen where the calls come 20 times a second.
+interface Current {
+  owner: THREE.Object3D; hand: THREE.Object3D | null; from: THREE.Vector3 | null;
+  want: THREE.Vector3[]; pts: THREE.Vector3[];
+  // The path as last kinked, and the ends it was kinked between, per stretch.
+  paths: { a: THREE.Vector3; b: THREE.Vector3; paths: BoltPath[] }[]; splash: BoltPath[];
+  glow: THREE.Mesh; body: THREE.Mesh; glowMat: THREE.MeshBasicMaterial; bodyMat: THREE.MeshBasicMaterial;
+  color: THREE.Color; width: number; power: number; left: number; fade: number; next: number; light: PointSource;
+}
 // A seam in space (Dark Dimension): an almond of black with a rim of colour,
 // cut open from a slit, held, and pinched shut. It faces the camera unless
 // it is given a face of its own.
@@ -38,6 +51,7 @@ export class Vfx {
   private marks: Mark[] = [];
   private glints: Glint[] = [];
   private arcs: Arc[] = [];
+  private currents = new Map<THREE.Object3D, Current>();
   private seams: Seam[] = [];
   private seamGeo = almond();
   private markGeo = new THREE.PlaneGeometry(1, 1);
@@ -79,7 +93,7 @@ export class Vfx {
 
   // How many effects are alive, for the checks that prove a restart leaves none.
   get live(): number {
-    return this.particles.length + this.rings.length + this.trails.length + this.flashes.length + this.patches.length + this.spikes.length + this.timers.length + this.held.length + this.marks.length + this.glints.length + this.arcs.length + this.seams.length;
+    return this.particles.length + this.rings.length + this.trails.length + this.flashes.length + this.patches.length + this.spikes.length + this.timers.length + this.held.length + this.marks.length + this.glints.length + this.arcs.length + this.seams.length + this.currents.size;
   }
 
   // Ends every effect now: a new run, a new Technique, or leaving a scene
@@ -97,6 +111,8 @@ export class Vfx {
     for (const g of this.glints.splice(0)) { this.scene.remove(g.sprite); g.sprite.material.dispose(); }
     for (const a of this.arcs.splice(0)) this.dropArc(a);
     for (const s of this.seams.splice(0)) this.dropSeam(s);
+    for (const c of this.currents.values()) this.dropCurrent(c);
+    this.currents.clear();
   }
 
   private dropSeam(s: Seam): void { this.scene.remove(s.root); for (const m of s.mats) m.dispose(); }
@@ -168,6 +184,110 @@ export class Vfx {
     a.glow.geometry = boltGeometry(paths, [{ width: a.width * 3.4, color: a.color, alpha: 1 }], eye);
     a.body.geometry.dispose();
     a.body.geometry = boltGeometry(paths, [{ width: a.width * 2.1, color: INK, alpha: 1 }, { width: a.width * 1.35, color: a.color, alpha: 1 }, { width: a.width * 0.55, color: WHITE, alpha: 1 }], eye);
+  }
+
+  // Keeps `owner`'s live current running through `pts` (the last is where
+  // it ends) for `hold` more seconds; 0 ends it now. `power` 0..1 is how
+  // much it carries: low, it thins and gutters. `from` is where it leaves the
+  // hand, when the caller knows better than the body's bone (first person).
+  current(owner: THREE.Object3D, pts: THREE.Vector3[], color: number, width: number, power: number, hold: number, from?: THREE.Vector3): void {
+    let c = this.currents.get(owner);
+    if (hold <= 0) { if (c) c.left = 0; return; }
+    if (!pts.length) return;
+    if (!c) {
+      const mesh = (mat: THREE.MeshBasicMaterial, order: number): THREE.Mesh => {
+        const m = new THREE.Mesh(new THREE.BufferGeometry(), mat);
+        m.renderOrder = order;
+        m.frustumCulled = false;
+        this.scene.add(m);
+        return m;
+      };
+      const glowMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: GLOW_PEAK * 1.6, side: THREE.DoubleSide, depthWrite: false, depthTest: false, toneMapped: false, blending: THREE.AdditiveBlending });
+      const bodyMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, side: THREE.DoubleSide, depthWrite: false, depthTest: false, toneMapped: false });
+      const light = this.lights.add<PointSource>({ kind: 'point', urgent: true, position: pts.at(-1)!.clone(), color: new THREE.Color(color).lerp(WHITE, 0.5), intensity: 0, distance: 7, decay: 2 });
+      c = { owner, hand: owner.getObjectByName('hand_r') ?? null, from: null, want: [], pts: [], paths: [], splash: [], glow: mesh(glowMat, 23), body: mesh(bodyMat, 24), glowMat, bodyMat, color: new THREE.Color(color), width, power, left: hold, fade: 1, next: 0, light };
+      this.currents.set(owner, c);
+    }
+    c.from = from?.clone() ?? null;
+    c.want = pts.map((p) => p.clone());
+    // Here the caller draws it every frame: it goes where it is told at once.
+    // Over the wire it eases there, and snaps only on a new stretch.
+    if (c.from || c.pts.length !== c.want.length) c.pts = c.want.map((p) => p.clone());
+    c.color.set(color);
+    c.width = width;
+    c.power = power;
+    c.left = hold;
+    c.fade = 1;
+  }
+
+  // Where each live current starts and ends now, for the checks.
+  get liveCurrents(): { from: [number, number, number]; to: [number, number, number]; power: number }[] {
+    const v = (p: THREE.Vector3): [number, number, number] => [p.x, p.y, p.z];
+    return [...this.currents.values()].filter((c) => c.left > 0).map((c) => ({ from: v(this.currentStart(c)), to: v(c.pts.at(-1)!), power: c.power }));
+  }
+
+  private currentStart(c: Current): THREE.Vector3 {
+    if (c.from) return c.from.clone();
+    if (c.hand) return c.hand.getWorldPosition(new THREE.Vector3());
+    return c.owner.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 1.2, 0));
+  }
+
+  private dropCurrent(c: Current): void {
+    for (const m of [c.glow, c.body]) { this.scene.remove(m); m.geometry.dispose(); }
+    c.glowMat.dispose(); c.bodyMat.dispose();
+    this.lights.remove(c.light);
+  }
+
+  private tickCurrent(c: Current, dt: number): boolean {
+    if (c.left <= 0) {
+      // Let go: it gutters out in a few frames.
+      c.fade -= dt / 0.07;
+      if (c.fade <= 0 || !c.owner.parent) return false;
+    } else c.left -= dt;
+    if (!c.from) { const k = 1 - Math.exp(-30 * dt); c.pts.forEach((p, i) => p.lerp(c.want[i]!, k)); }
+    const start = this.currentStart(c);
+    const stops = [start, ...c.pts];
+    // A new path every few frames; between them the old one is carried along
+    // to the ends as they move, so it follows the hand and the aim each frame.
+    if ((c.next -= dt) <= 0 || c.paths.length !== c.pts.length) {
+      c.next = 0.035 + Math.random() * 0.035;
+      c.paths = c.pts.map((b, i) => {
+        const a = stops[i]!;
+        const len = a.distanceTo(b);
+        const paths = boltPaths(a, b, 0.11 + Math.random() * 0.06, len > 5 ? 2 : len > 2 ? 1 : 0).map((p, k) => ({ ...p, flat: k === 0 }));
+        // A second, finer strand wound round the first.
+        if (len > 0.6) paths.push({ pts: boltPaths(a, b, 0.2, 0)[0]!.pts, w: 0.42, flat: true });
+        return { a: a.clone(), b: b.clone(), paths };
+      });
+      // Where it lands it splashes: short forks off the end.
+      const end = c.pts.at(-1)!;
+      c.splash = Array.from({ length: 3 }, () => boltPaths(end, end.clone().add(new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.5, Math.random() - 0.5).normalize().multiplyScalar(0.3 + Math.random() * 0.45)), 0.3, 0)[0]!).map((p) => ({ ...p, w: 0.5 }));
+    }
+    const drawn: BoltPath[] = [];
+    const q = new THREE.Quaternion(), d0 = new THREE.Vector3(), d1 = new THREE.Vector3();
+    c.paths.forEach((seg, i) => {
+      const a = stops[i]!, b = stops[i + 1]!;
+      const l0 = seg.a.distanceTo(seg.b) || 1e-3, l1 = a.distanceTo(b);
+      q.setFromUnitVectors(d0.subVectors(seg.b, seg.a).normalize(), d1.subVectors(b, a).normalize());
+      for (const p of seg.paths) drawn.push({ ...p, pts: p.pts.map((x) => x.clone().sub(seg.a).applyQuaternion(q).multiplyScalar(l1 / l0).add(a)) });
+    });
+    const end = c.pts.at(-1)!, was = c.paths.at(-1)!.b;
+    for (const p of c.splash) drawn.push({ ...p, pts: p.pts.map((x) => x.clone().sub(was).add(end)) });
+    const eye = this.viewer?.camera.position ?? start.clone().add(new THREE.Vector3(0, 10, 0));
+    // It crackles: thicker and thinner frame to frame, and low on charge it drops out in flickers.
+    const surge = 0.85 + Math.random() * 0.3;
+    const out = Math.random() < (1 - c.power) * 0.4 ? 0.15 : 1;
+    const w = c.width * (0.55 + 0.45 * c.power) * surge;
+    c.glow.geometry.dispose();
+    c.glow.geometry = boltGeometry(drawn, [{ width: w * 4.6, color: c.color, alpha: 1 }], eye);
+    c.body.geometry.dispose();
+    c.body.geometry = boltGeometry(drawn, [{ width: w * 2.5, color: INK, alpha: 1 }, { width: w * 1.7, color: c.color, alpha: 1 }, { width: w * 0.75, color: WHITE, alpha: 1 }], eye);
+    const shown = c.fade * out;
+    c.bodyMat.opacity = shown;
+    c.glowMat.opacity = GLOW_PEAK * 1.6 * shown * (0.7 + Math.random() * 0.6);
+    c.light.position.copy(end).lerp(start, 0.3);
+    c.light.intensity = shown * (10 + 14 * c.power) * (0.6 + Math.random() * 0.8);
+    return true;
   }
 
   private dropMark(m: Mark): void { this.scene.remove(m.root); m.mat.dispose(); m.state = 'gone'; }
@@ -466,6 +586,7 @@ export class Vfx {
       a.glowMat.opacity = GLOW_PEAK * flicker;
       if ((a.next -= dt) <= 0) { a.next = 0.045; this.redrawArc(a); }
     }
+    for (const [owner, c] of this.currents) if (!this.tickCurrent(c, dt)) { this.dropCurrent(c); this.currents.delete(owner); }
     for (let i = this.seams.length - 1; i >= 0; i--) {
       const s = this.seams[i]!;
       s.life -= dt;
@@ -503,7 +624,8 @@ const GLOW_PEAK = 0.22;
 // Bolts alive at once, at most: a Closed Circuit through a crowd asks for many.
 const MAX_ARCS = 180;
 
-interface BoltPath { pts: THREE.Vector3[]; w: number }
+// `flat`: the same width all along, not thinning toward its end.
+interface BoltPath { pts: THREE.Vector3[]; w: number; flat?: boolean }
 
 // A unit almond (vesica), long along x: the shape of a seam cut in space.
 function almond(): THREE.BufferGeometry {
@@ -561,7 +683,7 @@ function boltGeometry(paths: BoltPath[], layers: { width: number; color: THREE.C
   const idx: number[] = [];
   const s = new THREE.Vector3(), d = new THREE.Vector3(), to = new THREE.Vector3();
   for (const layer of layers) {
-    for (const { pts, w: pw } of paths) {
+    for (const { pts, w: pw, flat } of paths) {
       const base = pos.length / 3;
       for (let i = 0; i < pts.length; i++) {
         const p = pts[i]!;
@@ -569,7 +691,7 @@ function boltGeometry(paths: BoltPath[], layers: { width: number; color: THREE.C
         d.normalize();
         // Seen from far off (the top-down camera) a bolt keeps a readable width; up close (a cutscene) it thins.
         const far = THREE.MathUtils.clamp(eye.distanceTo(p) / 6, 0.45, 2.6);
-        const w = layer.width * 0.5 * far * pw * (pw === 1 ? 1 - 0.35 * (i / pts.length) : 1 - i / pts.length);
+        const w = layer.width * 0.5 * far * pw * (flat ? 1 : pw === 1 ? 1 - 0.35 * (i / pts.length) : 1 - i / pts.length);
         s.crossVectors(d, to.subVectors(eye, p)).normalize().multiplyScalar(w);
         pos.push(p.x + s.x, p.y + s.y, p.z + s.z, p.x - s.x, p.y - s.y, p.z - s.z);
         for (let k = 0; k < 2; k++) col.push(layer.color.r, layer.color.g, layer.color.b, layer.alpha);

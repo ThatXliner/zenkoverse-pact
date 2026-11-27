@@ -46,7 +46,7 @@ export function shorten(long: Gesture, factor = 0.5): Gesture {
 export function flick(long: Gesture): Gesture {
   const last = long.keys[long.keys.length - 1];
   const impactKey = long.keys.reduce((best, k) => (Math.abs(k.t - long.impactAt) < Math.abs(best.t - long.impactAt) ? k : best), long.keys[0]!);
-  return { duration: 0.22, impactAt: 0.06, hold: long.hold, holds: long.holds, keys: [{ t: 0, left: impactKey.left, right: impactKey.right, snap: true, camera: impactKey.camera, event: impactKey.event }, { t: 0.16, left: last?.left, right: last?.right }] };
+  return { duration: 0.22, impactAt: Math.min(0.06, long.impactAt), hold: long.hold, holds: long.holds, keys: [{ t: 0, left: impactKey.left, right: impactKey.right, snap: true, camera: impactKey.camera, event: impactKey.event }, { t: 0.16, left: last?.left, right: last?.right }] };
 }
 
 export function variants(long: Gesture): GestureSet {

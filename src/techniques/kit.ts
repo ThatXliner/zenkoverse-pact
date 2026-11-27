@@ -32,7 +32,9 @@ export interface TechniqueKit {
   breadth: number;
   // The sound word lettered over its heavy hits, as a manga panel would.
   sfx: string;
-  resource: { name: string; max: number; regen: number; startsFull: boolean; free?: AbilityKind[] };
+  // `holdDrain`: the share of `max` a held Ability spends each second while
+  // its key is down (0.12 when unset); 0 when the kit spends it itself.
+  resource: { name: string; max: number; regen: number; startsFull: boolean; free?: AbilityKind[]; holdDrain?: number };
   // The key the Technique strikes with; the other main key is its reserve.
   // The primary when unset (Electro strikes with the secondary).
   strikes?: 'primary' | 'secondary';
@@ -42,7 +44,9 @@ export interface TechniqueKit {
   // `short` is the HUD's few words on what a key does, in sentence case.
   primitive: { name: string; short: string; description: string };
   parameters: Param[];
-  shapes: Record<string, { label: string; short: string; kinds: AbilityKind[]; description: string }>;
+  // A `held` shape runs while its key is down, whatever Pact grants it, and
+  // for at least `held` seconds from its impact, so a tap still reads.
+  shapes: Record<string, { label: string; short: string; kinds: AbilityKind[]; description: string; held?: number }>;
   behaviors: Record<string, string>;
   catalogue: Pact[];
   // Keyed by kind; a shape may have its own, which it plays instead.

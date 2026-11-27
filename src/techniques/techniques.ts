@@ -36,7 +36,8 @@ import { CarriedTool } from './tool';
 
 export const KITS: Record<TechniqueId, TechniqueKit> = { recoil, shift, rime, blink, echo, heat, tension, electro, friction, dark, fuel };
 
-interface Cast { slot: KeySlot; ctx: AbilityContext; t: number; impactAt: number; duration: number; fired: boolean; held: boolean; result?: CastResult | void }
+// `atLeast`: a held cast runs this long past its impact even if the key is already up.
+interface Cast { slot: KeySlot; ctx: AbilityContext; t: number; impactAt: number; duration: number; fired: boolean; held: boolean; atLeast: number; result?: CastResult | void }
 
 // The full hand sign (issue #42). Alt starts it; nothing cancels it. While
 // signing the player is rooted and cannot cast or open the Workshop.
@@ -316,11 +317,11 @@ export class Techniques {
     const gesture = pick(gestureSet, variant);
     // Inside an open aura field the player senses and acts faster (issue #4).
     const speed = (1 + g.mastery.get(this.def.id, 'speed') * 0.7) * (variant === 'long' ? 1 : 1.15) * g.aura.castSpeed;
-    const held = restriction(pact ?? ({ clauses: [] } as unknown as Pact), 'duration') === 'held' || !!(!pact && kind === 'secondary' && this.def.effects.hold);
+    const held = restriction(pact ?? ({ clauses: [] } as unknown as Pact), 'duration') === 'held' || !!(!pact && kind === 'secondary' && this.def.effects.hold) || this.def.shapes[shape]?.held !== undefined;
     // A Maximum Output's sign is already playing in its cutscene, timed to this beat.
     const cut = kind === 'max' && g.cutscenes.active;
     if (!cut) this.perform(gesture, speed);
-    this.cast_ = { slot, ctx, t: 0, impactAt: gesture.impactAt / speed, duration: gesture.duration / speed, fired: false, held };
+    this.cast_ = { slot, ctx, t: 0, impactAt: gesture.impactAt / speed, duration: gesture.duration / speed, fired: false, held, atLeast: this.def.shapes[shape]?.held ?? 0 };
     if (!cut) g.audio.play(this.def.audio[shape] ?? this.def.audio[kind], { pitch: variant === 'none' ? 1.15 : 1 });
     this.cooldown[slot] = KIND_DEFS[kind].cooldown;
     if (kind === 'max') this.charge = 0;
@@ -437,8 +438,8 @@ export class Techniques {
       c.t += dt;
       if (!c.fired && c.t >= c.impactAt) this.fire(c);
       if (c.fired && c.held) {
-        const down = inp.isDown(c.slot);
-        if (down && this.resource > 0) { this.def.effects.hold?.(c.ctx, dt); this.resource = Math.max(0, this.resource - dt * this.def.resource.max * 0.12); }
+        const down = inp.isDown(c.slot) || c.t < c.impactAt + c.atLeast;
+        if (down && this.resource > 0) { this.def.effects.hold?.(c.ctx, dt); this.resource = Math.max(0, this.resource - dt * this.def.resource.max * (this.def.resource.holdDrain ?? 0.12)); }
         else { this.def.effects.release?.(c.ctx); this.stopGesture(); this.cast_ = null; }
       } else if (c.t >= c.duration) this.cast_ = null;
     }

@@ -64,7 +64,7 @@ export class Combat {
   // (`stop`), may go through a field's reinforcement (`pierce`) and carry
   // extra posture damage to a boss (`poise`), letters its own word and
   // colour on a heavy hit, and trains no Technique.
-  hitEnemy(e: Enemy, amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number; kind?: 'kinetic' | 'cold' | 'pulse' | 'resonance' | 'cut' | 'heat' | 'shock'; heavy?: boolean; stagger?: boolean; melee?: MeleeWeight; stop?: number; pierce?: boolean; poise?: number; word?: string; color?: number } = {}): number {
+  hitEnemy(e: Enemy, amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number; kind?: 'kinetic' | 'cold' | 'pulse' | 'resonance' | 'cut' | 'heat' | 'shock'; heavy?: boolean; stagger?: boolean; melee?: MeleeWeight; stop?: number; pierce?: boolean; poise?: number; word?: string; color?: number; tick?: boolean } = {}): number {
     const g = this.game;
     // A Wager's harder strike, on the blows of the cast that declared it (src/techniques/wagers.ts).
     const wager = g.techniques.wagers.boost;
@@ -79,6 +79,13 @@ export class Combat {
     this.eyes.landed(e, final);
     g.drills.struck(e, final);
     this.quiet = 0;
+    // A tick of a held current (Electro's line) is one of many a second: it
+    // shows its number but leaves the stop, the shake and the thud to the kit.
+    if (opts.tick && !opts.heavy) {
+      this.number(e.center(), String(final), m > 1.1 ? '#ffb0ff' : '#f3eee4', false);
+      if (e.isBoss) combatUi.boss.value = { name: e.def.title ?? e.def.name, frac: Math.max(0, e.hp / e.maxHp), color: e.def.emissive ?? 0xff6a1a };
+      return final;
+    }
     g.audio.hit(final, e.center());
     this.number(e.center(), String(final), wager > 1 ? '#ffd34d' : m > 1.1 ? '#ffb0ff' : '#f3eee4', final >= 40);
     // Hit-stop by the blow's weight: a jab catches for a frame or two, a

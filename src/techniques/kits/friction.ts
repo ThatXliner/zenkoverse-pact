@@ -297,8 +297,11 @@ function tickSlide(g: Game, s: Slide, dt: number): Footing {
   const dir = flatOf(p.velocity);
   soleMarks(g, s, dt);
   // Whatever stands in the way takes the speed: the body is bowled over and
-  // the slider loses most of what it had.
-  if (sp > 4) {
+  // the slider loses most of what it had. Not while the hands are reaching
+  // for a grab: the grab takes the body instead, and the speed with it.
+  const c = g.techniques.current;
+  const reaching = !!c && !c.fired && c.ctx.shape === 'grip';
+  if (sp > 4 && !reaching) {
     for (const e of g.techniques.enemiesInSphere(p.position, 1.15)) {
       // A body in the slider's own grip rides along; it is not bowled over.
       if (s.hit.has(e) || e.state === 'knocked' || e.gripped > 0 || Math.abs(e.position.y - p.position.y) > 1.2) continue;

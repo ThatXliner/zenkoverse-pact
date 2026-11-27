@@ -384,12 +384,12 @@ await page.evaluate(() => { const g = window.game; g.game.encounters.reset(); g.
 console.log('\nrefinement and potential');
 const pot = await page.evaluate(() => {
   const G = window.game.game;
-  const ids = ['blink', 'recoil', 'rime', 'shift', 'echo'];
+  const ids = ['blink', 'recoil', 'rime', 'shift', 'echo', 'heat'];
   return Object.fromEntries(ids.map((t) => [t, { potential: G.aura.potential(t), breadth: G.aura.breadth(t), pacts: G.aura.pacts(t) }]));
 });
 console.log(`    ${Object.entries(pot).map(([t, p]) => `${t} ${Math.round(p.potential * 100)} (breadth ${p.breadth}, ${p.pacts} Pacts)`).join(', ')}`);
 const same = Object.entries(pot).filter(([, p]) => p.pacts === pot.rime.pacts).sort((x, y) => x[1].breadth - y[1].breadth);
-check(same.length >= 3 && same.every(([, p], i) => i === 0 || p.potential < same[i - 1][1].potential), `with the same Pact count, a broader Technique has lower potential (${same.map(([t]) => t).join(' > ')})`);
+check(same.length >= 3 && same.every(([, p], i) => i === 0 || (p.breadth > same[i - 1][1].breadth ? p.potential < same[i - 1][1].potential : p.potential === same[i - 1][1].potential)), `with the same Pact count, a broader Technique has lower potential (${same.map(([t]) => t).join(' > ')})`);
 const extra = await page.evaluate(() => {
   const G = window.game.game;
   const before = G.aura.potential();

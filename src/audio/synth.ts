@@ -227,6 +227,20 @@ export const SYNTHS = {
     src.connect(bp).connect(hit(v, n(p, 'gain', 0.6), 0.004, dur));
     return dur;
   },
+  // Heat meeting water or skin: a high hiss with a crackle of pops in it.
+  // `hp` sets how high it hisses (lower is a fire's roar), `pops` how many pops.
+  sizzle(v: Voice, p: SynthParams): number {
+    const dur = n(p, 'dur', 0.8);
+    const src = noiseSource(v, 'white', dur);
+    const hp = filter(v, 'highpass', n(p, 'hp', 3500) * v.pitch, 0.7);
+    const crackle = v.ctx.createGain();
+    crackle.gain.setValueAtTime(0.55, v.t);
+    const pops = Math.round(n(p, 'pops', dur * 28));
+    const times = Array.from({ length: pops }, () => v.t + Math.random() * dur).sort((a, b) => a - b);
+    for (const t of times) { crackle.gain.setValueAtTime(0.55 + Math.random() * 1.4, t); crackle.gain.setTargetAtTime(0.5, t + 0.001, 0.005); }
+    src.connect(hp).connect(crackle).connect(hit(v, n(p, 'gain', 0.4), n(p, 'attack', 0.015), dur));
+    return dur;
+  },
   // Water: a slap of noise and a couple of bubbles.
   splash(v: Voice, p: SynthParams): number {
     const size = n(p, 'size', 1);

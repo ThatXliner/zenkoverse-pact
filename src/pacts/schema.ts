@@ -6,7 +6,7 @@
 import { SLOTS, slotAccepts, slotDef, type AbilitySlot, type AbilityKind } from './slots';
 import { DECLARATIONS, DECLARE, REWARDS, FORFEITS, FORFEIT, MAX_PARTS, wagerError, upgradeWager, type WagerTerms } from './wager';
 
-export type TechniqueId = 'recoil' | 'shift' | 'rime' | 'blink' | 'echo';
+export type TechniqueId = 'recoil' | 'shift' | 'rime' | 'blink' | 'echo' | 'heat';
 export type Param = 'direction' | 'range' | 'target' | 'trigger' | 'duration' | 'resource' | 'body';
 
 export type Direction = 'front' | 'declared' | 'ground' | 'line' | 'behind';
@@ -74,7 +74,7 @@ export function valuesFor(param: Param, technique: TechniqueId): readonly string
 }
 
 export const RISK_COSTS: readonly RiskCost[] = ['health', 'exhaustion', 'seal'];
-export const TECHNIQUE_IDS: readonly TechniqueId[] = ['recoil', 'shift', 'rime', 'blink', 'echo'];
+export const TECHNIQUE_IDS: readonly TechniqueId[] = ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat'];
 
 export interface Validation { ok: boolean; errors: string[] }
 

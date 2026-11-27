@@ -18,6 +18,7 @@
     "check:effects": "node tools/check-effects.mjs",
     "check:eyes": "node tools/check-eyes.mjs",
     "check:freeze": "node tools/check-freeze.mjs",
+    "check:heat": "node tools/check-heat.mjs",
     "check:hud": "node tools/check-hud.mjs",
     "check:keybinds": "node tools/check-keybinds.mjs",
     "check:knockdown": "node tools/check-knockdown.mjs",

@@ -54,6 +54,13 @@ const STAGED: Partial<Record<PoseName, { pos: [number, number, number]; rot?: [n
   kuji: { pos: [0.03, -0.22, -0.3] },
   fistToPalm: { pos: [0.05, -0.25, -0.32] },
   veilEyes: { pos: [0.08, -0.04, -0.22] },
+  emberCup: { pos: [0.24, -0.46, -0.24] },
+  seize: { pos: [0.09, -0.18, -0.8] },
+  crossBlock: { pos: [-0.05, 0.0, -0.36] },
+  kilnRaise: { pos: [0.58, -0.14, -0.18] },
+  twinPalm: { pos: [0.07, -0.26, -0.78] },
+  sealRubUp: { pos: [0.03, -0.22, -0.3] },
+  sealRubDown: { pos: [0.03, -0.31, -0.3] },
 };
 const BODY_POSES = Object.fromEntries(Object.entries(POSES).map(([name, pose]) => {
   const st = STAGED[name as PoseName];

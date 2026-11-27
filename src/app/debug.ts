@@ -14,6 +14,8 @@ import type { TechniqueId } from '../techniques/kit';
 import type { PoseName, HandPose } from '../hands/poses';
 import { MASTERY_CONFIG } from '../mastery/mastery';
 import { postsView } from '../drills/strikingPosts';
+import { heatState, setBodyHeat, quenchView } from '../techniques/kits/heat';
+import { freezePond } from '../techniques/kits/rime';
 import { netUi } from '../net/net';
 import { clashUi } from '../combat/clash';
 import { setSetting, type Settings } from './settings';
@@ -43,6 +45,11 @@ export interface DebugApi {
   posts(): ReturnType<typeof postsView>;
   // Ends a running drill without judging it, back to explore.
   quitDrill(): void;
+  // Heat's body heat and what it has burning, as the checks read them; `body`
+  // sets the body heat. `quench` is the lit piece in the Quench drill.
+  heat(body?: number): ReturnType<typeof heatState> & { quench: ReturnType<typeof quenchView> };
+  // Lays Rime's ice on the pond for `seconds`, as another player's Cold Stitch does online.
+  ice(seconds: number): void;
   // Regen and the passive ceiling as the checks read them.
   training(): { passiveCeiling: number; regen: typeof RULES.regen; quiet: number; mending: boolean };
   workshop(open: boolean): void;
@@ -159,6 +166,8 @@ export function installDebug(game: Game): void {
     encounter(id) { game.encounters.begin(id, true); },
     drill(id) { game.drills.begin(id, true); },
     posts() { return postsView(); },
+    ice(seconds) { freezePond(game, seconds); },
+    heat(body) { if (body !== undefined) setBodyHeat(body); return { ...heatState(), quench: quenchView() }; },
     quitDrill() { game.drills.abandon(); if (appState.value.kind === 'drill') setState({ kind: 'explore' }); },
     training() { return { passiveCeiling: MASTERY_CONFIG.passiveCeiling, regen: RULES.regen, quiet: game.combat.quiet, mending: combatUi.mending.value }; },
     workshop(open) { if (open) game.openWorkshop(); else game.closeWorkshop(); },

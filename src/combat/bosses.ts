@@ -75,6 +75,16 @@ export class Fuse {
   // The pools not burning yet.
   get waiting(): THREE.Vector3[] { return this.pools.filter((p) => !p.lit).map((p) => p.at); }
 
+  // Someone else's heat reaches a pool still waiting to burn: it goes up now,
+  // and burns whoever stands in it, him included. How many pools it lit.
+  light(at: THREE.Vector3, radius: number): number {
+    if (this.done) return 0;
+    let n = 0;
+    for (const p of this.pools) if (!p.lit && p.patch && p.at.distanceTo(at) < radius + POOL * 0.5) { this.ignite(p); n++; }
+    if (this.pools.every((p) => p.lit)) this.done = true;
+    return n;
+  }
+
   // Hit out of the cast before the snap: the fuel stays, unlit and harmless.
   fizzle(): void {
     if (this.snapAt !== null) return;

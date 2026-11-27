@@ -100,6 +100,10 @@ body.top-view .hud { cursor: none; }
 .meter .track > i, .aura-meter .track > i { position: absolute; inset: 0; right: auto; background: var(--paper); transition: width 0.18s var(--ease); }
 .meter.resource .track > i { background: var(--c); }
 .meter.strain .track > i { background: #ff6b6b; }
+/* A cost kept in the body (Heat's body heat): dull red climbing to white, and a pulse past the top. */
+.meter.gauge .track > i { background: linear-gradient(90deg, #7a2a22, #e0402e 55%, #ffb25a 85%, #fff2d0); background-size: clamp(180px, 22vw, 280px) 100%; }
+.meter.gauge.over .track > i { animation: pulse 0.6s ease-in-out infinite; }
+.meter.gauge.over .lbl .jp { color: #fff2d0; }
 .meter.health.low .track > i { background: #ff5a4a; animation: pulse 0.9s ease-in-out infinite; }
 /* Health coming back out of a fight: the fill eases up, and its leading edge breathes. */
 .meter.health.mend .track > i { transition: width 0.6s linear; }

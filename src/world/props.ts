@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Assets } from '../app/assets';
 import { Physics, RAPIER, GROUP_PROP } from '../physics/world';
 import { toon, toonify } from '../render/materials';
+import { mangaShading } from '../render/tone';
 
 export type PropTrait = 'freezable' | 'resonant' | 'flammable' | 'porous' | 'kinetic-source' | 'fragile' | 'metal' | 'wood';
 
@@ -46,8 +47,27 @@ export interface PropInstance {
   hp: number;
   resonance: number;
   frozen: number;
+  // How hot it is: 0 cold, about 0.3 a dull red, 0.6 cherry, 1 white. Metal
+  // glows with it; it cools at `cools` a second (0.06 when unset).
+  heat: number;
+  cools?: number;
+  // This prop's own copies of its materials, made the first time it is
+  // heated so the glow is its alone.
+  glow?: THREE.MeshToonMaterial[];
   alive: boolean;
 }
+
+// The glow of hot metal by its heat: dull red, cherry, orange, straw, white.
+const GLOW: [number, number][] = [[0.2, 0x000000], [0.35, 0x6a0c04], [0.55, 0xc0200c], [0.75, 0xff5a10], [0.92, 0xffb040], [1.05, 0xfff2d0]];
+const SCORCHED = new THREE.Color(0x1e1614);
+const glowAt = (h: number, out: THREE.Color): THREE.Color => {
+  if (h <= GLOW[0]![0]) return out.setHex(0);
+  for (let i = 1; i < GLOW.length; i++) {
+    const [h1, c1] = GLOW[i]!, [h0, c0] = GLOW[i - 1]!;
+    if (h <= h1) return out.setHex(c0).lerp(new THREE.Color(c1), (h - h0) / (h1 - h0));
+  }
+  return out.setHex(GLOW[GLOW.length - 1]![1]);
+};
 
 // Online, who simulates which prop is decided across the room
 // (src/net/propsync.ts). Before this screen acts on a prop it touches it, so
@@ -60,6 +80,7 @@ export class PropSystem {
   authority: PropAuthority | null = null;
   private cache = new Map<string, { template: THREE.Object3D; half: THREE.Vector3; center: THREE.Vector3 }>();
   readonly byBody = new Map<number, PropInstance>();
+  private glowColor = new THREE.Color();
 
   constructor(private assets: Assets, private physics: Physics, private scene: THREE.Scene) {}
 
@@ -95,7 +116,7 @@ export class PropSystem {
     holder.rotation.y = rotationY;
     this.scene.add(holder);
     const body = this.physics.dynamicBox(holder, half, def.mass, GROUP_PROP);
-    const inst: PropInstance = { id: this.nextId++, def, key, mesh: holder, body, half: half.clone(), hp: def.breakable?.hp ?? Infinity, resonance: 0, frozen: 0, alive: true };
+    const inst: PropInstance = { id: this.nextId++, def, key, mesh: holder, body, half: half.clone(), hp: def.breakable?.hp ?? Infinity, resonance: 0, frozen: 0, heat: 0, alive: true };
     this.instances.push(inst);
     this.byBody.set(body.handle, inst);
     (body.collider(0) as RAPIER.Collider & { surfaceTag?: string }).surfaceTag = def.surface ?? (def.traits.includes('wood') ? 'wood' : 'concrete');
@@ -129,7 +150,55 @@ export class PropSystem {
         p.frozen -= dt;
         if (p.frozen <= 0) p.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
       }
+      if (p.heat > 0) {
+        p.heat = Math.max(0, p.heat - dt * (p.cools ?? 0.06));
+        this.paintHeat(p);
+      }
     }
+  }
+
+  // Hot metal glows; wood and paper only smoulder.
+  private paintHeat(p: PropInstance): void {
+    if (!p.glow) return;
+    const metal = p.def.traits.includes('metal');
+    glowAt(p.heat, this.glowColor);
+    // The paint darkens as the glow comes up, so the glow reads as the colour.
+    const dark = metal ? Math.min(1, p.heat * 1.6) : Math.min(0.6, p.heat * 0.8);
+    for (const m of p.glow) {
+      m.color.copy(m.userData.base as THREE.Color).lerp(SCORCHED, dark);
+      m.emissive.copy(this.glowColor);
+      m.emissiveIntensity = metal ? 1.6 : 0.5;
+    }
+  }
+
+  // Heats a prop by `amount`, up to a little past white.
+  warm(p: PropInstance, amount: number): void {
+    if (!p.alive) return;
+    p.heat = THREE.MathUtils.clamp(p.heat + amount, 0, 1.25);
+    if (!p.glow) {
+      p.glow = [];
+      p.mesh.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        const c = (m.material as THREE.MeshToonMaterial).clone();
+        c.userData.base = c.color.clone();
+        mangaShading(c);
+        m.material = c;
+        p.glow!.push(c);
+      });
+    }
+    this.paintHeat(p);
+  }
+
+  // Lets every hot prop go cold at once, when the effects that heated them end.
+  cool(): void { for (const p of this.instances) { p.heat = 0; this.paintHeat(p); } }
+
+  // Out of the ice now: the heat has melted it.
+  unfreeze(p: PropInstance): boolean {
+    if (!p.alive || p.frozen <= 0) return false;
+    p.frozen = 0;
+    p.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true);
+    return true;
   }
 
   find(body: RAPIER.RigidBody): PropInstance | undefined { return this.byBody.get(body.handle); }

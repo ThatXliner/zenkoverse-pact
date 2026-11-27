@@ -129,6 +129,27 @@ export const CUES = {
   'blink.max.blow': sfx([S(BELL, 0.8, { pitch: 0.5 }), S(SOFT_H, 0.8, { pitch: 0.7 }), Y('crack', { dur: 0.12 }, { gain: 0.8 }), Y('boom', { f0: 120, f1: 30, dur: 1.5 }, { gain: 1.1 }), Y('tone', { f: 4200, dur: 2.8, attack: 0.02 }, { gain: 0.07 })], { wet: 0.6, duck: 1 }),
   'blink.max.tail': net([Y('boom', { f0: 100, f1: 34, dur: 1 }, { gain: 0.7 }), Y('whoosh', { dur: 0.6, f0: 1200, f1: 200, peak: 0.1 }, { gain: 0.6 })], { wet: 0.4 }),
 
+  // ------------------------------------------------------------ Heat: any energy in, only heat out
+  'heat.cast': net([S(CLOTH, 0.3), Y('inhale', { dur: 0.24, f1: 1800 }, { gain: 0.32 }), Y('sizzle', { dur: 0.3, hp: 5200 }, { gain: 0.1 })]),
+  'heat.sear': net([S(SOFT_H, 0.45, { pitch: 0.9 }), Y('sizzle', { dur: 0.9, hp: 2800 }, { gain: 0.55 }), Y('boom', { f0: 120, f1: 45, dur: 0.4 }, { gain: 0.45 }), Y('whoosh', { dur: 0.22, f0: 500, f1: 1600, peak: 0.15 }, { gain: 0.3 })], { wet: 0.3 }),
+  'heat.whiff': net([Y('whoosh', { dur: 0.28, f0: 240, f1: 1200, peak: 0.4 }, { gain: 0.4 }), Y('sizzle', { dur: 0.35, hp: 6000 }, { gain: 0.14 })]),
+  'heat.spot': net([Y('sizzle', { dur: 0.55, hp: 4400 }, { gain: 0.32 }), Y('tone', { f: 1600, glide: 700, dur: 0.22 }, { gain: 0.035 }), Y('thud', { f: 130, dur: 0.08 }, { gain: 0.2 })], { every: 0.05 }),
+  'heat.steam': net([Y('sizzle', { dur: 1.4, hp: 1600, attack: 0.03 }, { gain: 0.6 }), Y('splash', { size: 0.6, bubbles: 3 }, { gain: 0.3 }), Y('whoosh', { dur: 0.9, f0: 500, f1: 2600, peak: 0.15 }, { gain: 0.35 })], { wet: 0.4, every: 0.15 }),
+  'heat.glow': net([S(v('impactMetal_light_', 2), 0.3, { pitch: 0.7 }), Y('tone', { f: 140, dur: 0.8, type: 1, lp: 500 }, { gain: 0.12 }), Y('sizzle', { dur: 0.5, hp: 5000 }, { gain: 0.12 })], { every: 0.08 }),
+  'heat.ignite': net([Y('whoosh', { dur: 0.6, f0: 120, f1: 900, peak: 0.3 }, { gain: 0.6 }), Y('rumble', { dur: 1.2, lp: 600, attack: 0.05 }, { gain: 0.5 }), Y('sizzle', { dur: 0.8, hp: 900, pops: 30 }, { gain: 0.3 })], { wet: 0.3, every: 0.1 }),
+  'heat.burn': net([Y('sizzle', { dur: 0.5, hp: 900, pops: 20 }, { gain: 0.22 }), Y('rumble', { dur: 0.5, lp: 380 }, { gain: 0.18 })], { every: 0.25 }),
+  'heat.convert': net([Y('inhale', { dur: 0.3, f1: 2200 }, { gain: 0.35 }), Y('tone', { f: 70, dur: 0.6, type: 1, lp: 300 }, { gain: 0.35 }), S(CLOTH, 0.3, { pitch: 0.9 })]),
+  'heat.converted': net([S(SOFT_H, 0.45, { pitch: 0.8, lp: 1200 }), Y('sizzle', { dur: 0.7, hp: 2600 }, { gain: 0.45 }), Y('thud', { f: 80, dur: 0.2 }, { gain: 0.5 })], { wet: 0.3, every: 0.05 }),
+  'heat.overrun': net([S(PUNCH_M, 0.5, { pitch: 0.9 }), Y('sizzle', { dur: 0.4, hp: 1800 }, { gain: 0.35 }), Y('crack', { dur: 0.05 }, { gain: 0.3 })], { every: 0.05 }),
+  'heat.drain': net([S(v('impactWood_medium_', 2), 0.35, { pitch: 0.8 }), Y('tone', { f: 300, glide: 80, dur: 0.4, lp: 800 }, { gain: 0.15 }), Y('sizzle', { dur: 0.3 }, { gain: 0.15 })], { every: 0.05 }),
+  'heat.vent': sfx([Y('sizzle', { dur: 1.8, hp: 1400, attack: 0.05 }, { gain: 0.45 }), Y('inhale', { dur: 0.8, f1: 900 }, { gain: 0.2 })], { every: 0.6 }),
+  'heat.overheat': sfx([Y('sizzle', { dur: 0.5, hp: 2400 }, { gain: 0.25 }), Y('tone', { f: 160, glide: 110, dur: 0.4, lp: 600 }, { gain: 0.2 })], { every: 0.4 }),
+  'heat.max.cast': sfx([Y('riser', { dur: 1.2, f0: 90, f1: 1600, tone: 0.6 }, { gain: 0.45 }), Y('sizzle', { dur: 1.2, hp: 3000, attack: 1.0 }, { gain: 0.25 })]),
+  'heat.max.charge': sfx([Y('riser', { dur: 1.0, f0: 80, f1: 2000, tone: 0.6 }, { gain: 0.5 }), Y('sizzle', { dur: 1.1, hp: 2400, attack: 0.9 }, { gain: 0.35 }), Y('rumble', { dur: 1.2, lp: 300, attack: 0.8 }, { gain: 0.35 })], { duck: 0.6 }),
+  'heat.max.inhale': sfx([Y('inhale', { dur: 0.5, f1: 6000 }, { gain: 0.55 }), Y('sizzle', { dur: 0.5, hp: 6000, attack: 0.45 }, { gain: 0.3 })]),
+  'heat.max.blow': sfx([S(SOFT_H, 1, { pitch: 0.6 }), S(MINING, 0.5, { pitch: 0.6 }), Y('crack', { dur: 0.1, hp: 1200 }, { gain: 0.7 }), Y('boom', { f0: 100, f1: 28, dur: 1.6 }, { gain: 1.1 }), Y('sizzle', { dur: 2.4, hp: 1200, attack: 0.02 }, { gain: 0.8 }), Y('rumble', { dur: 2.2, lp: 500 }, { gain: 0.7 })], { wet: 0.6, duck: 1 }),
+  'heat.max.tail': net([Y('sizzle', { dur: 2.2, hp: 1500, attack: 0.05 }, { gain: 0.55 }), Y('rumble', { dur: 1.6, lp: 420 }, { gain: 0.6 }), Y('whoosh', { dur: 1.2, f0: 300, f1: 2000, peak: 0.2 }, { gain: 0.35 })], { wet: 0.5 }),
+
   // ------------------------------------------------------------ props and bodies
   'prop.wood': net([S(v('impactWood_heavy_', 2), 0.6, { vary: 0.1 }), Y('thud', { f: 100, dur: 0.12 }, { gain: 0.3 })], { wet: 0.3, every: 0.05 }),
   'prop.metal': net([S(v('impactMetal_heavy_', 2), 0.55, { vary: 0.1 }), Y('shimmer', { f: 340, dur: 0.6 }, { gain: 0.08 })], { wet: 0.3, every: 0.05 }),

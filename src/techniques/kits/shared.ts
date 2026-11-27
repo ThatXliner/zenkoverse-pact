@@ -37,7 +37,7 @@ export function targetsAllowed(ctx: AbilityContext): { people: boolean; props: b
   return { people: t !== 'props', props: t !== 'people', single: t === 'single' || t === 'named' };
 }
 
-export function hitCone(ctx: AbilityContext, range: number, halfAngle: number, dmg: number, opts: { knock?: number; lift?: number; kind?: 'kinetic' | 'cold' | 'pulse' | 'resonance' | 'cut'; heavy?: boolean } = {}): Enemy[] {
+export function hitCone(ctx: AbilityContext, range: number, halfAngle: number, dmg: number, opts: { knock?: number; lift?: number; kind?: 'kinetic' | 'cold' | 'pulse' | 'resonance' | 'cut' | 'heat'; heavy?: boolean } = {}): Enemy[] {
   const g = ctx.game;
   const allow = targetsAllowed(ctx);
   if (!allow.people) return [];

@@ -1,4 +1,5 @@
 import type * as THREE from 'three';
+import type { ReadonlySignal } from '@preact/signals';
 import type { Pact, Param, TechniqueId } from '../pacts/schema';
 import type { AbilityKind, AbilitySlot } from '../pacts/slots';
 import type { PropTrait, PropInstance } from '../world/props';
@@ -31,6 +32,9 @@ export interface TechniqueKit {
   // The sound word lettered over its heavy hits, as a manga panel would.
   sfx: string;
   resource: { name: string; max: number; regen: number; startsFull: boolean; free?: AbilityKind[] };
+  // A cost the Technique keeps in the body, shown under the resource while it
+  // reads above nothing (Heat's body heat). 0 to 1; past 1 is too much.
+  gauge?: { name: string; glyph: string; value: ReadonlySignal<number> };
   // `short` is the HUD's few words on what a key does, in sentence case.
   primitive: { name: string; short: string; description: string };
   parameters: Param[];

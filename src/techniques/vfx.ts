@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import type { LightPool, PointSource } from '../render/lightPool';
 import { ensoTexture, strokeTexture } from '../render/brush';
 import { Mark, kiraTexture, type MarkShape } from './mark';
+import { toon, faceted } from '../render/materials';
 
-interface Particle { mesh: THREE.Object3D; vel: THREE.Vector3; spin: THREE.Vector3; life: number; max: number; kind: 'debris' | 'spark' | 'shard' | 'flame'; gravity: number; scaleEnd: number; size?: number }
+interface Particle { mesh: THREE.Object3D; vel: THREE.Vector3; spin: THREE.Vector3; life: number; max: number; kind: 'debris' | 'spark' | 'shard' | 'flame' | 'steam'; gravity: number; scaleEnd: number; size?: number }
 interface Glint { sprite: THREE.Sprite; life: number; max: number; size: number; follow?: () => THREE.Vector3 }
 interface Ring { mesh: THREE.Mesh; life: number; max: number; from: number; to: number; mat: THREE.MeshBasicMaterial; peak: number }
 interface Trail { mesh: THREE.Mesh; points: THREE.Vector3[]; life: number; mat: THREE.MeshBasicMaterial; width: number; peak: number; at: THREE.Vector3 }
 interface Flash { light: PointSource; life: number; max: number; peak: number }
-interface Patch { mesh: THREE.Mesh; life: number; max: number; mat: THREE.MeshPhysicalMaterial }
+interface Patch { mesh: THREE.Mesh; life: number; max: number; mat: THREE.MeshPhysicalMaterial; frost: boolean }
 interface Timer { left: number; fire(): void }
 interface Held { left: number; end(): void }
 
@@ -29,6 +30,10 @@ export class Vfx {
   private glints: Glint[] = [];
   private markGeo = new THREE.PlaneGeometry(1, 1);
   private flameGeo = new THREE.ConeGeometry(0.16, 0.7, 5).translate(0, 0.35, 0);
+  // Steam is drawn as a manga panel draws it: solid puffs the brush inks round,
+  // swelling as they rise and pinching off, not a soft glow.
+  private steamGeo = faceted(new THREE.IcosahedronGeometry(0.24, 1));
+  private steamMat = toon(0xfaf6f0, { emissive: 0x58524a });
   private flameMats = [0xff6a1a, 0xffa53a, 0xffd27a].map((color) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.92, depthWrite: false }));
   // The camera the frame is drawn from. Smears and rings fade as they reach
   // it, and in first person a ring is held to a small part of the view, so a
@@ -133,6 +138,37 @@ export class Vfx {
     }
   }
 
+  // Steam rising off `center` over a disc of `radius`: water meeting heat, or
+  // a hot body venting. `rise` is how high it climbs, in metres, and `size`
+  // scales the puffs.
+  steam(center: THREE.Vector3, radius: number, count: number, rise = 1.6, size = 1): void {
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * radius;
+      const m = new THREE.Mesh(this.steamGeo, this.steamMat);
+      m.position.set(center.x + Math.cos(a) * r, center.y + Math.random() * 0.2, center.z + Math.sin(a) * r);
+      m.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
+      m.scale.setScalar(0.01);
+      this.scene.add(m);
+      const max = 0.6 + Math.random() * 0.5;
+      const puff = (0.5 + Math.random() * 0.7) * size;
+      // Up fast at first, then drag slows it, so it climbs about `rise`.
+      this.particles.push({ mesh: m, vel: new THREE.Vector3((Math.random() - 0.5) * 0.35, rise * (1.8 + Math.random() * 0.9), (Math.random() - 0.5) * 0.35), spin: new THREE.Vector3(Math.random(), Math.random() * 2, Math.random()), life: max, max, kind: 'steam', gravity: 0, scaleEnd: 0, size: puff });
+    }
+  }
+
+  // Heat reaching ice: the spikes and frost within `radius` of `center` go
+  // now. Returns how many pieces it melted.
+  melt(center: THREE.Vector3, radius: number): number {
+    let n = 0;
+    for (const s of this.spikes) {
+      if (s.life > 0.6 && Math.hypot(s.mesh.position.x - center.x, s.mesh.position.z - center.z) < radius) { s.life = 0.6; n++; }
+    }
+    for (const p of this.patches) {
+      if (p.frost && p.life > 0.5 && Math.hypot(p.mesh.position.x - center.x, p.mesh.position.z - center.z) < radius + p.mesh.scale.x * 0.5) { p.life = 0.5; p.max = Math.max(p.max, 0.5); n++; }
+    }
+    return n;
+  }
+
   private dropTrail(t: Trail): void {
     this.scene.remove(t.mesh);
     if (t.mesh instanceof THREE.Group) for (const c of t.mesh.children) { (c as THREE.Mesh).geometry.dispose(); ((c as THREE.Mesh).material as THREE.Material).dispose(); }
@@ -205,7 +241,7 @@ export class Vfx {
     mesh.scale.setScalar(0.01);
     mesh.receiveShadow = true;
     this.scene.add(mesh);
-    this.patches.push({ mesh, life, max: life, mat });
+    this.patches.push({ mesh, life, max: life, mat, frost: kind === 'frost' });
     (mesh as unknown as { targetRadius: number }).targetRadius = radius;
     return mesh;
   }
@@ -258,6 +294,16 @@ export class Vfx {
       p.life -= dt;
       p.vel.y -= p.gravity * dt;
       p.mesh.position.addScaledVector(p.vel, dt);
+      if (p.kind === 'steam') {
+        p.vel.multiplyScalar(Math.exp(-1.8 * dt));
+        // Swells fast, holds, and pinches off at the top.
+        const left = p.life / p.max;
+        p.mesh.rotation.y += p.spin.y * dt;
+        const k = p.size! * Math.min(1, (1 - left) * 4) * Math.min(1, left * 2.5);
+        p.mesh.scale.set(Math.max(0.01, k), Math.max(0.01, k * (1 + (1 - left) * 0.5)), Math.max(0.01, k));
+        if (p.life <= 0) { this.scene.remove(p.mesh); this.particles.splice(i, 1); }
+        continue;
+      }
       if (p.mesh.position.y < 0.03 && p.kind !== 'spark' && p.kind !== 'flame') { p.mesh.position.y = 0.03; p.vel.y *= -0.3; p.vel.x *= 0.7; p.vel.z *= 0.7; p.spin.multiplyScalar(0.5); }
       p.mesh.rotation.x += p.spin.x * dt; p.mesh.rotation.y += p.spin.y * dt;
       const u = p.life / p.max;

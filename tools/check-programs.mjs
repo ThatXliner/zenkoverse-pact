@@ -21,6 +21,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 await page.goto(`${url}?debug`);
 await page.waitForFunction(() => window.game?.game?.ready, null, { timeout: 180000 });
+// The title mounts a moment after the game is ready (slower on the live
+// site): press Enter once its first choice holds the focus, as a player would.
+await page.waitForFunction(() => document.activeElement?.textContent === 'Begin', null, { timeout: 60000 });
 await page.keyboard.press('Enter');
 await sleep(400);
 await page.getByRole('button', { name: 'Skip tutorial' }).click();

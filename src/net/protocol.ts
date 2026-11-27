@@ -48,7 +48,12 @@ export interface PlayerState {
   f?: [radius: number, density: number, limit?: number];
   // The installed Eye, as its place in EYE_IDS plus one (src/eyes/registry.ts), 0 for none.
   e?: number;
+  // How hot the body shows, 0..1 (Heat's flush, src/character/avatar.ts `heat`).
+  h?: number;
+  // The body's kit pose, as STATE_FLAG bits: crouched in a glide, holding a held Ability.
+  k?: number;
 }
+export const STATE_FLAG = { glide: 1, holding: 2 } as const;
 
 // What everyone knows about a player in the room. The server owns hp, down,
 // kills and downs.
@@ -78,6 +83,18 @@ export const PROP_FLAG = { rest: 1, claim: 4 } as const;
 // props that have moved came to rest, which are broken, and who owns which.
 export interface PropSnapshot { rest: PropWire[]; broken: number[]; owners: [number, number][] }
 
+// Heat a player put into the world (src/net/kitsync.ts): props as
+// [id, heat 0..1.25, seconds left on fire], bodies burning as [player id, seconds].
+export type HeatWire = { p?: [id: number, heat: number, fire: number][]; b?: [player: number, seconds: number][] };
+// One end of a Tension line: a point in the world (`pin` when driven into
+// open ground), a point on a prop in its own frame, a player's body, or the
+// caster's own hand.
+export type AnchorWire = [0, number, number, number, 0 | 1] | [1, number, number, number, number] | [2, number] | [3];
+// One line standing: its two ends, LINE_FLAG bits, how far it is drawn 0..1,
+// and how strongly it shows 0..1 (fading out).
+export type LineWire = [a: AnchorWire, b: AnchorWire, flags: number, drawn: number, shown: number];
+export const LINE_FLAG = { loose: 1 } as const;
+
 export type ClientMsg =
   | { type: 'hello'; room: string; name: string; token: string; tech: string }
   | { type: 'state'; s: PlayerState }
@@ -100,6 +117,12 @@ export type ClientMsg =
   // Rime froze the koi pond into a floor for `s` seconds.
   // The pond's floor for `s` seconds; with `at` (x, z) and `r`, a canal frozen across there instead.
   | { type: 'ice'; s: number; at?: [number, number]; r?: number }
+  // Heat melted the pond's floor.
+  | { type: 'melt' }
+  // Props this player heated or set burning, and players it burned.
+  | ({ type: 'heat' } & HeatWire)
+  // Every Tension line this player has standing, on its clock; empty when none are left.
+  | { type: 'lines'; ct: number; l: LineWire[] }
   // This player began a Maximum Output: `cut` names the cutscene, `target`
   // the player pulled into it, `ms` its length, `p` and `yaw` where the
   // caster stands and faces. The server locks the two for `ms` at most.
@@ -132,6 +155,9 @@ export type ServerMsg =
   | { type: 'prop-owner'; prop: number; owner: number | null }
   | { type: 'prop-break'; prop: number; by: number; from: Vec3 }
   | { type: 'ice'; id: number; s: number; at?: [number, number]; r?: number }
+  | { type: 'melt'; id: number }
+  | ({ type: 'heat'; id: number } & HeatWire)
+  | { type: 'lines'; id: number; ct: number; l: LineWire[] }
   // A Maximum Output started, to the whole room: the caster and the target
   // (null when the server dropped it) are locked until max-end. Until then
   // neither can be hit by anyone else, and the target cannot act.

@@ -6,10 +6,11 @@ import { KITS } from '../techniques/techniques';
 import { PLAYER_SUIT } from '../character/avatar';
 import { FxWire } from './fxwire';
 import { PropSync } from './propsync';
-import { freezePond, freezeChannel } from '../techniques/kits/rime';
+import { freezePond, freezeChannel, meltPond } from '../techniques/kits/rime';
+import { KitSync } from './kitsync';
 import { RemotePlayer, seatSuit } from './remote';
 import { eyeCode } from '../eyes/registry';
-import { RULES, type ClientMsg, type PlayerInfo, type ServerMsg, type Vec3 } from './protocol';
+import { RULES, STATE_FLAG, type ClientMsg, type PlayerInfo, type ServerMsg, type Vec3 } from './protocol';
 import type { Pick } from './clash';
 import { pick } from '../hands/gestures';
 import type { GestureVariant } from '../mastery/mastery';
@@ -72,6 +73,7 @@ export class Net {
   private feedId = 0;
   private fx: FxWire;
   readonly props: PropSync;
+  readonly kits: KitSync;
   // What the check scripts read: every hit this client sent and every health
   // change the server announced.
   readonly log = { sent: [] as { target: number; amount: number; t: number }[], hp: [] as { id: number; hp: number; by: number | null; amount: number; t: number }[] };
@@ -79,6 +81,7 @@ export class Net {
   constructor(private game: Game) {
     this.fx = new FxWire(game.vfx, game.audio);
     this.props = new PropSync(game, (m) => this.send(m), () => this.connected, (fn) => this.fx.quiet(fn));
+    this.kits = new KitSync(game, (m) => this.send(m), () => this.id, this.remotes);
   }
 
   get active(): boolean { return netUi.status.value !== 'off'; }
@@ -128,6 +131,7 @@ export class Net {
     this.clearRemotes();
     this.fx.dispose();
     this.props.dispose();
+    this.kits.dispose();
     this.id = null;
     if (this.downed) this.respawned(this.game.player.position.clone(), RULES.maxHp);
     this.game.avatar.setSuit(PLAYER_SUIT);
@@ -142,6 +146,7 @@ export class Net {
   }
 
   private clearRemotes(): void {
+    this.kits.clear();
     for (const r of this.remotes.values()) r.dispose();
     this.remotes.clear();
     netUi.others.value = [];
@@ -182,7 +187,7 @@ export class Net {
         netUi.room.value = m.room;
         netUi.me.value = m.you;
         g.avatar.setSuit(seatSuit(m.you.slot));
-        for (const id of [...this.remotes.keys()]) if (!m.players.some((p) => p.id === id)) { this.remotes.get(id)!.dispose(); this.remotes.delete(id); }
+        for (const id of [...this.remotes.keys()]) if (!m.players.some((p) => p.id === id)) { this.kits.forget(id); this.remotes.get(id)!.dispose(); this.remotes.delete(id); }
         for (const p of m.players) this.addRemote(p);
         this.refreshRoster();
         g.combat.setHp(m.you.hp);
@@ -210,6 +215,7 @@ export class Net {
         const r = this.remotes.get(m.id);
         if (!r) return;
         this.feed(`${r.info.name} left`);
+        this.kits.forget(m.id);
         r.dispose();
         this.remotes.delete(m.id);
         this.refreshRoster();
@@ -241,8 +247,9 @@ export class Net {
           // A Maximum Output's sign is already playing, from its start.
           // Their cast's sound comes over the effects wire, placed at them.
           if (kind !== 'max') {
-            const gesture = pick(kit.gestures[kind] ?? kit.gestures.primary!, m.variant);
-            r.avatar.perform(gesture, m.speed);
+            const key = kit.gestures[kind] ? kind : 'primary';
+            const gesture = pick(kit.gestures[key]!, m.variant);
+            r.perform(key, gesture, m.speed);
             // An open field senses it: the same wind-up, read as where and when.
             g.aura.senseBlow(r, m.dir, gesture.impactAt / m.speed);
           }
@@ -333,6 +340,17 @@ export class Net {
           if (w?.kind === 'channel') freezeChannel(g, w, x, m.r ?? 3, m.s);
         } else freezePond(g, m.s);
         return;
+      case 'melt':
+        meltPond();
+        return;
+      case 'heat':
+        this.kits.heat(m);
+        return;
+      case 'lines': {
+        const r = this.remotes.get(m.id);
+        if (r && Array.isArray(m.l)) r.at(m.ct, () => this.kits.lines(m.id, m.l));
+        return;
+      }
       case 'max': this.maxStarted(m); return;
       case 'max-end':
         if (m.caster === this.id || m.target === this.id) g.cutscenes.serverEnd();
@@ -424,6 +442,9 @@ export class Net {
     this.send({ type: 'ice', s: Math.round(seconds * 10) / 10, ...(channel ? { at: [Math.round(channel.x * 10) / 10, Math.round(channel.z * 10) / 10] as [number, number], r: Math.round(channel.r * 10) / 10 } : {}) });
   }
 
+  // Heat melted the pond's floor here: it melts on every screen.
+  melt(): void { this.send({ type: 'melt' }); }
+
   // This player's field touches another's: the server decides whether a clash starts.
   askClash(target: number): void { if (!this.downed) this.send({ type: 'clash', target }); }
   clashPick(id: number, round: number, pick: Pick): void { this.send({ type: 'clash-pick', id, round, pick }); }
@@ -439,11 +460,12 @@ export class Net {
       if (now - this.lastSend >= SEND_MS - 2) {
         this.lastSend = now;
         const s = g.techniques.sign;
-        this.send({ type: 'state', s: { ct: now, p: v3(g.player.position), v: v3(g.player.velocity), yaw: Math.round(g.bodyYaw * 1000) / 1000, pitch: g.cam.isTop ? 0 : Math.round(g.cam.pitch * 1000) / 1000, g: g.player.grounded, sign: s.kind === 'signing' || g.cutscenes.sealing ? 1 : s.kind === 'primed' ? 2 : 0, cine: g.cutscenes.active, f: [Math.round(g.aura.field.radius * 100) / 100, Math.round(g.aura.field.density * 100) / 100, Math.round(g.aura.pushLimit * 100) / 100], e: eyeCode(g.combat.eye) } });
+        this.send({ type: 'state', s: { ct: now, p: v3(g.player.position), v: v3(g.player.velocity), yaw: Math.round(g.bodyYaw * 1000) / 1000, pitch: g.cam.isTop ? 0 : Math.round(g.cam.pitch * 1000) / 1000, g: g.player.grounded, sign: s.kind === 'signing' || g.cutscenes.sealing ? 1 : s.kind === 'primed' ? 2 : 0, cine: g.cutscenes.active, f: [Math.round(g.aura.field.radius * 100) / 100, Math.round(g.aura.field.density * 100) / 100, Math.round(g.aura.pushLimit * 100) / 100], e: eyeCode(g.combat.eye), h: Math.round(Math.min(1, g.avatar.heat) * 100) / 100, k: (g.avatar.glide ? STATE_FLAG.glide : 0) | (g.techniques.current?.held ? STATE_FLAG.holding : 0) } });
       }
     } else this.fx.take();
     this.props.update(raw);
     for (const r of this.remotes.values()) r.update(raw);
+    this.kits.update(now, this.connected);
     this.plates();
   }
 

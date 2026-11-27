@@ -144,13 +144,18 @@ function heatProp(g: Game, p: PropInstance, dose: number): boolean {
   return true;
 }
 
+// The pond's ice floor goes, here and, online, on every screen.
+function melt(g: Game): void {
+  if (meltPond()) g.net?.melt();
+}
+
 // Heat thrown into water: the pond (or a stream) boils off as steam, scalds
 // whoever stands in it, takes the heat out of the user, and melts any ice on it.
 function boil(g: Game, at: THREE.Vector3, kind: 'water' | 'wet' | 'ice', potency: number): void {
   const big = kind !== 'wet';
   g.vfx.steam(at, big ? 1.6 : 0.8, big ? 18 : 6, big ? 2.4 : 1.2);
   g.audio.play('heat.steam', { at });
-  if (kind === 'ice' || kind === 'water') meltPond();
+  if (kind === 'ice' || kind === 'water') melt(g);
   g.vfx.melt(at, 2.5);
   if (!big) return;
   st.core = Math.max(0, st.core - HEAT.vent.quench);
@@ -543,7 +548,7 @@ export const heat: TechniqueKit = {
       st.core = THREE.MathUtils.clamp(st.core - dt * (HEAT.vent.rate * (1 + g.mastery.get('heat', 'tolerance')) + wet), 0, 1.5);
       if (wet && st.core > 0.08 && (st.ventT -= dt) <= 0) { st.ventT = 0.25; g.vfx.steam(me.clone().add(new THREE.Vector3(0, 0.1, 0)), 0.5, 2, 1.4, 0.7); g.audio.play('heat.vent', { at: me }); }
       // An overheated body standing on ice melts it out from under itself.
-      if (under === 'ice' && st.core >= HEAT.overheat.at) meltPond();
+      if (under === 'ice' && st.core >= HEAT.overheat.at) melt(g);
       if (!st.overheated && st.core >= HEAT.overheat.at) { st.overheated = true; st.hurtT = 0; g.player.speedScale = Math.min(g.player.speedScale, HEAT.overheat.speed); }
       else if (st.overheated && st.core < HEAT.overheat.clears) { st.overheated = false; if (g.player.speedScale === HEAT.overheat.speed) g.player.speedScale = 1; }
       if (st.overheated && (st.hurtT += dt) >= 0.5) { st.hurtT -= 0.5; g.combat.hurtPlayer(HEAT.overheat.hurt * 0.5, { self: true }); g.audio.play('heat.overheat'); }
@@ -620,6 +625,28 @@ export const heat: TechniqueKit = {
   },
   audio: { primary: 'heat.cast', secondary: 'heat.convert', max: 'heat.max.cast' },
 };
+
+// What Heat has put into the world, as another screen needs it (src/net/kitsync.ts):
+// the props on fire with their seconds left, and the bodies burning with theirs.
+export const heatWorld = (): { fires: Map<PropInstance, number>; burns: Map<Enemy, number> } =>
+  ({ fires: new Map(fires.map((f) => [f.prop, f.left])), burns: new Map([...burns].map(([e, b]) => [e, b.left])) });
+
+// Fires another player's Heat lit, as their screen reports them, until game time.
+const heard = new Map<PropInstance, number>();
+export function heardFire(g: Game, p: PropInstance, seconds: number): void {
+  if (seconds > 0) heard.set(p, g.clock.time + seconds); else heard.delete(p);
+}
+
+// Where the ground is burning now: under every prop on fire, lit here or,
+// online, on another screen, out to the fire's reach and up to where its
+// flames lick. Fire parts a Tension line strung through it.
+export function burningGround(g: Game): { at: THREE.Vector3; radius: number; height: number }[] {
+  const out: { at: THREE.Vector3; radius: number; height: number }[] = [];
+  const add = (p: PropInstance) => { if (p.alive) out.push({ at: p.mesh.position.clone().setY(p.mesh.position.y - p.half.y), radius: Math.max(p.half.x, p.half.z) + 0.3, height: 1.6 }); };
+  for (const f of fires) add(f.prop);
+  for (const [p, until] of heard) { if (until <= g.clock.time || !p.alive) heard.delete(p); else if (!fires.some((f) => f.prop === p)) add(p); }
+  return out;
+}
 
 // The debug hook and the checks read the body's heat through here.
 export const heatState = (): { core: number; overheated: boolean; bracing: boolean; burning: number; fires: number } =>

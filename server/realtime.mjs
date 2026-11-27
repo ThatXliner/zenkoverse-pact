@@ -38,6 +38,16 @@ const PROP_ENTRIES = 64;
 const PROP_HITS_PER_SECOND = 40;
 const ICE_EVERY_MS = 500;
 const PROP_REST = 1, PROP_CLAIM = 4;
+// The kits' own world (src/net/kitsync.ts): heat in props and bodies, and
+// Tension's standing lines. Each is a snapshot a client sends a few times a
+// second at most; anything faster is dropped.
+const HEAT_EVERY_MS = 100;
+const HEAT_PROPS = 64;
+const HEAT_BODIES = 8;
+const LINES_EVERY_MS = 100;
+const MAX_LINES = 32;
+const STATE_FLAGS = 1 | 2;
+const LINE_FLAGS = 1;
 
 const cleanRoom = (s) => (String(s ?? '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24) || rules.defaultRoom);
 const cleanName = (s) => (String(s ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 20) || 'Student');
@@ -45,6 +55,23 @@ const num = (x, lo, hi) => (Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) :
 const vec = (v) => (Array.isArray(v) && v.length === 3 && v.every(Number.isFinite) ? v : null);
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 const propId = (x) => (Number.isInteger(x) && x >= 0 && x <= MAX_PROP_ID ? x : null);
+const playerId = (x) => (Number.isInteger(x) && x > 0 ? x : null);
+const r2 = (x) => Math.round(x * 100) / 100;
+// One end of a Tension line as src/net/protocol.ts describes it, bounded, or null.
+function anchorWire(a) {
+  if (!Array.isArray(a)) return null;
+  if (a[0] === 0 && a.length === 5 && a.slice(1, 4).every(Number.isFinite)) return [0, num(a[1], -5000, 5000), num(a[2], -500, 500), num(a[3], -5000, 5000), a[4] === 1 ? 1 : 0];
+  if (a[0] === 1 && a.length === 5 && propId(a[1]) !== null && a.slice(2).every(Number.isFinite)) return [1, a[1], num(a[2], -10, 10), num(a[3], -10, 10), num(a[4], -10, 10)];
+  if (a[0] === 2 && a.length === 2 && playerId(a[1]) !== null) return [2, a[1]];
+  if (a[0] === 3 && a.length === 1) return [3];
+  return null;
+}
+function lineWire(l) {
+  if (!Array.isArray(l) || l.length !== 5) return null;
+  const a = anchorWire(l[0]), b = anchorWire(l[1]);
+  if (!a || !b || !Number.isInteger(l[2])) return null;
+  return [a, b, l[2] & LINE_FLAGS, num(l[3], 0, 1), num(l[4], 0, 1)];
+}
 // One prop pose as src/net/protocol.ts describes it, bounded, or null.
 function propWire(e) {
   if (!Array.isArray(e) || e.length !== 13 || !e.every(Number.isFinite) || propId(e[0]) === null) return null;
@@ -288,7 +315,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
         if (absent) room.players.delete(absent.id);
       }
       if (present(room).length >= rules.maxPlayers || freeSlot(room) < 0) { send(ws, { type: 'full', room: code, max: rules.maxPlayers }); return null; }
-      p = { id: nextId++, token, slot: freeSlot(room), hp: rules.maxHp, down: false, foughtAt: 0, kills: 0, downs: 0, state: null, fresh: [], stateAt: 0, protectUntil: 0, respawnAt: 0, leftAt: 0, bucket: HITS_PER_SECOND, bucketAt: Date.now(), seen: new Set(), clash: null, clashAt: 0, propBucket: PROP_HITS_PER_SECOND, propBucketAt: Date.now(), iceAt: 0, max: null, maxAt: -Infinity };
+      p = { id: nextId++, token, slot: freeSlot(room), hp: rules.maxHp, down: false, foughtAt: 0, kills: 0, downs: 0, state: null, fresh: [], stateAt: 0, protectUntil: 0, respawnAt: 0, leftAt: 0, bucket: HITS_PER_SECOND, bucketAt: Date.now(), seen: new Set(), clash: null, clashAt: 0, propBucket: PROP_HITS_PER_SECOND, propBucketAt: Date.now(), iceAt: 0, meltAt: 0, heatAt: 0, linesAt: 0, max: null, maxAt: -Infinity };
       room.players.set(p.id, p);
     }
     p.ws = ws;
@@ -329,7 +356,7 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
       case 'state': {
         const s = m.s, pos = vec(s?.p), v = vec(s?.v);
         if (!pos || !v || !Number.isFinite(s.ct)) return;
-        const st = { ct: s.ct, p: p.down ? (p.state?.p ?? pos) : pos, v, yaw: num(s.yaw, -1e3, 1e3), pitch: num(s.pitch, -2, 2), g: !!s.g, sign: s.sign === 1 || s.sign === 2 ? s.sign : 0, cine: !!s.cine, f: Array.isArray(s.f) ? [num(s.f[0], 0, rules.field.maxRadius), num(s.f[1], 0, 1), num(s.f[2] ?? 0, 0, rules.field.maxRadius)] : [0, 0, 0], e: Number.isInteger(s.e) && s.e >= 0 && s.e <= 5 ? s.e : 0 };
+        const st = { ct: s.ct, p: p.down ? (p.state?.p ?? pos) : pos, v, yaw: num(s.yaw, -1e3, 1e3), pitch: num(s.pitch, -2, 2), g: !!s.g, sign: s.sign === 1 || s.sign === 2 ? s.sign : 0, cine: !!s.cine, f: Array.isArray(s.f) ? [num(s.f[0], 0, rules.field.maxRadius), num(s.f[1], 0, 1), num(s.f[2] ?? 0, 0, rules.field.maxRadius)] : [0, 0, 0], e: Number.isInteger(s.e) && s.e >= 0 && s.e <= 5 ? s.e : 0, h: Number.isFinite(s.h) ? num(s.h, 0, 1) : 0, k: Number.isInteger(s.k) ? s.k & STATE_FLAGS : 0 };
         p.state = st;
         p.stateAt = now;
         if (p.fresh.length < 6) p.fresh.push(st);
@@ -451,6 +478,34 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
         // A canal frozen across: where (bounded to the world) and how wide.
         const at = Array.isArray(m.at) && m.at.length === 2 ? [num(m.at[0], -5000, 5000), num(m.at[1], -5000, 5000)] : null;
         broadcast(room, at ? { type: 'ice', id: p.id, s: secs, at, r: num(m.r, 0.5, 20) } : { type: 'ice', id: p.id, s: secs }, p);
+        return;
+      }
+      case 'melt':
+        if (now - p.meltAt < ICE_EVERY_MS) return;
+        p.meltAt = now;
+        broadcast(room, { type: 'melt', id: p.id }, p);
+        return;
+      case 'heat': {
+        // Glow and fire on props the room knows, and burns on players standing
+        // within reach of the sender: what the sender's own screen shows.
+        if (now - p.heatAt < HEAT_EVERY_MS) return;
+        p.heatAt = now;
+        const props = Array.isArray(m.p) ? m.p.slice(0, HEAT_PROPS).filter((e) => Array.isArray(e) && e.length === 3 && propId(e[0]) !== null && !room.broken.has(e[0])).map((e) => [e[0], r2(num(e[1], 0, 1.25)), r2(num(e[2], 0, 10))]) : [];
+        const bodies = Array.isArray(m.b) ? m.b.slice(0, HEAT_BODIES).filter((e) => {
+          if (!Array.isArray(e) || e.length !== 2) return false;
+          const t = room.players.get(playerId(e[0]));
+          return !!t?.ws && t !== p && !t.down && !!p.state && !!t.state && dist(p.state.p, t.state.p) <= rules.maxHitRange;
+        }).map((e) => [e[0], r2(num(e[1], 0, 6))]) : [];
+        if (p.down || (!props.length && !bodies.length)) return;
+        broadcast(room, { type: 'heat', id: p.id, ...(props.length ? { p: props } : {}), ...(bodies.length ? { b: bodies } : {}) }, p);
+        return;
+      }
+      case 'lines': {
+        // The sender's lines as a whole: an empty list takes them all away.
+        if (!Array.isArray(m.l) || m.l.length > MAX_LINES || now - p.linesAt < LINES_EVERY_MS) return;
+        p.linesAt = now;
+        const l = m.l.map(lineWire).filter((x) => x);
+        broadcast(room, { type: 'lines', id: p.id, ct: Number(m.ct) || 0, l }, p);
         return;
       }
       case 'ping':

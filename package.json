@@ -17,6 +17,7 @@
     "check:cutscenes": "node tools/check-cutscenes.mjs",
     "check:effects": "node tools/check-effects.mjs",
     "check:electro": "node tools/check-electro.mjs",
+    "check:online-kits": "node tools/check-online-kits.mjs",
     "check:eyes": "node tools/check-eyes.mjs",
     "check:freeze": "node tools/check-freeze.mjs",
     "check:friction": "node tools/check-friction.mjs",

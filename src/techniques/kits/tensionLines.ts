@@ -5,6 +5,7 @@ import type { PropInstance } from '../../world/props';
 import { GROUP_WORLD, GROUP_PROP, GROUP_ENEMY, RAPIER } from '../../physics/world';
 import { toon } from '../../render/materials';
 import { damageProp } from './shared';
+import { burningGround } from './heat';
 import { appState } from '../../app/state';
 
 // Tension's lines: prepared wire strung between two anchors, standing in the
@@ -351,6 +352,7 @@ export function updateLines(g: Game, dt: number): void {
     if (holdEnds(g, s, pa, pb, dt)) continue;
     if (s.loose <= 0 && s.a.kind !== 'hand' && trips(g, s, pa, pb)) continue;
     if (sever(g, s)) continue;
+    if (scorched(g, s, pa, pb)) continue;
     if (s.load >= s.strength) { drop(g, s, 'snap'); continue; }
     draw(s, pa, pb, len, cam, g.clock.time);
   }
@@ -453,6 +455,25 @@ function sever(g: Game, s: Strand): boolean {
   return false;
 }
 
+// Fire burns through a line strung low over it: wherever the ground is
+// burning (src/techniques/kits/heat.ts), on this screen or, online, on
+// another player's, a stretch of line within the flames parts there.
+function scorched(g: Game, s: Strand, pa: THREE.Vector3, pb: THREE.Vector3): boolean {
+  const fires = burningGround(g);
+  if (!fires.length) return false;
+  const dx = pb.x - pa.x, dz = pb.z - pa.z, l2 = dx * dx + dz * dz;
+  for (const f of fires) {
+    const t = l2 < 1e-6 ? 0 : THREE.MathUtils.clamp(((f.at.x - pa.x) * dx + (f.at.z - pa.z) * dz) / l2, 0, 1);
+    const q = pointOn(g, s, t);
+    if (Math.hypot(q.x - f.at.x, q.z - f.at.z) > f.radius || q.y < f.at.y - 0.3 || q.y > f.at.y + f.height) continue;
+    g.vfx.flames(q.clone().setY(Math.max(f.at.y, q.y - 0.3)), 0.15, 4, 0.6);
+    g.vfx.burst(q, 5, 'spark', 2.5, 0xffa04a);
+    drop(g, s, 'snap');
+    return true;
+  }
+  return false;
+}
+
 // A line is a ribbon of even width on screen, turned to the eye: unlit, in
 // the Technique's colour, over the page like a stroke of coloured ink.
 // Across its width the stroke is ink at both edges and colour between, so
@@ -509,12 +530,35 @@ function ribbon(mesh: THREE.Mesh, pa: THREE.Vector3, pb: THREE.Vector3, cam: THR
 // The line with its sag, its shiver, and its colour going white as it is drawn tight.
 function draw(s: Strand, pa: THREE.Vector3, pb: THREE.Vector3, len: number, cam: THREE.Vector3, time: number): void {
   const wobble = s.shiver * 0.08 + s.drawn * 0.02 + (s.load / s.strength > 0.7 ? 0.03 : 0);
-  ribbon(s.mesh, pa, pb, cam, time, sag(s, len, 0.5), wobble, 1 + s.drawn * 0.4);
-  const mat = s.mesh.material as THREE.MeshBasicMaterial;
-  mat.color.setHex(s.loose > 0 ? 0xa0506e : COLOR).lerp(WHITE, Math.min(0.7, s.drawn * 0.55 + s.shiver * 0.6));
-  mat.opacity = Math.min(1, s.life / LINES.fade);
+  paint(s.mesh, pa, pb, cam, time, sag(s, len, 0.5), wobble, s.loose > 0, s.drawn, s.shiver, Math.min(1, s.life / LINES.fade));
+}
+function paint(mesh: THREE.Mesh, pa: THREE.Vector3, pb: THREE.Vector3, cam: THREE.Vector3, time: number, droop: number, wobble: number, loose: boolean, drawn: number, shiver: number, opacity: number): void {
+  ribbon(mesh, pa, pb, cam, time, droop, wobble, 1 + drawn * 0.4);
+  const mat = mesh.material as THREE.MeshBasicMaterial;
+  mat.color.setHex(loose ? 0xa0506e : COLOR).lerp(WHITE, Math.min(0.7, drawn * 0.55 + shiver * 0.6));
+  mat.opacity = opacity;
 }
 const WHITE = new THREE.Color(0xffffff);
+
+// Another player's line, online (src/net/kitsync.ts): only the stroke and
+// its pins, drawn from what their screen sends. It holds nothing and trips
+// nobody here; the caster's own screen decides what its lines do.
+export interface ShownLine { mesh: THREE.Mesh; pins: THREE.Object3D[]; key: string }
+export function showLine(g: Game, ends: { at: THREE.Vector3; pin: boolean }[], key: string): ShownLine {
+  return { mesh: ribbonMesh(g), pins: ends.map((e) => pinMesh(g, { kind: 'fixed', at: e.at, pin: e.pin })!), key };
+}
+export function paintLine(g: Game, l: ShownLine, pa: THREE.Vector3, pb: THREE.Vector3, loose: boolean, drawn: number, shown: number): void {
+  l.mesh.visible = true;
+  const len = pa.distanceTo(pb);
+  const droop = (loose ? 0.14 : drawn > 0 ? 0 : 0.015) * len;
+  paint(l.mesh, pa, pb, g.renderer.camera.getWorldPosition(new THREE.Vector3()), g.clock.time, droop, drawn * 0.02, loose, drawn, 0, shown);
+}
+export function hideLine(g: Game, l: ShownLine): void {
+  g.renderer.scene.remove(l.mesh);
+  l.mesh.geometry.dispose();
+  (l.mesh.material as THREE.Material).dispose();
+  for (const p of l.pins) g.renderer.scene.remove(p);
+}
 
 // Ghost lines hold nothing and are only drawn: the string figure between
 // the hands, the network forming in Drawn World. Ask for them each frame;

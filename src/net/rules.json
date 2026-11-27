@@ -10,6 +10,7 @@
   "hitTimeoutMs": 1500,
   "maxHitDamage": 300,
   "maxHitRange": 48,
+  "melee": { "range": 4.5, "maxDamage": 45, "blowsPerSecond": 6 },
   "reconnectGraceSeconds": 20,
   "regen": { "quietSeconds": 5, "perSecond": 6, "rampSeconds": 2, "clearRadius": 14 },
   "field": { "maxRadius": 14, "layer": 0.6, "open": 0.3, "area": 1, "clashSlack": 1.5, "clashCooldownMs": 1000 },

@@ -309,6 +309,12 @@ export const CUES = {
   'aura.retract': sfx([Y('whoosh', { dur: 0.6, f0: 2000, f1: 200, peak: 0.2 }, { gain: 0.85 }), Y('tone', { f: 392, glide: 130, dur: 0.6 }, { gain: 0.16 })], { net: true }),
   'aura.collapse': sfx([S(GLASS_H, 0.85, { pitch: 0.8 }), Y('crack', { dur: 0.12, hp: 1600 }, { gain: 0.6 }), Y('tinkle', { count: 20, spread: 0.9, lo: 1200 }, { gain: 0.8 }), Y('boom', { f0: 100, f1: 34, dur: 0.8 }, { gain: 0.7 })], { wet: 0.5, net: true, duck: 0.6 }),
   'aura.denied': ui([S('error_004', 0.25, { pitch: 0.8 })]),
+  // Bare hands (src/combat/melee.ts): a short cut of air and sleeve under each
+  // blow, the hit itself is the shared hit tier; the aura strike inhales as
+  // the fist fills and lands a low boom with a crack on its front.
+  'melee.swing': net([S(CLOTH, 0.4, { pitch: 1.2, vary: 0.12 }), Y('whoosh', { dur: 0.14, f0: 500, f1: 2400, peak: 0.4 }, { gain: 0.45 })], { every: 0.05 }),
+  'melee.gather': net([Y('inhale', { dur: 0.4, f1: 3200 }, { gain: 0.4 }), Y('shimmer', { f: 523.25, dur: 0.5 }, { gain: 0.12 })], { wet: 0.4 }),
+  'melee.strike': net([S(PUNCH_H, 0.7, { pitch: 0.85 }), Y('crack', { dur: 0.06, hp: 1500 }, { gain: 0.4 }), Y('boom', { f0: 110, f1: 38, dur: 0.6 }, { gain: 0.75 }), Y('whoosh', { dur: 0.35, f0: 260, f1: 1800, peak: 0.15 }, { gain: 0.35 })], { wet: 0.45, duck: 0.35, every: 0.05 }),
   'clash.begin': sfx([S(BELL, 0.7, { pitch: 0.55 }), Y('riser', { dur: 0.6, f0: 200, f1: 3000 }, { gain: 0.4 }), Y('boom', { f0: 80, f1: 30, dur: 1.4 }, { gain: 0.9, at: 0.05 })], { wet: 0.6, duck: 0.8 }),
   'clash.round': sfx([Y('taiko', { f: 110 }, { gain: 0.8 }), S('tick_001', 0.35)]),
   'clash.pick': ui([S('click_003', 0.5), Y('thud', { f: 140, dur: 0.08 }, { gain: 0.3 })]),

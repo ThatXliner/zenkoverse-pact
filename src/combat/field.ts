@@ -181,6 +181,18 @@ export class AuraField {
     this.pool = Math.max(0, this.pool - share);
   }
 
+  // Aura drawn into one blow (src/combat/melee.ts): `share` of the pool, or
+  // of an open field's time. Unlike an expansion it needs only that much,
+  // not a full pool, and a pool it leaves short refills as after any field.
+  canDraw(share: number): boolean { return this.open ? this.left >= share * this.holds : this.pool + 1e-6 >= share; }
+  draw(share: number): boolean {
+    if (!this.canDraw(share)) return false;
+    if (this.open) { this.lose(share); return true; }
+    this.pool = Math.max(0, this.pool - share);
+    if (this.state === 'ready') { this.state = 'recovering'; this.ended = null; }
+    return true;
+  }
+
   // Back to a full pool and no field, for a new scene.
   reset(): void {
     this.state = 'ready';

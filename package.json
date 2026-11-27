@@ -28,6 +28,7 @@
     "check:keybinds": "node tools/check-keybinds.mjs",
     "check:knockdown": "node tools/check-knockdown.mjs",
     "check:locomotion": "node tools/check-locomotion.mjs",
+    "check:melee": "node tools/check-melee.mjs",
     "check:multiplayer": "node tools/check-multiplayer.mjs",
     "check:messages": "node tools/check-messages.mjs",
     "check:navigation": "node tools/check-navigation.mjs",

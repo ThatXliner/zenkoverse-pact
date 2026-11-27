@@ -11,6 +11,7 @@ import { ATTACKS, inAttack, markOrigin, reachOf, type AttackDef } from './attack
 import { DANGER, Echo, Fuse, GHOST } from './bosses';
 import { kindle } from '../techniques/ignition';
 import type { Mark } from '../techniques/mark';
+import type { MeleeWeight } from './melee';
 
 // 'rival' is another player in an online room (src/net/remote.ts): no AI, its
 // body follows the network and its hits go to the server.
@@ -60,6 +61,14 @@ const THAW = 1;
 // blows still push it, but neither throw it down again nor stagger it, so
 // knockdowns can't be chained into a lock any more than freezes can.
 const STEADY = 1.5;
+// Bare-hand blows in a row (src/combat/melee.ts), on the freezes' pattern:
+// the first FLINCH_CHAIN flinch the body, the rest it fights through, until
+// FLINCH_FADES seconds pass without one. A light blow does not stop a
+// wind-up past its glint. So a combo opens a body, it never holds one.
+const FLINCH_CHAIN = 3;
+const FLINCH_FADES = 1.6;
+// Once the chain is spent the body swings back within this many seconds.
+const FLINCH_COUNTER = 0.35;
 const POISE_DECAY = 14;
 // How far the Enforcer wants to stand from the player when he pours.
 const POUR_RANGE = 5;
@@ -119,6 +128,11 @@ export class Enemy {
   private thaw = 0;
   // Counts down from STEADY when the body gets up from a knockdown.
   steady = 0;
+  // Bare-hand flinches in the current chain, and seconds since the last blow in it.
+  private flinch = 0;
+  private sinceFlinch = 0;
+  // Seconds left giving ground before a blow it saw gathering.
+  private wary = 0;
   readonly def: EnemyDef;
   // The Master's aura field (issue #4), null for everyone without one.
   field: AuraField | null = null;
@@ -197,9 +211,12 @@ export class Enemy {
   get isBoss(): boolean { return !!this.def.boss; }
   center(): THREE.Vector3 { return this.position.clone().add(new THREE.Vector3(0, this.height * 0.55, 0)); }
 
-  hurt(amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number; stagger?: boolean } = {}): void {
+  // `melee` is a bare-hand blow's weight: it runs the flinch chain. `poise`
+  // is extra posture damage for a boss, as a share of `amount`.
+  hurt(amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number; stagger?: boolean; melee?: MeleeWeight; poise?: number } = {}): void {
     if (!this.alive) return;
     if (this.run?.stops) this.caught();
+    if (opts.melee && this.def.ai !== 'dummy' && !this.flinches(opts.melee)) opts = { ...opts, stagger: false, knock: Math.min(opts.knock ?? 0, 2) };
     this.hp -= amount;
     this.damageTaken += amount;
     this.avatar.flash(1.2);
@@ -215,7 +232,7 @@ export class Enemy {
     const poise = POISE[this.def.ai];
     if (poise !== undefined) {
       // Under its posture the boss takes the blow and carries on with what it was doing.
-      this.poise += amount;
+      this.poise += amount * (1 + (opts.poise ?? 0));
       if (knock > 0) this.velocity.addScaledVector(away, knock);
       if (this.hp <= 0) { this.die(); return; }
       if (this.poise < poise) return;
@@ -255,6 +272,23 @@ export class Enemy {
     this.echoes.length = 0;
     this.game.renderer.scene.remove(this.avatar.root);
     this.game.physics.world.removeRigidBody(this.body);
+  }
+
+  // One more bare-hand blow in the chain: whether it flinches the body.
+  private flinches(w: MeleeWeight): boolean {
+    this.sinceFlinch = 0;
+    if (w === 'light' && this.state === 'windup' && this.committed) return false;
+    if (this.flinch >= FLINCH_CHAIN) return false;
+    if (++this.flinch >= FLINCH_CHAIN) this.attackCd = Math.min(this.attackCd, FLINCH_COUNTER);
+    return true;
+  }
+
+  // A heavy blow gathering in front of this body: one that can swing first
+  // tries to beat it, the rest give ground for a moment. A boss stands.
+  threatened(): void {
+    if (!this.alive || this.isBoss || this.def.ai !== 'thug' || this.run || this.state !== 'chase') return;
+    if (this.attackCd < 0.5) this.attackCd = 0;
+    else this.wary = 0.6;
   }
 
   // Holds the body where it stands for `seconds`, dropping whatever it was doing.
@@ -377,6 +411,8 @@ export class Enemy {
     this.tickFrost(dt);
     this.locked = Math.max(0, this.locked - dt);
     this.steady = Math.max(0, this.steady - dt);
+    this.wary = Math.max(0, this.wary - dt);
+    if ((this.sinceFlinch += dt) > FLINCH_FADES) this.flinch = 0;
     this.guardBroken = Math.max(0, this.guardBroken - dt);
     this.resonance = Math.max(0, this.resonance - dt * 0.5);
     this.slow = THREE.MathUtils.lerp(this.slow, 1, 1 - Math.exp(-1.5 * dt));
@@ -517,6 +553,7 @@ export class Enemy {
     this.backT = 0;
     if (this.def.ai !== 'ancient') {
       this.face(p, dt);
+      if (this.wary > 0) { move.copy(toP).normalize().multiplyScalar(-speed * 0.8); return; }
       if (dist > reachOf(this.attack)) move.copy(toP).normalize().multiplyScalar(speed);
       return;
     }

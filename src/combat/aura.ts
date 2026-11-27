@@ -170,9 +170,10 @@ export class Aura {
   // A hit from the player on `e`: harder inside the player's field, softer
   // on a body standing in its own (the Master's reinforcement). Online a
   // player's reinforcement is their own client's, in `reinforce`.
-  damageOn(e: Enemy): number {
+  // An aura strike (`pierce`) goes through the reinforcement.
+  damageOn(e: Enemy, pierce = false): number {
     let m = this.inField(e.position) ? 1 + AURA.sharper.damage * this.field.density : 1;
-    if (e.field?.open) m *= reinforcement(e.field.density);
+    if (e.field?.open && !pierce) m *= reinforcement(e.field.density);
     return m;
   }
   // How fast the player's Technique cooldowns run: faster in a settled
@@ -416,5 +417,5 @@ export function fieldWords(f: AuraReadout): { state: string; detail: string } {
   if (f.state === 'open') return { state: 'Field open', detail: `${f.left.toFixed(1)} s · ${keyLabel('aura')} retracts` };
   if (f.state === 'ready') return { state: 'Ready', detail: `${keyLabel('aura')} wraps, hold to widen` };
   if (f.ended === 'collapsed') return { state: 'Collapsed', detail: `${Math.round(f.pool * 100)}% · refilling` };
-  return { state: f.ended === 'retracted' ? 'Retracted' : 'Spent', detail: `${Math.round(f.pool * 100)}% · refilling` };
+  return { state: f.ended === 'retracted' ? 'Retracted' : f.ended ? 'Spent' : 'Drawn', detail: `${Math.round(f.pool * 100)}% · refilling` };
 }

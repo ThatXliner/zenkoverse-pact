@@ -68,4 +68,31 @@ export const MOVES = {
     { t: 0.18, right: 'quietSpread', left: 'quietSpread', snap: true },
     { t: 0.6, right: 'rest', left: 'rest' },
   ] },
+  // The player's bare hands (src/combat/melee.ts). A jab off the lead (left)
+  // hand and a cross off the rear come straight from the guard, quick enough
+  // that the fist is out on the next frames; the third blow is a hook, drawn
+  // wide first so the body reads it coming. Each lands on `impactAt`.
+  punchJab: { duration: 0.32, impactAt: 0.08, keys: [
+    { t: 0, left: 'punch', right: 'guard', snap: true, camera: { fov: 2 } },
+    { t: 0.13, left: 'guard' },
+  ] },
+  punchCross: { duration: 0.36, impactAt: 0.1, keys: [
+    { t: 0, right: 'punch', left: 'guard', snap: true, camera: { fov: 3, roll: -0.01 } },
+    { t: 0.16, right: 'guard' },
+  ] },
+  punchHook: { duration: 0.62, impactAt: 0.22, keys: [
+    { t: 0, right: 'hookDraw', left: 'guard' },
+    { t: 0.15, right: 'hook', snap: true, camera: { fov: 6, pitch: 0.012, roll: 0.025 } },
+    { t: 0.4, right: 'guard' },
+  ] },
+  // The aura strike: the fist sinks to the ribs and fills while the lead hand
+  // holds the line, then drives straight out as the lead hand pulls back.
+  auraStrike: { duration: 0.95, impactAt: 0.42, keys: [
+    { t: 0, right: 'chamber', left: 'guard', slow: true },
+    { t: 0.36, right: 'punchOver', left: 'chamber', snap: true, camera: { fov: 9, pitch: 0.02 } },
+    { t: 0.68, right: 'guard', left: 'guard' },
+  ] },
 } satisfies Record<string, Gesture>;
+
+// The blows as the wire numbers them (src/net/protocol.ts `blow`).
+export const BLOW_MOVES: readonly Gesture[] = [MOVES.punchJab, MOVES.punchCross, MOVES.punchHook, MOVES.auraStrike];

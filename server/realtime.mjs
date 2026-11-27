@@ -379,6 +379,14 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
       case 'fx':
         if (Array.isArray(m.calls) && m.calls.length <= 64) broadcast(room, { type: 'fx', id: p.id, ct: Number(m.ct) || 0, calls: m.calls }, p);
         return;
+      case 'blow': {
+        // A bare-hand blow's gesture, relayed: one of the four, no faster than a combo throws them.
+        const n = m.n;
+        if (p.down || !Number.isInteger(n) || n < 0 || n > 3 || now - (p.blowAt ?? 0) < 1000 / rules.melee.blowsPerSecond) return;
+        p.blowAt = now;
+        broadcast(room, { type: 'blow', id: p.id, ct: Number(m.ct) || 0, n, dir: vec(m.dir) ?? [0, 0, -1] }, p);
+        return;
+      }
       case 'hit': {
         // Bounds, not a replay of the attacker's simulation: a hit is taken
         // on trust when both are standing, the victim is not protected, the
@@ -391,17 +399,19 @@ export function attachRealtime(httpServer, { latency = 0, log = console.log } = 
         p.seen.add(key);
         if (p.seen.size > 512) p.seen.delete(p.seen.values().next().value);
         if (now < target.protectUntil) return;
-        if (p.state && target.state && dist(p.state.p, target.state.p) > rules.maxHitRange) return;
+        // A bare-hand blow (`m`) is held to arm's reach and a fist's damage.
+        const melee = m.m === 1 || m.m === 2 ? m.m : 0;
+        if (p.state && target.state && dist(p.state.p, target.state.p) > (melee ? rules.melee.range : rules.maxHitRange)) return;
         if (!lockAllows(p, target, now)) return;
         p.bucket = Math.min(HITS_PER_SECOND, p.bucket + ((now - p.bucketAt) / 1000) * HITS_PER_SECOND);
         p.bucketAt = now;
         if (p.bucket < 1) return;
         p.bucket--;
-        const amount = num(m.amount, 0, rules.maxHitDamage);
+        const amount = num(m.amount, 0, melee ? rules.melee.maxDamage : rules.maxHitDamage);
         if (amount <= 0) return;
         const id = nextHit++;
         room.pending.set(id, { by: p.id, target: target.id, amount, at: now });
-        send(target.ws, { type: 'struck', hit: id, by: p.id, amount, from: vec(m.from) ?? p.state?.p ?? [0, 0, 0], knock: num(m.knock, 0, 30), lift: num(m.lift, 0, 15) });
+        send(target.ws, { type: 'struck', hit: id, by: p.id, amount, from: vec(m.from) ?? p.state?.p ?? [0, 0, 0], knock: num(m.knock, 0, 30), lift: num(m.lift, 0, 15), ...(melee ? { m: melee } : {}) });
         return;
       }
       case 'resolve': {

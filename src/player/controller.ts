@@ -56,6 +56,9 @@ export class PlayerController {
   dashTimer = 0;
   private dashDir = new THREE.Vector3();
   private push = new THREE.Vector3();
+  // A step driven into a blow (src/combat/melee.ts): this velocity on top of
+  // the walk for `left` seconds, so the body arrives as the fist does.
+  private drive = { v: new THREE.Vector3(), left: 0 };
   private coyote = 0;
   private stepPhase = 0;
   private mantleT = 0;
@@ -90,10 +93,18 @@ export class PlayerController {
   // the keys keep control while the body is pushed back a step.
   shove(v: THREE.Vector3): void { if (this.footing.kind !== 'plant' && this.footing.kind !== 'cling') this.push.add(v.clone().setY(0)); }
 
+  // Covers `v` (flat) over `seconds`, against whatever is in the way.
+  lunge(v: THREE.Vector3, seconds: number): void {
+    if (this.footing.kind === 'plant' || this.footing.kind === 'cling' || seconds <= 0) return;
+    this.drive.v.copy(v).setY(0).divideScalar(seconds);
+    this.drive.left = seconds;
+  }
+
   teleport(p: THREE.Vector3): void {
     this.position.copy(p);
     this.velocity.set(0, 0, 0);
     this.push.set(0, 0, 0);
+    this.drive.left = 0;
     // A mantle under way would carry the body back to its ledge.
     this.mantleT = 0;
     this.body.setNextKinematicTranslation({ x: p.x, y: p.y + PLAYER_HEIGHT / 2, z: p.z });
@@ -164,7 +175,9 @@ export class PlayerController {
       return;
     }
 
-    const move = this.velocity.clone().add(this.push).multiplyScalar(dt);
+    const move = this.velocity.clone().add(this.push);
+    if (this.drive.left > 0) { move.addScaledVector(this.drive.v, Math.min(dt, this.drive.left) / dt); this.drive.left -= dt; }
+    move.multiplyScalar(dt);
     this.push.multiplyScalar(Math.exp(-PUSH_DECAY * dt));
     const stepping = this.grounded && this.velocity.y <= 0 && this.dashTimer <= 0;
     this.ctrl.computeColliderMovement(this.collider, move, undefined, groups(GROUP_PLAYER, GROUP_WORLD | GROUP_PROP));

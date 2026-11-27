@@ -14,7 +14,7 @@ const SOURCE = { goal: 'Goal', tutorial: 'Tutorial', pin: 'Pin' } as const;
 // The keys worth a reminder while you stand about. Movement and the
 // Abilities are on the cards and in the tutorial; the full list is in the
 // pause menu.
-const AT_HAND: readonly [Action, string][] = [['pause', 'menu'], ['map', 'map'], ['workshop', 'workshop'], ['camera', 'view'], ['aura', 'aura']];
+const AT_HAND: readonly [Action, string][] = [['pause', 'menu'], ['map', 'map'], ['workshop', 'workshop'], ['camera', 'view'], ['aura', 'aura'], ['punch', 'punch'], ['strike', 'aura strike']];
 // How long the player stands idle before the key reminder fades in.
 const IDLE_MS = 6000;
 

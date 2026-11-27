@@ -40,6 +40,7 @@ import type { AudioView } from '../audio/audio';
 import { CUES, isCue } from '../audio/cues';
 import type { EyeId } from '../eyes/registry';
 import { eyeUi } from '../eyes/ui';
+import { meleeUi, type BlowLog } from '../combat/melee';
 
 export interface DebugApi {
   game: Game;
@@ -123,6 +124,10 @@ export interface DebugApi {
   aura(): AuraView;
   // Sets trained refinement for the Technique in hand (the drill raises it in play).
   refinement(v: number): void;
+  // Bare hands as the checks read them: the blow in flight, what the next
+  // press throws, the aura strike's cost and whether it can fire, and every
+  // blow thrown with what it hit. `bodies` reads each enemy's state and flinch chain.
+  melee(): MeleeView;
   // Refills the pool at once, so a check need not wait out a recovery.
   auraReady(): void;
   // The online room as the multiplayer check reads it: this player, the
@@ -170,6 +175,17 @@ export interface AuraView {
   refinement: number; trained: number; potential: number; breadth: number; pacts: number;
   clash: { stage: string | null; masterPick: string | null; view: unknown; log: unknown[] };
   hp: number; master: { hp: number; field: string; radius: number; density: number; pool: number; recovers: number; ended: string | null; locked: number; guardBroken: number; taken: number } | null;
+}
+
+export interface MeleeView {
+  blow: { name: string; t: number; landed: boolean } | null;
+  next: string;
+  thrown: number;
+  strike: { cost: number; ok: boolean; pool: number; state: string; left: number };
+  log: BlowLog[];
+  denied: number;
+  bodies: { key: string; state: string; hp: number; at: [number, number, number]; guardBroken: number }[];
+  remotes: { id: number; gesture: string | null; performing: boolean }[];
 }
 
 export interface NetView {
@@ -321,6 +337,16 @@ export function installDebug(game: Game): void {
     audioCues() { return Object.keys(CUES); },
     audioRender(name) { return isCue(name) && game.audio.unlocked ? game.audio.render(name) : Promise.resolve(null); },
     auraReady() { if (!game.aura.field.open) game.aura.field.reset(); },
+    melee() {
+      const m = game.melee, f = game.aura.field;
+      return {
+        blow: m.current, next: m.nextBlow, thrown: m.thrown,
+        strike: { cost: m.strikeCost, ok: m.canStrike, pool: f.pool, state: f.state, left: f.left },
+        log: m.log.map((l) => ({ ...l })), denied: meleeUi.denied.value,
+        bodies: game.encounters.enemies.map((e) => ({ key: e.key, state: e.state, hp: e.hp, at: [e.position.x, e.position.y, e.position.z] as [number, number, number], guardBroken: e.guardBroken })),
+        remotes: game.net ? [...game.net.remotes.values()].map((r) => ({ id: r.id, gesture: r.gestureKey, performing: r.avatar.performing })) : [],
+      };
+    },
     stats() {
       const i = game.renderer.gl.info;
       return { fps: 0, drawCalls: i.render.calls, triangles: i.render.triangles, props: game.props.instances.length, enemies: game.encounters.enemies.length };

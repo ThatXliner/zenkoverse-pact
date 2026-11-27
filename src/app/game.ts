@@ -22,6 +22,7 @@ import { Techniques } from '../techniques/techniques';
 import { TECHNIQUE_IDS, type TechniqueId } from '../techniques/kit';
 import { Combat } from '../combat/combat';
 import { Encounters } from '../combat/encounters';
+import { Ward } from '../combat/ward';
 import { Aura } from '../combat/aura';
 import { Vfx } from '../techniques/vfx';
 import { Audio } from '../audio/audio';
@@ -41,7 +42,7 @@ import { Waypoints } from '../world/waypoints';
 import { installDebug } from './debug';
 import { Net } from '../net/net';
 import type { Enemy } from '../combat/enemies';
-import { AWAY_SPAWNS, CITY_ORIGIN } from '../world/atlas';
+import { AWAY_SPAWNS, CITY_ORIGIN, awayAt } from '../world/atlas';
 
 // `?debug&region=city` starts a run in the city ward, at the station plaza,
 // past the end of the pass road; the ward builds at once round the player.
@@ -104,6 +105,7 @@ export class Game {
   techniques!: Techniques;
   combat!: Combat;
   encounters!: Encounters;
+  ward!: Ward;
   aura!: Aura;
   vfx!: Vfx;
   audio!: Audio;
@@ -172,6 +174,7 @@ export class Game {
     this.combat = new Combat(this);
     this.aura = new Aura(this);
     this.encounters = new Encounters(this);
+    this.ward = new Ward(this);
     this.drills.register(strikingPosts(this));
     this.tutorial = new Tutorial(this);
     this.rooftop = new Rooftop(this);
@@ -216,6 +219,7 @@ export class Game {
     this.encounters.reset();
     this.book.preview.value = null;
     this.tutorial.skip();
+    this.ward.reset();
     this.aura.reset();
     this.clock.shared = true;
     setState({ kind: 'explore' });
@@ -256,6 +260,7 @@ export class Game {
     this.endEffects();
     this.drills.abandon();
     this.encounters.reset();
+    this.ward.reset();
     clearMessages();
   }
 
@@ -273,6 +278,18 @@ export class Game {
     } else {
       this.tutorial.start();
     }
+    this.requestLock();
+  }
+
+  // The player went down in the ward: they get up in the station plaza, not back in the yard.
+  get downInWard(): boolean { const p = this.player.position; return awayAt(p.x, p.z)?.id === 'city'; }
+  getUp(): void {
+    const at = AWAY_SPAWNS['city:plaza']!.clone();
+    this.combat.resetPlayer();
+    this.endScene();
+    this.player.teleport(at);
+    this.world.ensureAt(at);
+    setState({ kind: 'explore' });
     this.requestLock();
   }
 
@@ -426,6 +443,7 @@ export class Game {
     this.combat.update(dt);
     this.aura.update(dt, raw);
     this.encounters.update(dt);
+    this.ward.update();
     this.rooftop.update(dt);
     this.props.update(dt);
     // In a cutscene the effects bloom at half speed while the world holds still.

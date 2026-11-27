@@ -219,9 +219,10 @@ function Defeat({ game }: { game: Game }) {
     <div class="defeat">
       <div>
         <div class="jp">敗北</div>
-        <p>You went down in the yard. The Pacts you inscribed remain.</p>
+        <p>{game.downInWard ? 'You went down in Shinonome.' : 'You went down in the yard.'} The Pacts you inscribed remain.</p>
         <div style="display:flex;gap:10px;justify-content:center;margin-top:18px">
-          <button class="btn primary" onClick={() => game.startRun({ skipTutorial: true })}>Back to the yard</button>
+          {game.downInWard && <button class="btn primary" onClick={() => game.getUp()}>Get up</button>}
+          <button class={game.downInWard ? 'btn' : 'btn primary'} onClick={() => game.startRun({ skipTutorial: true })}>Back to the yard</button>
           <button class="btn" onClick={() => setState({ kind: 'title' })}>Title</button>
         </div>
       </div>

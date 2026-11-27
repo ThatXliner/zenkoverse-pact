@@ -10,7 +10,9 @@ import { RULES } from '../net/protocol';
 import { combatUi } from '../combat/combat';
 import { validatePact } from '../pacts/schema';
 import type { KeySlot } from '../pacts/slots';
-import type { DrillId } from './state';
+import type { DrillId, EncounterId } from './state';
+import { street } from '../world/city/street';
+import { wardWon } from '../combat/ward';
 import type { Action } from './keymap';
 import { audit as auditOffers } from '../rooftop/offers';
 import type { TechniqueId } from '../techniques/kit';
@@ -47,7 +49,9 @@ export interface DebugApi {
   pose(name: PoseName | HandPose | null): void;
   handsView(yaw: number, pitch: number): void;
   hold(action: Action, held: boolean): void;
-  encounter(id: 'sparring' | 'kuroda' | 'ancient' | 'dummy-room'): void;
+  encounter(id: EncounterId): void;
+  // The ward's street as the checks read it: the fight, the officer, the gate, the bodies in it, and what has been won.
+  ward(): WardView;
   drill(id: DrillId): void;
   // The striking posts as the checks read them: which post is lit, how long it has been, where they stand.
   posts(): ReturnType<typeof postsView>;
@@ -124,6 +128,19 @@ export interface DebugApi {
   audioRender(name: string): Promise<{ peak: number; rms: number; seconds: number; missing: string[] } | null>;
 }
 
+export interface WardView {
+  current: string | null;
+  state: string;
+  won: string[];
+  log: string[];
+  armed: string[];
+  fight: { id: string; at: [number, number, number] } | null;
+  gateEmpty: boolean;
+  casts: number;
+  officer: { at: [number, number, number]; mode: string } | null;
+  enemies: { key: string; alive: boolean; at: [number, number, number]; running: boolean; escaped: boolean; hp: number }[];
+}
+
 export interface CutsceneView {
   ids: string[];
   active: boolean;
@@ -188,6 +205,16 @@ export function installDebug(game: Game): void {
     handsView(yaw, pitch) { game.hands.inspect = yaw === 0 && pitch === 0 ? null : { yaw, pitch }; },
     hold(action, held) { game.input.inject(action, held); },
     encounter(id) { game.encounters.begin(id, true); },
+    ward() {
+      const e = game.encounters, o = street.officer, v = (p: THREE.Vector3): [number, number, number] => [p.x, p.y, p.z];
+      return {
+        current: e.current?.id ?? null, state: appState.value.kind, won: [...wardWon.value], log: game.ward.log.map((l) => `${l.event} ${l.id}`),
+        armed: (['city-alley', 'city-canal', 'kuroda-yard', 'kuroda-house', 'city-roofs'] as const).filter((id) => e.isArmed(id)),
+        fight: street.fight ? { id: street.fight.id, at: v(street.fight.at) } : null, gateEmpty: street.gateEmpty, casts: street.casts.length,
+        officer: o ? { at: v(o.at), mode: o.mode } : null,
+        enemies: e.enemies.map((x) => ({ key: x.key, alive: x.alive, at: v(x.position), running: !!x.run, escaped: x.escaped, hp: x.hp })),
+      };
+    },
     drill(id) { game.drills.begin(id, true); },
     posts() { return postsView(); },
     ice(seconds) { freezePond(game, seconds); },

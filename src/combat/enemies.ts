@@ -25,6 +25,8 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
   bruiser: { name: 'Bristle Brawler', model: 'beard', costume: 'bruiser', posture: POSTURES.bruiser, hp: 120, speed: 3.0, dmg: 16, ai: 'thug', tint: 0x9b2335, height: 1.95, build: 1.18 },
   kuroda: { name: 'Kuroda Enforcer', model: 'parted', costume: 'kuroda', posture: POSTURES.kuroda, hp: 620, speed: 3.2, dmg: 15, ai: 'kuroda', boss: true, tint: 0xd4661a, emissive: 0xff3a00, height: 1.9, build: 1.1, title: 'Kuroda Enforcer' },
   ancient: { name: 'The Ancient Echo Master', model: 'long', costume: 'ancient', posture: POSTURES.ancient, hp: 1300, speed: 1.7, dmg: 20, ai: 'ancient', boss: true, tint: 0xeef3ea, emissive: 0x7dffb2, height: 1.7, build: 0.94, title: 'The Ancient Echo Master' },
+  // A Kuroda house hand: the men in black at the gate, upright and broad.
+  hand: { name: 'Kuroda Hand', model: 'buzzed', costume: 'hand', posture: POSTURES.hand, hp: 85, speed: 3.4, dmg: 12, ai: 'thug', tint: 0x1d1b22, height: 1.84, build: 1.12 },
   dummy: { name: 'Training Dummy', model: 'buzzed', costume: 'dummy', hp: 100000, speed: 0, dmg: 0, ai: 'dummy', tint: 0x8c9a7a },
   // Rooftop-trial roster: the same thug AI at other speeds, weights and hit points.
   runner: { name: 'Spring Leaper', model: 'buzzed', costume: 'runner', posture: POSTURES.runner, hp: 52, speed: 5.2, dmg: 14, ai: 'thug', tint: 0x2f9e5a, height: 1.72, build: 0.92 },
@@ -159,6 +161,12 @@ export class Enemy {
   private bar: HealthBar | null = null;
   private deadT = 0;
   disposed = false;
+  // Running a route instead of fighting: a thief who bolts across the roofs,
+  // a street crowd that breaks and runs. `hops` are the points it jumps from;
+  // `stops` means a blow or a hold ends the run and the body turns to fight.
+  // `escaped` once it reaches the last point.
+  run: { path: THREE.Vector3[]; i: number; speed: number; hops: ReadonlySet<number>; stops: boolean; stuck: number; last: THREE.Vector3 } | null = null;
+  escaped = false;
 
   constructor(protected game: Game, key: string, pos: THREE.Vector3, scale: EnemyScale = NO_SCALE, showBar = false, def: EnemyDef = ENEMY_DEFS[key]!) {
     this.key = key;
@@ -190,6 +198,7 @@ export class Enemy {
 
   hurt(amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number; stagger?: boolean } = {}): void {
     if (!this.alive) return;
+    if (this.run?.stops) this.caught();
     this.hp -= amount;
     this.damageTaken += amount;
     this.avatar.flash(1.2);
@@ -297,6 +306,19 @@ export class Enemy {
     return s;
   }
 
+  // Runs `path` (world points) at `speed` m/s instead of fighting.
+  flee(path: THREE.Vector3[], speed: number, opts: { hops?: number[]; stops?: boolean } = {}): void {
+    if (!this.alive) return;
+    this.run = { path, i: 0, speed, hops: new Set(opts.hops ?? []), stops: opts.stops ?? false, stuck: 0, last: this.position.clone() };
+    this.setState('chase');
+  }
+
+  // A run cut short by a blow or a hold: the body turns and fights.
+  private caught(): void {
+    this.run = null;
+    this.attackCd = Math.max(this.attackCd, 0.8);
+  }
+
   // Lets go of a grip before it runs out; the moment after is the same as a thaw.
   letGo(): void { if (this.gripped > 0) { this.gripped = 0; this.thaw = THAW; } }
 
@@ -362,7 +384,9 @@ export class Enemy {
     for (let i = this.echoes.length - 1; i >= 0; i--) { this.echoes[i]!.update(dt); if (this.echoes[i]!.done) this.echoes.splice(i, 1); }
     const atk = this.attack;
 
-    if (this.alive && def.ai !== 'dummy' && this.locked <= 0 && this.gripped <= 0) {
+    if (this.run?.stops && (this.frozen > 0 || this.gripped > 0)) this.caught();
+    if (this.run && this.alive && this.locked <= 0 && this.gripped <= 0 && (this.state === 'chase' || this.state === 'idle')) this.running(move, dt, speed / def.speed);
+    else if (this.alive && def.ai !== 'dummy' && this.locked <= 0 && this.gripped <= 0) {
       switch (this.state) {
         case 'idle':
           if (dist < 26) this.setState('chase');
@@ -414,7 +438,7 @@ export class Enemy {
           break;
       }
     }
-    this.foresee(sensed && this.state === 'chase' && this.locked <= 0 && def.ai !== 'dummy' && this.attackCd < AURA.sense.lead && dist <= reachOf(atk) + 1.5);
+    this.foresee(sensed && !this.run && this.state === 'chase' && this.locked <= 0 && def.ai !== 'dummy' && this.attackCd < AURA.sense.lead && dist <= reachOf(atk) + 1.5);
     if (this.state === 'knocked') {
       // Thrown: no footing in the air, and on the ground a skid that the
       // feet fight with steps until it stops, rather than a glide.
@@ -450,6 +474,25 @@ export class Enemy {
       if (this.alive && f.ready && this.locked <= 0) f.expand(f.reach, AURA.master.density, Infinity);
       f.update(dt);
     }
+  }
+
+  // Along the run's path, jumping where it says and wherever a ledge stops the feet.
+  private running(move: THREE.Vector3, dt: number, pace: number): void {
+    const r = this.run!;
+    const target = r.path[r.i]!;
+    const to = target.clone().sub(this.position).setY(0);
+    if (to.length() < 0.7) {
+      if (r.hops.has(r.i) && this.grounded) this.velocity.y = 6.2;
+      if (++r.i >= r.path.length) { this.run = null; this.escaped = true; }
+      return;
+    }
+    this.face(target, dt, 10);
+    move.copy(to.normalize()).multiplyScalar(r.speed * pace);
+    // Feet that want to go and do not: a ledge or a step in the way, so up and over it.
+    const went = Math.hypot(this.position.x - r.last.x, this.position.z - r.last.z);
+    r.last.copy(this.position);
+    r.stuck = pace > 0.2 && went < r.speed * pace * 0.25 * dt ? r.stuck + dt : 0;
+    if (r.stuck > 0.3 && this.velocity.y <= 0.1) { this.velocity.y = 6; r.stuck = 0; }
   }
 
   // Walks in to its reach. The Master does not walk to anyone: she turns

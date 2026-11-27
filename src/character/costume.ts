@@ -30,7 +30,7 @@ export type Shape =
 // running along the bone (down an arm toward the hand).
 export interface Piece { bone: string; shape: Shape; color: number; at?: Vec3; rot?: Vec3; frame?: 'body' | 'bone' }
 
-export type CostumeId = 'thug' | 'bruiser' | 'runner' | 'husk' | 'dummy' | 'kuroda' | 'ancient';
+export type CostumeId = 'thug' | 'bruiser' | 'runner' | 'husk' | 'dummy' | 'kuroda' | 'ancient' | 'hand' | 'police' | 'ledger';
 
 // Pieces are authored on a body 1.8 m tall and scale with the role's height.
 const REF_HEIGHT = 1.8;
@@ -117,6 +117,34 @@ export const COSTUMES: Record<CostumeId, Piece[]> = {
     { bone: 'spine_01', shape: { kind: 'band', r: [0.18, 0.155], h: 0.14 }, color: INKY, at: [0, -0.04, 0.01] },
     { bone: 'Head', shape: { kind: 'ball', r: [0.075, 0.04, 0.045] }, color: INKY, at: [0.02, 0.015, -0.14] },
     ...[-0.6, -0.2, 0.2, 0.6].map((x): Piece => ({ bone: 'Head', shape: { kind: 'cone', r: 0.05, h: 0.36 }, color: 0x1a1216, at: [0.02 + x * 0.12, 0.27 - Math.abs(x) * 0.06, 0.13], rot: [-1.2, 0, -x * 0.5] })),
+  ],
+  // A Kuroda house hand: a black suit whose jacket flares at the hips, a
+  // white collar, a dark red tie and dark glasses. The men at the gate.
+  hand: [
+    { bone: 'pelvis', shape: { kind: 'skirt', top: 0.2, bottom: 0.25, h: 0.24, depth: 0.8, arc: 5.2 }, color: 0x15131a, at: [0, 0.02, 0.0] },
+    { bone: 'neck_01', shape: { kind: 'band', r: [0.085, 0.09], h: 0.06, t: 0.02 }, color: WHITE, at: [0, -0.01, 0.0] },
+    { bone: 'spine_03', shape: { kind: 'box', size: [0.05, 0.26, 0.012] }, color: 0x7a1e2a, at: [0, 0.02, -0.17], rot: [0.12, 0, 0] },
+    { bone: 'Head', shape: { kind: 'box', size: [0.2, 0.045, 0.03] }, color: INKY, at: [0.02, 0.07, -0.13] },
+    ...both({ bone: 'upperarm', frame: 'bone', shape: { kind: 'band', r: [0.075, 0.075], h: 0.05, t: 0.02 }, color: 0x15131a, at: [0, 0.03, 0] }),
+  ],
+  // The ward's officer: a peaked cap with a gold band, a white lanyard, a
+  // black duty belt with its pouches, white cuffs.
+  police: [
+    { bone: 'Head', shape: { kind: 'dome', r: [0.13, 0.09, 0.14], cut: 1.6 }, color: 0x1f2b44, at: [0.02, 0.17, -0.02] },
+    { bone: 'Head', shape: { kind: 'band', r: [0.13, 0.14], h: 0.035, t: 0.02 }, color: 0xd9a032, at: [0.02, 0.17, -0.02] },
+    { bone: 'Head', shape: { kind: 'box', size: [0.2, 0.015, 0.09] }, color: INKY, at: [0.02, 0.155, -0.17], rot: [0.2, 0, 0] },
+    { bone: 'spine_01', shape: { kind: 'band', r: [0.18, 0.155], h: 0.09 }, color: INKY, at: [0, -0.04, 0.01] },
+    ...[-1, 1].map((s): Piece => ({ bone: 'spine_01', shape: { kind: 'box', size: [0.08, 0.12, 0.06] }, color: INKY, at: [s * 0.16, -0.06, 0.04] })),
+    { bone: 'spine_03', shape: { kind: 'box', size: [0.02, 0.24, 0.012] }, color: WHITE, at: [0.08, 0.0, -0.16], rot: [0.1, 0, 0.35] },
+    ...both({ bone: 'lowerarm', frame: 'bone', shape: { kind: 'band', r: [0.05, 0.05], h: 0.07 }, color: WHITE, at: [0, 0.24, 0] }),
+  ],
+  // Someone who watches fights and writes them down: a long grey coat, a
+  // dark scarf, a notebook in the left hand.
+  ledger: [
+    { bone: 'spine_03', shape: { kind: 'skirt', top: 0.2, bottom: 0.32, h: 0.95, depth: 0.85 }, color: 0x5d6168, at: [0, -0.33, 0.01] },
+    { bone: 'neck_01', shape: { kind: 'band', r: [0.1, 0.1], h: 0.09, t: 0.04 }, color: 0x2a2f3a, at: [0, 0.0, 0.0] },
+    ...both({ bone: 'upperarm', frame: 'bone', shape: { kind: 'skirt', top: 0.07, bottom: 0.08, h: 0.3 }, color: 0x5d6168, at: [0, 0.14, 0], rot: [Math.PI, 0, 0] }),
+    { bone: 'hand_l', frame: 'bone', shape: { kind: 'box', size: [0.1, 0.14, 0.02] }, color: WHITE, at: [0, 0.06, 0.04] },
   ],
   // The Master: a white robe to the ankles under a jade obi, wide bell
   // sleeves with jade cuffs, and a high collar.

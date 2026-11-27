@@ -5,21 +5,38 @@ import { Avatar, type CharacterModel } from '../../character/avatar';
 import { toon, faceted } from '../../render/materials';
 import { RAIL, ODORI, PROMENADE, UNDER, KURODA } from './plan';
 import { rng } from './kit';
+import { street, type OfficerMode } from './street';
+import { POSTURES } from '../../character/posture';
 
 // What moves in the ward on its own, kept cheap: a commuter train that pulls
 // in, waits and leaves, and an express that runs through on the far track
 // (one mesh each); crows on the wires and roof edges that lift off when
 // someone comes close (two instanced draws); a few people walking their
-// pavements, drawn and animated only near the camera; and two men in black
-// at the Kuroda gate who turn their heads to watch whoever passes.
+// pavements, drawn and animated only near the camera; two men in black at
+// the Kuroda gate who turn their heads to watch whoever passes; and the
+// officer at the koban. They answer what happens in the street (street.ts):
+// walkers clear off from a fight and stand off to watch it, the gate empties
+// when its men go into one, crows lift at a Technique cast near them, and
+// the officer walks his beat, blows his whistle at Technique use or a
+// street fight he can see, walks over and stands watching. Someone in a
+// grey coat comes to the end of the lane to watch the alley fight, and
+// leaves when it ends.
 
 export interface Life { group: THREE.Group; update(time: number, dt: number, player: THREE.Vector3, camera: THREE.Camera): void; dispose(): void }
 
 const TRAIN_PERIOD = 52;
 const CAR = 19.5;
 
-// A generator: each person's rig is a slice of building, so the ward's life arrives over a few frames.
-export function* buildLife(origin: THREE.Vector3, assets: Assets, parent: THREE.Object3D): Generator<void, Life, void> {
+// The officer's beat round the koban, and how far from it he will go.
+const BEAT: [number, number][] = [[-19.5, -23.2], [-9, -21], [-3.4, -16.2], [-15, -16.2]];
+const BEAT_REACH = 40;
+const SIGHT = 30;
+// Walkers hurry off from a fight closer than this, and stop to watch from past it.
+const CLEAR = 24;
+
+// A generator: each person's rig is a slice of building, so the ward's life
+// arrives over a few frames. `sees` is a clear line between two points.
+export function* buildLife(origin: THREE.Vector3, assets: Assets, parent: THREE.Object3D, sees: (a: THREE.Vector3, b: THREE.Vector3) => boolean): Generator<void, Life, void> {
   const group = new THREE.Group();
   group.name = 'city-life';
   group.userData.keep = true;
@@ -61,6 +78,13 @@ export function* buildLife(origin: THREE.Vector3, assets: Assets, parent: THREE.
   const used = new Set<number>();
   const free = (): number => { let i = Math.floor(r() * perches.length); while (used.has(i)) i = (i + 1) % perches.length; return i; };
   const crows: Crow[] = Array.from({ length: CROWS }, () => { const p = free(); used.add(p); return { perch: p, from: perches[p]!.clone(), to: perches[p]!.clone(), t: 1, flying: false, dur: 1, yaw: r() * 6, rest: 0, peck: r() * 5 }; });
+  // Up off its perch, gliding to another.
+  const scare = (c: Crow): void => {
+    const p = perches[c.perch]!;
+    used.delete(c.perch);
+    const n = free(); used.add(n);
+    c.from.copy(p); c.to.copy(perches[n]!); c.perch = n; c.t = 0; c.flying = true; c.dur = 2.4 + c.from.distanceTo(c.to) / 9;
+  };
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s1 = new THREE.Vector3(1, 1, 1), pos = new THREE.Vector3(), mid = new THREE.Vector3();
 
   // ------------------------------------------------------------ people
@@ -84,15 +108,48 @@ export function* buildLife(origin: THREE.Vector3, assets: Assets, parent: THREE.
     group.add(avatar.root);
     walkers.push({ avatar, path, i: 1, pos: start, speed: 1.15 + r() * 0.35, yaw: 0, pause: 0, vel: new THREE.Vector3() });
   }
+  // The men at the gate wear what the house's hands wear in a fight (the `hand` role).
+  const guards: Avatar[] = [];
   for (const dz of [-1.2, 6.2]) {
     yield;
-    const avatar = new Avatar(assets, dz < 0 ? 'buzzed' : 'bald', { targetHeight: 1.84, tint: 0x1f1b20, build: 1.12 });
+    const avatar = new Avatar(assets, 'buzzed', { targetHeight: 1.84, tint: 0x1d1b22, build: 1.12, costume: 'hand', posture: POSTURES.hand });
     const p = at(KURODA.x0 - 1.6, 0.12, KURODA.gate.z0 + dz + (dz < 0 ? 0 : 0.6));
     avatar.root.position.copy(p);
     group.add(avatar.root);
+    guards.push(avatar);
     walkers.push({ avatar, path: [p], i: 0, pos: p.clone(), speed: 0, yaw: Math.PI / 2, pause: 0, guard: p.clone(), vel: new THREE.Vector3() });
   }
-  disposers.push(() => { for (const w of walkers) w.avatar.root.removeFromParent(); });
+  yield;
+  // The officer, and the one who watches the alley fight.
+  const officer = new Avatar(assets, 'buzzed', { targetHeight: 1.76, tint: 0x8fa6bf, costume: 'police' });
+  const beat = BEAT.map(([x, z]) => at(x, 0.12, z));
+  const koban = beat[0]!.clone();
+  const cop = { pos: koban.clone(), i: 1, yaw: 0, vel: new THREE.Vector3(), mode: 'patrol' as OfficerMode, t: 0, lost: 0, seen: 0, target: null as THREE.Vector3 | null };
+  officer.root.position.copy(cop.pos);
+  group.add(officer.root);
+  yield;
+  const watcher = new Avatar(assets, 'long', { targetHeight: 1.72, tint: 0x3a3f4a, costume: 'ledger' });
+  const wit = { pos: new THREE.Vector3(), to: null as THREE.Vector3 | null, vel: new THREE.Vector3(), yaw: Math.PI / 2, leaving: false };
+  watcher.root.visible = false;
+  group.add(watcher.root);
+  disposers.push(() => { for (const w of walkers) w.avatar.root.removeFromParent(); officer.root.removeFromParent(); watcher.root.removeFromParent(); street.officer = null; });
+  const eye = new THREE.Vector3(), seen = new THREE.Vector3();
+  const inYard = (p: THREE.Vector3): boolean => p.x - O.x > KURODA.x0 && p.x - O.x < KURODA.x1 && p.z - O.z > KURODA.z0 && p.z - O.z < KURODA.z1;
+  // The officer sees a point when it is near, on open ground (not behind the Kuroda fence), and no wall is between.
+  const copSees = (p: THREE.Vector3): boolean => {
+    if (cop.pos.distanceTo(p) > SIGHT || inYard(p) || p.distanceTo(koban) > BEAT_REACH) return false;
+    return sees(eye.copy(cop.pos).setY(cop.pos.y + 1.6), seen.copy(p).setY(p.y + 1.2));
+  };
+  // Walks a body toward `to` at `speed`, turning to face its way; returns the distance left.
+  const step = (p: THREE.Vector3, v: THREE.Vector3, to: THREE.Vector3, speed: number, dt: number, stop = 0.4): number => {
+    const d = Math.hypot(to.x - p.x, to.z - p.z);
+    if (d <= stop) { v.set(0, 0, 0); return d; }
+    v.set(to.x - p.x, 0, to.z - p.z).multiplyScalar(Math.min(speed, (d - stop) / Math.max(dt, 1e-3)) / d);
+    p.addScaledVector(v, dt);
+    return d;
+  };
+  const yawTo = (from: THREE.Vector3, to: THREE.Vector3): number => Math.atan2(-(to.x - from.x), -(to.z - from.z));
+  let lastCast = 0;
 
   return {
     group,
@@ -119,11 +176,7 @@ export function* buildLife(origin: THREE.Vector3, assets: Assets, parent: THREE.
         if (!c.flying) {
           c.rest += dt;
           const p = perches[c.perch]!;
-          if (c.rest > 1.5 && p.distanceTo(player) < 6.5) {
-            used.delete(c.perch);
-            const n = free(); used.add(n);
-            c.from.copy(p); c.to.copy(perches[n]!); c.perch = n; c.t = 0; c.flying = true; c.dur = 2.4 + c.from.distanceTo(c.to) / 9;
-          }
+          if (c.rest > 1.5 && p.distanceTo(player) < 6.5) scare(c);
         } else {
           c.t += dt / c.dur;
           if (c.t >= 1) { c.t = 1; c.flying = false; c.rest = 0; }
@@ -153,11 +206,25 @@ export function* buildLife(origin: THREE.Vector3, assets: Assets, parent: THREE.
       bodies.instanceMatrix.needsUpdate = true;
       wings.instanceMatrix.needsUpdate = true;
       // People: walk their pavement and back, stop a step short of the
-      // player, pause now and then. Far from the camera they neither draw nor animate.
+      // player, pause now and then. Far from the camera they neither draw nor
+      // animate. A fight sends them off the other way along their pavement,
+      // to stand and watch from further off until it is over.
       const cam = camera.position;
+      const fight = street.fight;
       for (const w of walkers) {
         const near = w.pos.distanceTo(cam) < 42;
-        w.avatar.root.visible = near;
+        w.avatar.root.visible = near && !(w.guard && street.gateEmpty);
+        if (!w.guard && fight && w.pos.distanceTo(fight.at) < CLEAR + 8) {
+          const ends = [w.path[0]!, w.path[w.path.length - 1]!];
+          const away = ends[0]!.distanceTo(fight.at) > ends[1]!.distanceTo(fight.at) ? ends[0]! : ends[1]!;
+          const close = w.pos.distanceTo(fight.at) < CLEAR;
+          if (close) step(w.pos, w.vel, away, 2.8, dt); else w.vel.set(0, 0, 0);
+          w.avatar.root.position.copy(w.pos);
+          w.yaw = close && w.vel.lengthSq() > 0.01 ? Math.atan2(-w.vel.x, -w.vel.z) : yawTo(w.pos, fight.at);
+          w.avatar.turnTo(w.yaw, dt, 6);
+          if (near) { w.avatar.setLocomotion(w.vel, true, dt); w.avatar.update(dt); }
+          continue;
+        }
         if (w.guard) {
           // Watch the player while they are close; otherwise face the street.
           const d = player.distanceTo(w.pos);
@@ -181,6 +248,80 @@ export function* buildLife(origin: THREE.Vector3, assets: Assets, parent: THREE.
         w.avatar.turnTo(w.yaw, dt, 6);
         if (near) { w.avatar.setLocomotion(w.vel, true, dt); w.avatar.update(dt); }
       }
+
+      // The officer. A Technique cast or a street fight he can see stops him
+      // with a blast of the whistle; then he walks over and stands watching
+      // the one who did it, a few metres off, until they leave his beat or it
+      // has been quiet a while. A fight he reaches breaks up (src/combat/ward.ts).
+      const cast = street.casts.at(-1);
+      const fresh = cast && cast.time > lastCast ? cast : null;
+      if (fresh) lastCast = fresh.time;
+      const brawl = fight && !fight.private ? player : null;
+      const alarm = (fresh && copSees(fresh.at) ? fresh.at : null) ?? (brawl && cop.mode !== 'approach' && copSees(brawl) ? brawl : null);
+      cop.t += dt;
+      if (alarm && (cop.mode === 'patrol' || cop.mode === 'return' || cop.mode === 'watch')) {
+        if (cop.mode === 'watch' && !brawl) cop.t = 0;
+        else { cop.mode = 'whistle'; cop.t = 0; }
+      }
+      switch (cop.mode) {
+        case 'patrol': {
+          if (step(cop.pos, cop.vel, beat[cop.i]!, 1.2, dt) < 0.5) cop.i = (cop.i + 1) % beat.length;
+          break;
+        }
+        case 'whistle':
+          cop.vel.set(0, 0, 0);
+          cop.yaw = yawTo(cop.pos, player);
+          if (cop.t > 0.8) { cop.mode = 'approach'; cop.t = 0; cop.lost = 0; }
+          break;
+        case 'approach': {
+          // He keeps the one he saw in sight; out of sight for long, or off his beat, he goes back.
+          cop.lost = copSees(player) ? 0 : cop.lost + dt;
+          if (cop.lost > 2 || player.distanceTo(koban) > BEAT_REACH) { cop.mode = 'return'; break; }
+          const left = step(cop.pos, cop.vel, player, 3.2, dt, 3.5);
+          if (left <= 3.6 && !brawl) { cop.mode = 'watch'; cop.t = 0; }
+          break;
+        }
+        case 'watch':
+          cop.vel.set(0, 0, 0);
+          cop.yaw = yawTo(cop.pos, player);
+          if (cop.t > 7 || player.distanceTo(cop.pos) > 16) cop.mode = 'return';
+          break;
+        case 'return':
+          if (step(cop.pos, cop.vel, beat[0]!, 1.6, dt) < 0.5) { cop.mode = 'patrol'; cop.i = 1; }
+          break;
+      }
+      if (cop.vel.lengthSq() > 0.01) cop.yaw = Math.atan2(-cop.vel.x, -cop.vel.z);
+      cop.target = cop.mode === 'approach' || cop.mode === 'watch' || cop.mode === 'whistle' ? player.clone() : null;
+      street.officer = { at: cop.pos.clone(), mode: cop.mode, target: cop.target };
+      officer.root.position.copy(cop.pos);
+      officer.turnTo(cop.yaw, dt, 8);
+      const copNear = cop.pos.distanceTo(cam) < 48;
+      officer.root.visible = copNear;
+      if (copNear) { officer.setLocomotion(cop.vel, true, dt); officer.update(dt); }
+
+      // The one in the grey coat: comes along the lane to its west end when
+      // the alley fight starts, stands and watches it, and goes when it ends.
+      if (fight?.watcher && !watcher.root.visible) {
+        wit.pos.copy(fight.watcher).add(new THREE.Vector3(-7, 0, 0));
+        wit.to = fight.watcher.clone();
+        wit.leaving = false;
+        watcher.root.visible = true;
+      } else if (!fight?.watcher && watcher.root.visible && !wit.leaving) {
+        wit.to = wit.pos.clone().add(new THREE.Vector3(-26, 0, 0));
+        wit.leaving = true;
+      }
+      if (watcher.root.visible && wit.to) {
+        const left = step(wit.pos, wit.vel, wit.to, wit.leaving ? 1.4 : 1.1, dt);
+        wit.yaw = wit.vel.lengthSq() > 0.01 ? Math.atan2(-wit.vel.x, -wit.vel.z) : yawTo(wit.pos, player);
+        if (wit.leaving && left < 0.5) watcher.root.visible = false;
+        watcher.root.position.copy(wit.pos);
+        watcher.turnTo(wit.yaw, dt, 5);
+        watcher.setLocomotion(wit.vel, true, dt);
+        watcher.update(dt);
+      }
+
+      // A cast near a perch puts the crows up.
+      if (fresh) for (const c of crows) if (!c.flying && perches[c.perch]!.distanceTo(fresh.at) < 14) scare(c);
     },
     dispose() {
       for (const d of disposers) d();

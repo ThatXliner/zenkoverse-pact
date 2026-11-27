@@ -33,6 +33,8 @@ export const ROAD_HALF = 1.55;
 export const BENCH = ROAD_HALF + 0.55;
 // The bank below a fill.
 const FILL = 0.8;
+// The rock face under a bridge's abutment.
+const ABUTMENT = 2.6;
 
 export const ROUTE: readonly Node[] = [
   // Out of the valley: the path from the shrine road meets the cutting.
@@ -92,7 +94,7 @@ export interface Site { id: string; x: number; z: number; y: number; r: number; 
 export const SITES: readonly Site[] = [
   { id: 'teahouse', x: 109, z: 207, y: 28.8, r: 6.4, edge: 8.4 },
   { id: 'lookout', x: 84, z: 262, y: 43.4, r: 4.6, edge: 6.0 },
-  { id: 'tarn', x: 52, z: 146, y: 8.2, r: 2.0, edge: 6.0 },
+  { id: 'tarn', x: 50, z: 157, y: 8.2, r: 2.0, edge: 6.0 },
 ];
 
 // ------------------------------------------------------------ geometry
@@ -102,7 +104,9 @@ export interface Along { d: number; y: number; seg: number; t: number; x: number
 const seg = ROUTE.slice(0, -1).map((a, i) => {
   const b = ROUTE[i + 1]!;
   const reach = Math.max(a.edge, b.edge) + 40;
-  return { a, b, x0: Math.min(a.x, b.x) - reach, x1: Math.max(a.x, b.x) + reach, z0: Math.min(a.z, b.z) - reach, z1: Math.max(a.z, b.z) + reach };
+  // Which of its ends is a rope span's abutment.
+  const abutB = b.pave === 'rope', abutA = i > 0 && ROUTE[i - 1]!.pave === 'rope';
+  return { a, b, abutA, abutB, x0: Math.min(a.x, b.x) - reach, x1: Math.max(a.x, b.x) + reach, z0: Math.min(a.z, b.z) - reach, z1: Math.max(a.z, b.z) + reach };
 });
 export const ROUTE_BOX = { x0: Math.min(...seg.map((s) => s.x0)), x1: Math.max(...seg.map((s) => s.x1)), z0: Math.min(...seg.map((s) => s.z0)), z1: Math.max(...seg.map((s) => s.z1)) };
 
@@ -124,7 +128,9 @@ export function along(x: number, z: number, out: Along = { d: 0, y: 0, seg: 0, t
 // The land at (x, z), `h`, held to the road: no higher than the cut bank
 // above its bench and no lower than the fill below it, for every stretch of
 // road (and every site) near enough to matter. A rope span holds nothing up:
-// the ravine stays open under it. Steps are carved a riser low, so the
+// the ravine stays open under it, and past the end of the road at each of its
+// abutments the ground falls away steeply instead of on a bank of fill, which
+// would bury the ravine under the span. Steps are carved a riser low, so the
 // treads stand on the ground and not in it.
 export function carve(x: number, z: number, h: number): number {
   if (x < ROUTE_BOX.x0 || x > ROUTE_BOX.x1 || z < ROUTE_BOX.z0 || z > ROUTE_BOX.z1) return h;
@@ -139,8 +145,9 @@ export function carve(x: number, z: number, h: number): number {
     const e = Math.max(0, d - BENCH);
     const y = a.y + (b.y - a.y) * t - (a.pave === 'steps' ? 0.28 : 0);
     const cut = a.cut + (b.cut - a.cut) * t;
+    const abut = (t === 1 && s.abutB) || (t === 0 && s.abutA);
     hi = Math.min(hi, y + e * cut);
-    lo = Math.max(lo, y - e * FILL);
+    lo = Math.max(lo, y - e * (abut ? ABUTMENT : FILL));
   }
   for (const st of SITES) {
     const d = Math.hypot(x - st.x, z - st.z);
@@ -153,11 +160,14 @@ export function carve(x: number, z: number, h: number): number {
   return Math.min(hi, Math.max(lo, h));
 }
 
-// How far inside the walkable strip (road and sites) a point is: negative inside, by that many metres.
-export function walkDistance(x: number, z: number): number {
+// How far inside the walkable strip (road and sites) a point is: negative
+// inside, by that many metres. Without `rope`, the bridge's span is left out
+// (the strip the ground carries).
+export function walkDistance(x: number, z: number, rope = true): number {
   let best = Infinity;
   for (const s of seg) {
     if (x < s.x0 || x > s.x1 || z < s.z0 || z > s.z1) continue;
+    if (!rope && s.a.pave === 'rope') continue;
     const { a, b } = s, dx = b.x - a.x, dz = b.z - a.z;
     const t = Math.min(1, Math.max(0, ((x - a.x) * dx + (z - a.z) * dz) / (dx * dx + dz * dz)));
     const d = Math.hypot(x - a.x - dx * t, z - a.z - dz * t) - (a.edge + (b.edge - a.edge) * t);

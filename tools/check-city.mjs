@@ -247,9 +247,15 @@ console.log('Rime freezes the canal into a floor; Echo rings a fuel drum until i
   // The top-down cursor aims on a plane at chest height, so point where that
   // plane passes over the drum; the camera leans toward the cursor, so aim again until it settles.
   await aimAt(drum.at[0], null, drum.at[1]);
+  // A click while the last cast's gesture still plays is dropped, as for a
+  // player, so each click waits for the hands to be free, and the ring is
+  // read once its cast has played out.
   const rings = [];
+  const idle = () => page.waitForFunction(() => !window.game.game.techniques.casting, null, { timeout: 4000 }).catch(() => undefined);
   for (let i = 0; i < 12 && await api((g, id) => !!g.game.props.byId(id), drum.id); i++) {
-    await page.mouse.down(); await wait(60); await page.mouse.up(); await wait(480);
+    await idle();
+    await page.mouse.down(); await wait(60); await page.mouse.up();
+    await idle();
     rings.push(await api((g, id) => +(g.game.props.byId(id)?.resonance ?? -1).toFixed(2), drum.id));
   }
   console.log(`  rings on the drum: ${rings.join(" ")}`);

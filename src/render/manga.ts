@@ -57,6 +57,9 @@ uniform float stride;
 uniform vec2 origin;
 uniform float crease;
 uniform float silhouette;
+uniform vec2 lensMain;
+uniform vec2 lensOver;
+uniform float bend;
 varying vec2 vUv;
 ${common}
 
@@ -66,7 +69,20 @@ float vz( float d, vec2 c ) { return ( c.x * c.y ) / ( c.y - ( c.y - c.x ) * d )
 // surface, small at a crease, large at a silhouette. A neighbour off the
 // surface (the sky, or no arm there) counts as far behind, so the
 // silhouette is drawn on the object's side.
-vec4 edge( sampler2D tex, vec2 c, vec2 uv, vec2 px, out float z ) {
+//
+// The second difference grows as a surface turns edge-on, so on its own it
+// would ink the few-degree folds between the facets of a gently curved
+// surface seen at a glancing angle (a cut bank beside the road, a hill's
+// flank) as a fan of streaks. The fourth channel is how sharply the surface
+// really bends at the pixel, the turn between the two view-space steps
+// either side of it (1 - cos), the same seen face-on or edge-on; a crease
+// needs both.
+vec3 viewAt( vec2 uv, float z, vec2 lens ) { return vec3( ( uv * 2.0 - 1.0 ) * lens * z, -z ); }
+float turn( vec3 a, vec3 c, vec3 b ) {
+  vec3 u = c - a, v = b - c;
+  return 1.0 - dot( u, v ) * inversesqrt( max( dot( u, u ) * dot( v, v ), 1e-20 ) );
+}
+vec4 edge( sampler2D tex, vec2 c, vec2 lens, vec2 uv, vec2 px, out float z ) {
   float dc = texture2D( tex, uv ).r;
   z = vz( dc, c );
   float far = z * ( 1.0 + silhouette * 4.0 );
@@ -75,7 +91,10 @@ vec4 edge( sampler2D tex, vec2 c, vec2 uv, vec2 px, out float z ) {
   float l = dl >= 0.9999 ? far : vz( dl, c ), r = dr >= 0.9999 ? far : vz( dr, c );
   float d = dd >= 0.9999 ? far : vz( dd, c ), u = du >= 0.9999 ? far : vz( du, c );
   float dz = max( abs( l + r - 2.0 * z ), abs( d + u - 2.0 * z ) ) / z;
-  return vec4( dz, r - l, u - d, 0.0 );
+  vec3 pc = viewAt( uv, z, lens );
+  float bx = turn( viewAt( uv - vec2( px.x, 0.0 ), l, lens ), pc, viewAt( uv + vec2( px.x, 0.0 ), r, lens ) );
+  float by = turn( viewAt( uv - vec2( 0.0, px.y ), d, lens ), pc, viewAt( uv + vec2( 0.0, px.y ), u, lens ) );
+  return vec4( dz, r - l, u - d, max( bx, by ) );
 }
 
 void main() {
@@ -84,14 +103,14 @@ void main() {
   vec4 e;
   bool arm = overOn > 0.5 && texture2D( depthOver, vUv ).r < 0.9999;
   if ( arm ) {
-    e = edge( depthOver, clipOver, vUv, px, z );
+    e = edge( depthOver, clipOver, lensOver, vUv, px, z );
     // The arms are a hand's length away: draw them as if at a metre and a half.
     z = 1.5;
   } else {
     if ( texture2D( depthMain, vUv ).r >= 0.9999 ) { gl_FragColor = vec4( 0.0 ); return; }
-    e = edge( depthMain, clipMain, vUv, px, z );
+    e = edge( depthMain, clipMain, lensMain, vUv, px, z );
   }
-  float fine = smoothstep( crease, crease * 2.2, e.x ) * 0.85;
+  float fine = smoothstep( crease, crease * 2.2, e.x ) * smoothstep( bend, bend * 2.0, e.w ) * 0.85;
   float full = smoothstep( silhouette, silhouette * 2.0, e.x );
   float fade = arm ? 1.0 : 1.0 - smoothstep( 45.0, 120.0, z );
   float strength = max( fine, full ) * fade;
@@ -128,6 +147,8 @@ export class InkMaskPass extends Pass {
         clipMain: { value: new THREE.Vector2() }, clipOver: { value: new THREE.Vector2() },
         texel: { value: new THREE.Vector2() }, stride: { value: 1 }, origin: { value: new THREE.Vector2() },
         crease: { value: 0.0022 }, silhouette: { value: 0.016 },
+        // A crease turns the surface by at least about 12 degrees (1 - cos 12° ≈ 0.022, full ink by 17°).
+        lensMain: { value: new THREE.Vector2() }, lensOver: { value: new THREE.Vector2() }, bend: { value: 0.022 },
       },
     });
     this.fullscreenMaterial = this.mat;
@@ -147,10 +168,18 @@ export class InkMaskPass extends Pass {
     const u = this.mat.uniforms;
     (u.clipMain!.value as THREE.Vector2).set(this.view.near, this.view.far);
     (u.clipOver!.value as THREE.Vector2).set(this.overlay.eye.near, this.overlay.eye.far);
+    lens(u.lensMain!.value as THREE.Vector2, this.view);
+    lens(u.lensOver!.value as THREE.Vector2, this.overlay.eye);
     u.overOn!.value = this.overlay.drawn ? 1 : 0;
     renderer.setRenderTarget(this.target);
     renderer.render(this.scene!, this.view);
   }
+}
+
+// The view-space half extent of the frame at unit depth, x and y.
+function lens(out: THREE.Vector2, cam: THREE.PerspectiveCamera): void {
+  const y = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) / cam.zoom;
+  out.set(y * cam.aspect, y);
 }
 
 // The first-person arms, drawn into their own target so the page effect can

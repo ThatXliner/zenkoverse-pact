@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { Game } from '../app/game';
 import { Enemy, ENEMY_DEFS, NO_SCALE } from '../combat/enemies';
 import type { CharacterModel } from '../character/avatar';
-import { RULES, type PlayerInfo, type PlayerState } from './protocol';
+import { RULES, STATE_FLAG, type PlayerInfo, type PlayerState } from './protocol';
+import type { Gesture } from '../hands/gestures';
 import { KITS } from '../techniques/techniques';
 import { EyeMark } from '../eyes/mark';
 import { eyeFromCode } from '../eyes/registry';
@@ -42,6 +43,8 @@ export class RemotePlayer extends Enemy {
   // it is drawn (eased, as their own screen eases it).
   fieldLimit = 0;
   fieldPush = 0;
+  // Until when (performance.now ms) another player's Heat has this body burning.
+  burnUntil = 0;
   private buf: PlayerState[] = [];
   // The sender's clock minus ours, from recent arrivals. The largest is the
   // least delayed sample, so it tracks the sender without the jitter.
@@ -54,6 +57,9 @@ export class RemotePlayer extends Enemy {
   private sample: PlayerState | null = null;
   // Their installed Eye, marked on the body; what it shows them is theirs alone.
   private eyeMark: EyeMark;
+  // A held Ability's gesture on this body (a brace, Open Hand, a draw), kept
+  // until their own screen says the key came up, and when it began.
+  private held: { gesture: Gesture; at: number } | null = null;
   // Hits this client sent that the server has not confirmed yet. The name
   // plate subtracts them, so the attacker sees the bar drop on the blow
   // instead of a round trip later.
@@ -156,6 +162,8 @@ export class RemotePlayer extends Enemy {
     this.alive = false;
     this.hp = 0;
     this.unconfirmed.length = 0;
+    this.held = null;
+    this.avatar.glide = false;
     this.collider.setEnabled(false);
     this.avatar.die();
   }
@@ -216,10 +224,17 @@ export class RemotePlayer extends Enemy {
         else if (kit && s.sign === 0) this.avatar.release(kit.sign);
         this.signShown = s.sign;
       }
+      // Their kit's pose: crouched low in a glide, and a held Ability's
+      // gesture let go when their key comes up (a sender without the flags
+      // keeps it until their next gesture, as before).
+      this.avatar.glide = !!((s.k ?? 0) & STATE_FLAG.glide);
+      if (this.held && s.k !== undefined && !(s.k & STATE_FLAG.holding) && now - this.held.at > 250) { this.avatar.release(this.held.gesture); this.held = null; }
       // In a Maximum Output's cutscene: the two in it glow for everyone
       // watching, but not in the cutscene's own close-ups.
       if (s.cine && this.game.cutscenes.partner !== this.id) this.avatar.flash(0.55);
     }
+    // How hot the body shows: their own flush, or a burn someone else's Heat put on it.
+    this.avatar.heat = this.alive ? Math.max(s.h ?? 0, Math.min(1, (this.burnUntil - now) / 1000) * 0.9) : 0;
     this.avatar.update(dt);
   }
 
@@ -232,6 +247,16 @@ export class RemotePlayer extends Enemy {
     if (pushing && this.avatar.stance === null) this.avatar.stance = 'push';
     else if (!pushing && this.wasPushing && this.avatar.stance === 'push' && !this.game.aura.clash.involves(this)) this.avatar.stance = null;
     this.wasPushing = pushing;
+  }
+
+  // The key of the cast gesture this body played last (primary, openHand, ...), for the checks.
+  gestureKey: string | null = null;
+
+  // A cast's gesture, by its key, on this body as on their own.
+  perform(key: string, gesture: Gesture, speed: number): void {
+    this.gestureKey = key;
+    this.avatar.perform(gesture, speed);
+    this.held = gesture.hold ? { gesture, at: performance.now() } : null;
   }
 
   // The drawn position, for the checks.

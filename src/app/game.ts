@@ -299,7 +299,7 @@ export class Game {
     this.closeWorkshop();
     this.book.preview.value = p;
     if (appState.value.kind !== 'encounter') this.encounters.begin('dummy-room', true);
-    toast(`Trying "${p.name}" on ${slotWords(p.slot)}. ${keyLabel('workshop')} returns to the Workshop; ${keyLabel('pause')} or walking out stops.`);
+    toast(`Trying "${p.name}" on ${slotWords(p.slot)}. ${keyLabel('workshop')} returns to the Workshop. To stop, walk out of the room, or choose Stop trying the draft in the ${keyLabel('pause')} menu.`);
   }
 
   // Ends a try: the draft leaves its key and the dummy room closes.
@@ -470,7 +470,8 @@ export class Game {
   private updateInteract(): void {
     let best: { text: string; act: () => void } | null = null;
     for (const p of this.world.plaques) {
-      if (p.position.distanceTo(this.player.position) < 2.2) { best = { text: p.found ? `Reread: ${p.title}` : `Read plaque: ${p.title}`, act: () => { p.found = true; hud.plaque.value = { title: p.title, body: p.body }; setTimeout(() => { hud.plaque.value = null; }, 7000); } }; break; }
+      // A plaque's text goes after a while, unless something else has taken its place by then.
+      if (p.position.distanceTo(this.player.position) < 2.2) { best = { text: p.found ? `Reread: ${p.title}` : `Read plaque: ${p.title}`, act: () => { p.found = true; const shown = { title: p.title, body: p.body }; hud.plaque.value = shown; setTimeout(() => { if (hud.plaque.value === shown) hud.plaque.value = null; }, 7000); } }; break; }
     }
     // The Architect explains first; after that, the desk opens the Workshop.
     if (!best && ARCHITECT_DESK.distanceTo(this.player.position) < 3.0) best = hud.plaque.value?.title === ARCHITECT.title

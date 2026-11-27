@@ -23,6 +23,7 @@
     "check:knockdown": "node tools/check-knockdown.mjs",
     "check:locomotion": "node tools/check-locomotion.mjs",
     "check:multiplayer": "node tools/check-multiplayer.mjs",
+    "check:messages": "node tools/check-messages.mjs",
     "check:navigation": "node tools/check-navigation.mjs",
     "check:pause": "node tools/check-pause.mjs",
     "check:programs": "node tools/check-programs.mjs",

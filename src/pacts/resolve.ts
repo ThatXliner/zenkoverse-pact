@@ -55,6 +55,7 @@ const WEIGHTS: Record<string, { base: number; usage: (t: Telemetry) => number; w
   'direction:ground': { base: 1.8, usage: (t) => 0.6 + t.airborneFraction, why: 'nothing happens above the ground plane' },
   'direction:line': { base: 2.0, usage: (t) => 0.5 + t.multiTargetFraction, why: 'a single line, nothing beside it' },
   'direction:behind': { base: 2.4, usage: () => 1, why: 'only what you cannot see' },
+  'direction:loosen': { base: 1.8, usage: () => 1, why: 'you can let a line go, never draw it tighter' },
   'range:touch': { base: 3.0, usage: (t) => 0.4 + t.longRangeFraction * 1.6, why: 'you have to be touching it' },
   'range:short': { base: 2.0, usage: (t) => 0.4 + t.longRangeFraction * 1.4, why: 'nothing past a few steps' },
   'range:medium': { base: 0.9, usage: (t) => 0.3 + t.longRangeFraction, why: 'the far end of the street is out of reach' },
@@ -140,7 +141,7 @@ export function estimateResolve(pact: Pact, inscribed: Pact[], telemetry: Teleme
 
 export function describe(r: Restriction): string {
   const map: Record<string, string> = {
-    'direction:front': 'only from the front', 'direction:declared': 'only in a declared direction', 'direction:ground': 'only along the ground', 'direction:line': 'only along one line', 'direction:behind': 'only from behind',
+    'direction:front': 'only from the front', 'direction:declared': 'only in a declared direction', 'direction:ground': 'only along the ground', 'direction:line': 'only along one line', 'direction:behind': 'only from behind', 'direction:loosen': 'only ever loosening',
     'range:touch': 'only on touch', 'range:short': 'within a few steps', 'range:medium': 'within the street', 'range:long': 'anywhere in sight',
     'target:single': 'one target', 'target:named': 'a named target', 'target:resonant': 'only what resonates', 'target:water': 'only through water', 'target:self': 'only yourself', 'target:props': 'only objects', 'target:people': 'only people',
     'trigger:still': 'only while standing still', 'trigger:grounded': 'only with feet on the ground', 'trigger:airborne': 'only in the air', 'trigger:struck': 'only after being struck', 'trigger:eyesClosed': 'only with eyes shut', 'trigger:declared': 'only when declared aloud', 'trigger:lowHealth': 'only near defeat', 'trigger:fullSign': 'only with the full hand sign',

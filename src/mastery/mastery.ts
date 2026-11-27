@@ -1,5 +1,5 @@
 import { signal } from '@preact/signals';
-import type { TechniqueId } from '../pacts/schema';
+import { TECHNIQUE_IDS, type TechniqueId } from '../pacts/schema';
 
 export type MasteryStat = 'output' | 'precision' | 'efficiency' | 'range' | 'speed' | 'control' | 'activation' | 'tolerance' | 'refinement';
 export const MASTERY_STATS: readonly MasteryStat[] = ['output', 'precision', 'efficiency', 'range', 'speed', 'control', 'activation', 'tolerance', 'refinement'];
@@ -27,9 +27,10 @@ export const MASTERY_CONFIG = {
 type Stats = Record<MasteryStat, number>;
 const zero = (): Stats => ({ output: 0, precision: 0, efficiency: 0, range: 0, speed: 0, control: 0, activation: 0, tolerance: 0, refinement: 0 });
 const KEY = 'zenko.mastery.v1';
+const fresh = (): Record<TechniqueId, Stats> => Object.fromEntries(TECHNIQUE_IDS.map((t) => [t, zero()])) as Record<TechniqueId, Stats>;
 
 export class Mastery {
-  readonly stats = signal<Record<TechniqueId, Stats>>({ recoil: zero(), shift: zero(), rime: zero(), blink: zero(), echo: zero(), heat: zero() });
+  readonly stats = signal<Record<TechniqueId, Stats>>(fresh());
   strain = 0;
   readonly recent = signal<{ stat: MasteryStat; amount: number; id: number } | null>(null);
   private n = 0;
@@ -102,5 +103,5 @@ export class Mastery {
 
   update(dt: number): void { this.strain = Math.max(0, this.strain - MASTERY_CONFIG.strainRecoveryPerSecond * dt); }
 
-  reset(): void { this.stats.value = { recoil: zero(), shift: zero(), rime: zero(), blink: zero(), echo: zero(), heat: zero() }; try { localStorage.removeItem(KEY); } catch { /* */ } }
+  reset(): void { this.stats.value = fresh(); try { localStorage.removeItem(KEY); } catch { /* */ } }
 }

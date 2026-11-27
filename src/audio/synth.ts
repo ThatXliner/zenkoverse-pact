@@ -304,6 +304,19 @@ export const SYNTHS = {
     SYNTHS.thud({ ...v, t: v.t + 0.2 }, { f: 52, dur: 0.18, gain: n(p, 'gain', 0.7) * 0.75 });
     return 0.45;
   },
+  // A wire plucked under load, Tension's voice: a plucked string whose pitch
+  // bends as the load comes on (`bend` below 1 rises to the note) or goes
+  // off (above 1 falls to it) over `bendDur`.
+  twang(v: Voice, p: SynthParams): number {
+    const f = n(p, 'f', 196) * v.pitch, dur = n(p, 'dur', 0.9);
+    const s = v.ctx.createBufferSource();
+    s.buffer = pluckBuffer(v.ctx, f, dur, n(p, 'bright', 0.8));
+    s.playbackRate.setValueAtTime(n(p, 'bend', 1), v.t);
+    s.playbackRate.exponentialRampToValueAtTime(1, v.t + n(p, 'bendDur', 0.12));
+    s.connect(hit(v, n(p, 'gain', 0.5), 0.001, dur));
+    s.start(v.t);
+    return dur;
+  },
 } satisfies Record<string, (v: Voice, p: SynthParams) => number>;
 
 const plucks = new Map<string, AudioBuffer>();

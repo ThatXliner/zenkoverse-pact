@@ -59,6 +59,9 @@ const SPECIFIC: Template[] = [
   { id: 'hush', name: 'Hush', only: 'echo', kinds: ['secondary'], shape: 'quiet', restrict: ['duration:held', 'trigger:grounded'] },
   { id: 'kiln', name: 'Kiln Hand', only: 'heat', kinds: ['primary'], shape: 'sear', behaviors: ['scorch', 'wide'], restrict: ['range:touch', 'trigger:grounded'] },
   { id: 'needle', name: 'Needle Heat', only: 'heat', kinds: ['primary'], shape: 'spot', behaviors: ['steady'], restrict: ['target:single', 'trigger:still'] },
+  { id: 'tripwire', name: 'Tripwire', only: 'tension', kinds: ['primary'], shape: 'thread', behaviors: ['barbed'], restrict: ['direction:ground', 'target:people'] },
+  { id: 'braid', name: 'Braided Line', only: 'tension', kinds: ['primary'], shape: 'thread', behaviors: ['braid'], restrict: ['range:short', 'trigger:still'] },
+  { id: 'bowstring', name: 'Bowstring', only: 'tension', kinds: ['secondary'], shape: 'draw', behaviors: ['quick'], restrict: ['trigger:grounded', 'resource:half'] },
 ];
 
 // Two sacrifices are the same surrender when they name the same tag, or when

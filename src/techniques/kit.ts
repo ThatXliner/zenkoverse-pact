@@ -41,6 +41,7 @@ export interface TechniqueKit {
   shapes: Record<string, { label: string; short: string; kinds: AbilityKind[]; description: string }>;
   behaviors: Record<string, string>;
   catalogue: Pact[];
+  // Keyed by kind; a shape may have its own, which it plays instead.
   gestures: Record<string, GestureSet>;
   // The signature full hand sign Alt performs: a committed sequence that
   // roots the player and primes the next cast. Its last key is the primed
@@ -60,8 +61,9 @@ export interface TechniqueKit {
     // to Vfx and end with it.
     reset?(game: Game): void;
   };
-  // The cue under each kind's wind-up (src/audio/cues.ts).
-  audio: Record<AbilityKind, CueName>;
+  // The cue under each kind's wind-up (src/audio/cues.ts), and under any
+  // shape's that has one of its own.
+  audio: Record<AbilityKind, CueName> & Partial<Record<string, CueName>>;
 }
 
 export interface AbilityContext {

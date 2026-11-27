@@ -19,6 +19,10 @@ export class Physics {
   readonly events!: RAPIER.EventQueue;
   private accumulator = 0;
   readonly step = 1 / 60;
+  // Colliders nothing is drawn for: the tall rails that keep bodies on the
+  // roofs and inside the walls. They stop bodies, but a thrown line passes
+  // them (Tension), since there is nothing there to tie it to.
+  readonly unseen = new Set<number>();
 
   async init(): Promise<void> {
     await RAPIER.init();

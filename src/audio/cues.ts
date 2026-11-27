@@ -119,6 +119,32 @@ export const CUES = {
   'echo.max.blow': sfx([S(BELL, 1, { pitch: 0.4 }), Y('crack', { dur: 0.1, hp: 1500 }, { gain: 0.5 }), Y('boom', { f0: 98, f1: 32, dur: 2 }, { gain: 1.1 }), Y('shimmer', { f: 147, dur: 3.2 }, { gain: 0.4 }), Y('rumble', { dur: 2.2 }, { gain: 0.7 })], { wet: 0.8, duck: 1 }),
   'echo.max.tail': net([S(BELL, 0.6, { pitch: 0.5 }), Y('shimmer', { f: 196, dur: 2.4 }, { gain: 0.3 }), Y('rumble', { dur: 1.5 }, { gain: 0.5 })], { wet: 0.7 }),
 
+  // ------------------------------------------------------------ Tension: lines strung, drawn and let go
+  // A wire under load is a plucked string: it rises as it tightens, cracks
+  // when it lets go, and falls flat when it goes slack. Rope creaks carry the
+  // draw; a blade's slice carries a line cutting across a body.
+  'tension.cast': net([S(CLOTH, 0.3, { pitch: 1.15 }), Y('whoosh', { dur: 0.18, f0: 600, f1: 2400, peak: 0.6, q: 2 }, { gain: 0.3 })]),
+  'tension.thread': net([Y('tear', { dur: 0.1 }, { gain: 0.22, pitch: 1.3 }), Y('twang', { f: 330, bend: 0.75, bendDur: 0.08, dur: 0.7 }, { gain: 0.55 }), S('tick_002', 0.3, { pitch: 0.8 })], { wet: 0.3 }),
+  'tension.pin': sfx([S(v('impactWood_light_', 2), 0.35, { pitch: 1.3 }), Y('thud', { f: 140, dur: 0.06 }, { gain: 0.25 })]),
+  'tension.snare': net([S(CLOTH, 0.5, { pitch: 0.85 }), Y('twang', { f: 147, bend: 0.6, bendDur: 0.15, dur: 0.9 }, { gain: 0.6 }), Y('thud', { f: 110, dur: 0.12 }, { gain: 0.35 })], { wet: 0.3 }),
+  'tension.trip': net([S(SOFT_M, 0.5, { pitch: 0.9 }), Y('twang', { f: 262, bend: 1.5, bendDur: 0.1, dur: 0.8 }, { gain: 0.6 }), Y('crack', { dur: 0.04, hp: 2400 }, { gain: 0.25 })], { wet: 0.3, every: 0.05 }),
+  'tension.draw': net([S(['creak1', 'creak2', 'creak3'], 0.45), Y('tone', { f: 98, glide: 196, dur: 0.9, type: 3, lp: 700 }, { gain: 0.12 }), Y('twang', { f: 110, bend: 0.5, bendDur: 0.8, dur: 1.0, bright: 0.4 }, { gain: 0.35 })], { wet: 0.25 }),
+  'tension.taut': sfx([Y('twang', { f: 392, dur: 1.1, bright: 0.9 }, { gain: 0.3 }), S(['creak1', 'creak2', 'creak3'], 0.25, { pitch: 1.3 })], { wet: 0.25 }),
+  'tension.snap': net([Y('crack', { dur: 0.07, hp: 1800 }, { gain: 0.6 }), Y('twang', { f: 220, bend: 2.2, bendDur: 0.05, dur: 0.6 }, { gain: 0.6 }), Y('whoosh', { dur: 0.2, f0: 2600, f1: 700, peak: 0.1, q: 1.4 }, { gain: 0.45 }), S('drawKnife1', 0.35, { pitch: 1.2 })], { wet: 0.35, duck: 0.2 }),
+  'tension.cut': net([S(['knifeSlice', 'knifeSlice2'], 0.6), S(PUNCH_M, 0.35, { pitch: 1.1 }), Y('crack', { dur: 0.05, hp: 2000 }, { gain: 0.3 })], { wet: 0.3, every: 0.04 }),
+  'tension.break': net([Y('crack', { dur: 0.09, hp: 1400 }, { gain: 0.6 }), Y('twang', { f: 523, bend: 1.8, bendDur: 0.04, dur: 0.4, bright: 0.95 }, { gain: 0.4 }), S(v('impactMetal_light_', 2), 0.3, { pitch: 1.4 })], { wet: 0.3 }),
+  'tension.backlash': sfx([S(SOFT_M, 0.5, { pitch: 1.2 }), Y('crack', { dur: 0.06, hp: 2200 }, { gain: 0.5 }), Y('twang', { f: 466, bend: 1.6, bendDur: 0.05, dur: 0.35 }, { gain: 0.4 })], { wet: 0.2 }),
+  'tension.reel': net([Y('whoosh', { dur: 0.5, f0: 300, f1: 2200, peak: 0.4 }, { gain: 0.5 }), Y('twang', { f: 196, bend: 0.5, bendDur: 0.4, dur: 0.6 }, { gain: 0.4 }), S(CLOTH, 0.4)]),
+  'tension.sling': net([Y('whoosh', { dur: 0.35, f0: 200, f1: 1600, peak: 0.3 }, { gain: 0.5 }), Y('twang', { f: 175, bend: 1.6, bendDur: 0.06, dur: 0.5 }, { gain: 0.4 })]),
+  'tension.slack.cast': net([S(CLOTH, 0.35, { pitch: 0.9 }), Y('inhale', { dur: 0.2, f1: 1800 }, { gain: 0.2 })]),
+  'tension.slack': net([Y('twang', { f: 196, bend: 1.9, bendDur: 0.35, dur: 0.8, bright: 0.5 }, { gain: 0.5 }), S(CLOTH, 0.4, { pitch: 0.75 }), Y('whoosh', { dur: 0.3, f0: 900, f1: 250, peak: 0.2 }, { gain: 0.3 })], { wet: 0.3 }),
+  'tension.spoil': net([S(SOFT_H, 0.45, { pitch: 0.8 }), Y('tone', { f: 330, glide: 110, dur: 0.35, lp: 900 }, { gain: 0.2 }), Y('thud', { f: 90, dur: 0.2 }, { gain: 0.5 })], { wet: 0.3 }),
+  'tension.max.cast': sfx([Y('riser', { dur: 1.2, f0: 120, f1: 2000, tone: 0.5 }, { gain: 0.4 }), Y('twang', { f: 147, bend: 0.5, bendDur: 1.1, dur: 1.4, bright: 0.5 }, { gain: 0.35 })]),
+  'tension.max.charge': sfx([Y('riser', { dur: 1.0, f0: 110, f1: 2400, tone: 0.45 }, { gain: 0.45 }), S(['creak1', 'creak2', 'creak3'], 0.5, { pitch: 0.8 }), Y('twang', { f: 110, bend: 0.5, bendDur: 0.9, dur: 1.4, bright: 0.4 }, { gain: 0.35 })], { duck: 0.6 }),
+  'tension.max.spread': sfx([Y('twang', { f: 294, dur: 0.9 }, { gain: 0.35 }), Y('twang', { f: 392, dur: 0.9, bright: 0.9 }, { gain: 0.3, at: 0.07 }), Y('twang', { f: 440, dur: 0.9 }, { gain: 0.3, at: 0.14 }), Y('tear', { dur: 0.3 }, { gain: 0.25 })], { wet: 0.4 }),
+  'tension.max.blow': sfx([Y('crack', { dur: 0.12, hp: 1200 }, { gain: 0.8 }), Y('twang', { f: 110, bend: 2.5, bendDur: 0.06, dur: 1.6 }, { gain: 0.8 }), Y('boom', { f0: 110, f1: 30, dur: 1.6 }, { gain: 1.0 }), S(['knifeSlice', 'knifeSlice2'], 0.7, { pitch: 0.8 }), Y('rumble', { dur: 1.8, lp: 260 }, { gain: 0.6 })], { wet: 0.6, duck: 1 }),
+  'tension.max.tail': net([Y('twang', { f: 147, bend: 1.4, bendDur: 0.2, dur: 1.8, bright: 0.6 }, { gain: 0.45 }), S(MINING, 0.4, { pitch: 0.8 }), Y('rumble', { dur: 1.4, lp: 360 }, { gain: 0.5 })], { wet: 0.5 }),
+
   // ------------------------------------------------------------ Blink: a concussive pulse from the eyes
   'blink.cast': net([Y('tone', { f: 2800, glide: 5200, dur: 0.16 }, { gain: 0.07 }), Y('inhale', { dur: 0.16, f1: 5000 }, { gain: 0.25 })]),
   'blink.flinch': net([S(SOFT_H, 0.6, { pitch: 1.2 }), Y('boom', { f0: 160, f1: 55, dur: 0.35 }, { gain: 0.7 }), Y('whoosh', { dur: 0.22, f0: 900, f1: 300, peak: 0.1, q: 0.6 }, { gain: 0.6 }), Y('crack', { dur: 0.05 }, { gain: 0.35 })], { wet: 0.3 }),

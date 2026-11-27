@@ -41,6 +41,12 @@ const ember = f([0.35, 0.25, 0.15], [0.45, 0.5, 0.35], [0.45, 0.55, 0.35], [0.5,
 // A grip opened to take a head: every finger bent at every joint, spread.
 const grip = f([0.3, 0.35, 0.25], [0.3, 0.5, 0.35], [0.3, 0.52, 0.35], [0.32, 0.52, 0.35], [0.36, 0.52, 0.35]);
 const sealed = f([0.15, 0.1, 0.05], [0.04, 0.06, 0.04], [0.02, 0.05, 0.04], [0.04, 0.06, 0.04], [0.08, 0.1, 0.06]);
+// A thread held between the thumb and the side of the index, the other
+// fingers tucked; and the hand thrown open after it, the index leading.
+const pinch = f([0.5, 0.45, 0.35], [0.5, 0.6, 0.4], [0.85, 0.95, 0.8], [0.9, 1, 0.85], [0.95, 1, 0.85]);
+const fling = f([0.08, 0.05, 0.05], [0, 0, 0], [0.12, 0.08, 0.05], [0.22, 0.16, 0.1], [0.32, 0.26, 0.14]);
+// String figures: every finger out and apart, a little hooked at the tips.
+const cradle = f([0.05, 0.05, 0.12], [0.02, 0.06, 0.18], [0.02, 0.06, 0.18], [0.04, 0.08, 0.2], [0.06, 0.1, 0.22]);
 
 export const POSES = {
   // Idle: low in the corners, thumb side up and turned in a little, the
@@ -105,6 +111,24 @@ export const POSES = {
   twinPalm: { pos: [0.055, -0.19, -0.47], rot: [1.35, -0.3, -0.55], fingers: open, spread: 0.35 },
   sealRubUp: { pos: [0.035, -0.215, -0.4], rot: [1.35, 0.04, -1.55], fingers: sealed, spread: 0.03 },
   sealRubDown: { pos: [0.035, -0.265, -0.4], rot: [1.35, 0.04, -1.55], fingers: sealed, spread: 0.03 },
+  // Tension. `threadPinch` holds the end of a line at the chest, `threadWind`
+  // draws it back past the shoulder, and `threadCast` throws it, the arm out
+  // and the hand flung open. Drawing a line is an archer's draw: `drawFront`
+  // is the far hand out along it, `drawBack` the near hand pulled to the
+  // shoulder, and `drawRelease` that hand thrown open behind. `slackDrop`
+  // lets a line go, the wrist falling limp. `cradle` and `cradleWide` are a
+  // string figure held between the hands at the sternum and spread wide;
+  // `drawYank` hauls both fists in to the hips.
+  threadPinch: { pos: [0.2, -0.2, -0.37], rot: [0.45, 0.35, -1.3], fingers: pinch, spread: 0.05 },
+  threadWind: { pos: [0.28, -0.17, -0.3], rot: [0.7, 0.15, -1.55], fingers: pinch, spread: 0.05 },
+  threadCast: { pos: [0.1, -0.17, -0.47], rot: [0.2, 0.2, -0.85], fingers: fling, spread: 0.35 },
+  drawFront: { pos: [0.12, -0.18, -0.46], rot: [0.25, 0.3, -1.45], fingers: pinch, spread: 0.05 },
+  drawBack: { pos: [0.3, -0.18, -0.26], rot: [0.55, -0.1, -1.6], fingers: pinch, spread: 0.05 },
+  drawRelease: { pos: [0.33, -0.13, -0.24], rot: [0.9, -0.3, -1.1], fingers: fling, spread: 0.55 },
+  slackDrop: { pos: [0.22, -0.3, -0.42], rot: [-0.55, 0.25, -0.45], fingers: relaxed, spread: 0.35 },
+  cradle: { pos: [0.11, -0.21, -0.4], rot: [1.25, -0.04, -1.5], fingers: cradle, spread: 0.6 },
+  cradleWide: { pos: [0.24, -0.19, -0.42], rot: [1.15, 0.3, -1.35], fingers: cradle, spread: 0.65 },
+  drawYank: { pos: [0.24, -0.3, -0.3], rot: [0.35, 0.3, -2.4], fingers: fist, spread: 0 },
 } satisfies Record<string, HandPose>;
 
 export type PoseName = keyof typeof POSES;

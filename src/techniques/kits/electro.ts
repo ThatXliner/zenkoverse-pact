@@ -50,9 +50,9 @@ const STRUCK_SHARE = 0.5;
 export const electroState = { backlashAt: -Infinity, suppliedAt: -Infinity, convertedAt: -Infinity, last: null as null | { at: number; length: number; wanted: number; spent: number; cost: number; hits: number; nodes: number; ended: string } };
 
 const catalogue: Pact[] = [
-  { id: 'electro.discharge', technique: 'electro', name: 'Discharge', slot: 'primary', grant: { shape: 'discharge', behaviors: ['seize'] }, clauses: [
+  { id: 'electro.discharge', technique: 'electro', name: 'Discharge', slot: 'secondary', grant: { shape: 'discharge', behaviors: ['seize'] }, clauses: [
     { kind: 'restrict', restriction: { param: 'range', value: 'short' } }, { kind: 'restrict', restriction: { param: 'direction', value: 'front' } }] },
-  { id: 'electro.impact-conversion', technique: 'electro', name: 'Impact Conversion', slot: 'secondary', grant: { shape: 'convert', behaviors: ['earth'] }, clauses: [
+  { id: 'electro.impact-conversion', technique: 'electro', name: 'Impact Conversion', slot: 'primary', grant: { shape: 'convert', behaviors: ['earth'] }, clauses: [
     { kind: 'restrict', restriction: { param: 'direction', value: 'front' } }, { kind: 'restrict', restriction: { param: 'trigger', value: 'grounded' } }] },
   { id: 'electro.self-supply', technique: 'electro', name: 'Self-Supply', slot: 'secondary', grant: { shape: 'supply' }, clauses: [
     { kind: 'restrict', restriction: { param: 'trigger', value: 'still' } }, { kind: 'restrict', restriction: { param: 'body', value: 'bothHands' } }] },
@@ -658,7 +658,9 @@ function dotsGeometry(from: THREE.Vector3, dir: THREE.Vector3, s0: number, s1: n
 
 function tickPreview(g: Game, dt: number): void {
   const t = g.techniques;
-  const show = g.input.enabled && !g.cutscenes.active && !g.cam.isFirst;
+  // The chain is the right click's: shown while that key holds a discharge (the raw Technique's, or a Pact's).
+  const pact = t.pactFor('secondary');
+  const show = g.input.enabled && !g.cutscenes.active && !g.cam.isFirst && (pact?.grant.shape ?? 'discharge') === 'discharge';
   if (!preview) {
     const mat = (opacity: number) => new THREE.MeshBasicMaterial({ color: COLOR, transparent: true, opacity, depthWrite: false, depthTest: false, toneMapped: false });
     const group = new THREE.Group();
@@ -675,7 +677,6 @@ function tickPreview(g: Game, dt: number): void {
   previewNext = 1 / 20;
   const aim = aimNow(g);
   if (!aim) { preview.group.visible = false; return; }
-  const pact = t.pactFor('primary');
   const plan = planChain(g, aim, chainRange(g, pact, pact?.grant.behaviors ?? []), Math.max(0, t.resource - KEEP), { people: true, props: true }, pondFrozen(g));
   aimShown = { end: [plan.end.x, plan.end.z], length: plan.length, wanted: plan.wanted, routes: plan.nodes.map((f) => f.n.kind), ends: plan.target?.kind ?? 'floor' };
   const y = g.player.position.y + 0.06;
@@ -934,11 +935,12 @@ export const electro: TechniqueKit = {
   blurb: 'Any energy in, only electricity out. A discharge needs a route: a touch, metal, water. You are never insulated from your own current.',
   breadth: 3,
   resource: { name: 'Charge', max: 100, regen: 0, startsFull: false, free: ['primary', 'secondary'] },
+  strikes: 'secondary',
   primitive: { name: 'Electro', short: 'a static snap', description: 'Turn a little of any energy you hold into a spark. It needs something to touch.' },
   parameters: ['direction', 'range', 'target', 'trigger', 'duration', 'resource', 'body'],
   shapes: {
-    discharge: { label: 'releases charge through whatever it touches', short: 'discharge through a touch', kinds: ['primary'], description: 'It needs a route: a touch, metal or water. Water takes everyone standing in it, you too.' },
-    convert: { label: 'turns the blow that lands into charge', short: 'turn a blow into charge', kinds: ['secondary'], description: 'Meet a blow as it lands. What you cannot take in still reaches you.' },
+    discharge: { label: 'releases charge through whatever it touches', short: 'a chain to where you aim', kinds: ['secondary'], description: 'It runs to where you aim, as far as your charge can push it through the air. Metal and water carry it farther and harder. Water takes everyone standing in it, you too.' },
+    convert: { label: 'turns the blow that lands into charge', short: 'turn a blow into charge', kinds: ['primary'], description: 'Meet a blow as it lands. What you cannot take in still reaches you.' },
     supply: { label: 'burns your own body for charge', short: 'burn your body for charge', kinds: ['secondary'], description: 'Charge from your own fuel. It strains you and heals nothing.' },
     circuit: { label: 'closes one circuit through the target and every conductor near it', short: 'one circuit through it all', kinds: ['max'], description: 'Everything at once, through every route there is, and through you.' },
   },
@@ -952,9 +954,9 @@ export const electro: TechniqueKit = {
   catalogue,
   gestures: {
     // A spear hand drawn back by the ear and driven out to touch.
-    primary: gestureSet(0.55, 0.24, [{ t: 0, right: 'spearDraw', left: 'guard', slow: true }, { t: 0.2, right: 'spear', snap: true, camera: { fov: 5, pitch: 0.012 } }, { t: 0.34, right: 'spear' }, { t: 0.48, right: 'rest', left: 'rest' }]),
+    secondary: gestureSet(0.55, 0.24, [{ t: 0, right: 'spearDraw', left: 'guard', slow: true }, { t: 0.2, right: 'spear', snap: true, camera: { fov: 5, pitch: 0.012 } }, { t: 0.34, right: 'spear' }, { t: 0.48, right: 'rest', left: 'rest' }]),
     // One palm meets the blow, the other goes to the floor.
-    secondary: gestureSet(0.5, 0.12, [{ t: 0, right: 'catchPalm', left: 'groundPalm', snap: true, camera: { fov: -3 } }, { t: 0.32, right: 'catchPalm', left: 'groundPalm' }, { t: 0.44, right: 'rest', left: 'rest' }]),
+    primary: gestureSet(0.5, 0.12, [{ t: 0, right: 'catchPalm', left: 'groundPalm', snap: true, camera: { fov: -3 } }, { t: 0.32, right: 'catchPalm', left: 'groundPalm' }, { t: 0.44, right: 'rest', left: 'rest' }]),
     // Hands wide, then the fists clench down by the hips and shake.
     supply: gestureSet(0.72, 0.4, [{ t: 0, right: 'gripOpen', left: 'gripOpen', slow: true }, { t: 0.36, right: 'gripDown', left: 'gripDown', snap: true, camera: { fov: -4, pitch: -0.01 } }, { t: 0.46, right: 'gripOpen', left: 'gripDown' }, { t: 0.54, right: 'gripDown', left: 'gripOpen' }, { t: 0.66, right: 'rest', left: 'rest' }]),
     max: gestureSet(2.3, 1.7, [{ t: 0, right: 'tent', left: 'tent', slow: true }, { t: 0.8, right: 'arcSpread', left: 'arcSpread', slow: true }, { t: 1.3, right: 'spearDraw', left: 'groundPalm', slow: true }, { t: 1.65, right: 'spear', left: 'groundPalm', snap: true, camera: { fov: 14, pitch: 0.04 } }, { t: 2.1, right: 'rest', left: 'rest' }]),
@@ -1057,7 +1059,7 @@ export const electro: TechniqueKit = {
       return amount - taken;
     },
   },
-  audio: { primary: 'electro.cast', secondary: 'electro.convert.cast', max: 'electro.max.cast' },
+  audio: { primary: 'electro.convert.cast', secondary: 'electro.cast', max: 'electro.max.cast' },
 };
 
 function tickHeld(g: Game, dt: number): void {

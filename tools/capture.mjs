@@ -484,7 +484,7 @@ if (run('electro')) {
         const G = g.game, V = G.player.position.constructor, p = G.player.position;
         g.look(Math.atan2(-(at[0] - p.x), -(at[2] - p.z)), pitch);
         for (let i = 0; i < 2; i++) { const n = new V(...at).project(G.renderer.camera); G.input.mouse.x = n.x; G.input.mouse.y = n.y; g.step(30); }
-        G.techniques.cast('primary', true);
+        G.techniques.cast('secondary', true);
       }, at, pitch);
       let prev = 0;
       for (const f of [16, 20, 26, 34]) { await step(f - prev); prev = f; await shot('electro', `${name}-${view}-f${f}`); }

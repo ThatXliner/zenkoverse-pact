@@ -32,6 +32,9 @@ export interface TechniqueKit {
   // The sound word lettered over its heavy hits, as a manga panel would.
   sfx: string;
   resource: { name: string; max: number; regen: number; startsFull: boolean; free?: AbilityKind[] };
+  // The key the Technique strikes with; the other main key is its reserve.
+  // The primary when unset (Electro strikes with the secondary).
+  strikes?: 'primary' | 'secondary';
   // A cost the Technique keeps in the body, shown under the resource while it
   // reads above nothing (Heat's body heat). 0 to 1; past 1 is too much.
   gauge?: { name: string; glyph: string; value: ReadonlySignal<number> };

@@ -36,6 +36,10 @@ const point2 = f([0.5, 0.7, 0.5], [0, 0, 0], [0, 0, 0], [1, 1, 0.9], [1, 1, 0.9]
 const snapReady = f([0.7, 0.3, 0.1], [0.3, 0.35, 0.2], [0.6, 0.7, 0.4], [0.9, 1, 0.9], [0.95, 1, 0.9]);
 const snapped = f([0.15, 0.1, 0.05], [0.5, 0.55, 0.35], [1, 1, 0.9], [1, 1, 0.9], [1, 1, 0.9]);
 const cup = f([0.3, 0.3, 0.2], [0.35, 0.3, 0.2], [0.35, 0.3, 0.2], [0.35, 0.3, 0.2], [0.4, 0.3, 0.2]);
+// Fingers half closed over the palm, as if holding something hot.
+const ember = f([0.35, 0.25, 0.15], [0.45, 0.5, 0.35], [0.45, 0.55, 0.35], [0.5, 0.55, 0.35], [0.55, 0.55, 0.35]);
+// A grip opened to take a head: every finger bent at every joint, spread.
+const grip = f([0.3, 0.35, 0.25], [0.3, 0.5, 0.35], [0.3, 0.52, 0.35], [0.32, 0.52, 0.35], [0.36, 0.52, 0.35]);
 const sealed = f([0.15, 0.1, 0.05], [0.04, 0.06, 0.04], [0.02, 0.05, 0.04], [0.04, 0.06, 0.04], [0.08, 0.1, 0.06]);
 
 export const POSES = {
@@ -87,6 +91,20 @@ export const POSES = {
   kuji: { pos: [0.03, -0.22, -0.4], rot: [1.4, 0.04, -1.55], fingers: point2, spread: 0 },
   fistToPalm: { pos: [0.11, -0.17, -0.42], rot: [0.1, 1.35, -1.5], fingers: fist, spread: 0 },
   veilEyes: { pos: [0.085, -0.2, -0.36], rot: [1.0, 0.25, 3.0], fingers: cup, spread: 0.12 },
+  // Heat. `emberCup` holds the heat drawn in: palm up below the chest, the
+  // fingers closing over it. `seize` drives an open grip out at head height,
+  // palm first, to put the heat into what it takes. `crossBlock` crosses the
+  // open hands before the face to take a blow in. `kilnRaise` opens both
+  // hands out and up to draw from all round; `twinPalm` drives both palm
+  // heels out together, fingers turned out. The sign rubs the sealed palms
+  // (`sealRubUp`, `sealRubDown`) as cold hands are warmed.
+  emberCup: { pos: [0.15, -0.25, -0.37], rot: [0.35, 0.45, -2.9], fingers: ember, spread: 0.2 },
+  seize: { pos: [0.1, -0.17, -0.47], rot: [1.3, 0.25, -0.35], fingers: grip, spread: 0.55 },
+  crossBlock: { pos: [-0.02, -0.13, -0.36], rot: [1.25, 0.5, -0.25], fingers: open, spread: 0.4 },
+  kilnRaise: { pos: [0.3, -0.16, -0.36], rot: [0.4, -0.2, -2.6], fingers: ember, spread: 0.4 },
+  twinPalm: { pos: [0.055, -0.19, -0.47], rot: [1.35, -0.3, -0.55], fingers: open, spread: 0.35 },
+  sealRubUp: { pos: [0.035, -0.215, -0.4], rot: [1.35, 0.04, -1.55], fingers: sealed, spread: 0.03 },
+  sealRubDown: { pos: [0.035, -0.265, -0.4], rot: [1.35, 0.04, -1.55], fingers: sealed, spread: 0.03 },
 } satisfies Record<string, HandPose>;
 
 export type PoseName = keyof typeof POSES;

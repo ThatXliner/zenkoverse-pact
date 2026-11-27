@@ -290,6 +290,19 @@ export class Enemy {
     this.sinceChill = 0;
   }
 
+  // Heat melts the ice early. The body counts as just thawed, so the heat
+  // that frees it is never a way to start a fresh chain of freezes.
+  melt(): boolean {
+    if (this.frozen <= 0) return false;
+    this.frozen = 0;
+    this.thaw = THAW;
+    return true;
+  }
+
+  // Lights the Kuroda's fuel lying near `at` before his snap: fire is fire,
+  // whoever's heat starts it.
+  igniteFuel(at: THREE.Vector3, radius: number): number { return this.fuse?.light(at, radius) ?? 0; }
+
   protected tickFrost(dt: number): void {
     if (this.frozen > 0 && this.frozen <= dt) this.thaw = THAW;
     else this.thaw = Math.max(0, this.thaw - dt);

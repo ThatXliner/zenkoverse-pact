@@ -14,7 +14,7 @@ const { url, args, stop } = await resolveTarget();
 
 const out = args.out ?? 'captures';
 const only = args.only ? new Set(args.only.split(',')) : null;
-const TECHS = ['recoil', 'shift', 'rime', 'blink', 'echo'];
+const TECHS = ['recoil', 'shift', 'rime', 'blink', 'echo', 'heat'];
 const MODAL_SIZES = [[1280, 720], [1920, 1080]];
 const HUD_SIZES = [[1280, 720], [1920, 1080], [2000, 1000], [2560, 1440]];
 mkdirSync(out, { recursive: true });

@@ -67,6 +67,16 @@ export function freezePond(g: import('../../app/game').Game, seconds: number): v
   g.vfx.until(seconds, () => { if (--held.holds === 0) held.melt(); });
 }
 
+// Heat on the frozen pond: the slab goes now, whatever freezes still hold it.
+// True when there was ice to melt.
+export function meltPond(): boolean {
+  const ice = pondIce;
+  if (!ice) return false;
+  ice.holds = Infinity;
+  ice.melt();
+  return true;
+}
+
 function freezeArea(g: import('../../app/game').Game, center: THREE.Vector3, radius: number, potency: number, pin: boolean, seconds: number): number {
   let hits = 0;
   // The frost lies on the floor it hits; over the pond, on the water's level, not its bed.

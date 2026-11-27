@@ -92,6 +92,14 @@ export const STORE = { x0: 17.4, x1: 24, z0: -9, z1: -1, wallTop: 3.8, deckY: 4.
 export const WALK_Y = 2.6;
 export const GATE = { x0: -4.2, x1: 4.2, z0: 17.8, z1: 20.8, roofY: 3.9 };
 export const POND = { center: new THREE.Vector3(11, 0, 11), radius: 2.75, surfaceY: -0.15, floorY: -0.9, hole: 2.6 };
+// The quench on the pond's west rim, where Heat's drill sets iron out to
+// temper: the mark the student stands on, an anvil block beside it, and three
+// stands on the rim stones facing it.
+export const QUENCH = {
+  station: new THREE.Vector3(5.6, 0, 11),
+  anvil: new THREE.Vector3(5.2, 0, 9.3),
+  stands: [Math.PI * 0.83, Math.PI, Math.PI * 1.17].map((a) => new THREE.Vector3(POND.center.x + Math.cos(a) * 3.3, 0.25, POND.center.z + Math.sin(a) * 3.3)),
+};
 
 export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Scene, props: PropSystem, lights: LightPool): World {
   const g = new THREE.Group();
@@ -395,6 +403,7 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   point(PALETTE.lantern, 8, 7, S.x0 - 1.0, 3.0, -6.6);
   for (const [x, z] of [[15.2, 1.8], [16.4, 2.0], [15.8, 3.1]] as const) props.spawn('crate', new THREE.Vector3(x, 0.05, z));
   props.spawn('barrel', new THREE.Vector3(14.2, 0.05, 2.6));
+  props.spawn('steamer', new THREE.Vector3(13.2, 0.05, 1.4));
   props.spawn('barrel', new THREE.Vector3(15.6, 0.05, -10.6));
   zones.push({ id: 'storehouse', min: new THREE.Vector3(S.x0 - 1, S.deckY - 1, S.z0 - 1), max: new THREE.Vector3(S.x1 + 1, S.deckY + 4, S.z1 + 1), label: 'Storehouse roof' });
   footprints.push({ x: (S.x0 + S.x1) / 2, z: (S.z0 + S.z1) / 2, w: S.x1 - S.x0, d: S.z1 - S.z0, y: S.deckY });
@@ -442,6 +451,19 @@ export function buildCompound(assets: Assets, physics: Physics, scene: THREE.Sce
   g.add(water);
   animated.push({ update: (t) => { waterMat.uniforms.time!.value = t; } });
   for (const [x, z, s] of [[P.center.x - 1.2, P.center.z + 0.6, 0.5], [P.center.x + 0.9, P.center.z - 1.1, 0.4]] as const) { const koi = new THREE.Mesh(new THREE.SphereGeometry(0.22 * s * 2, 8, 6), toon(0xff7a4a)); koi.scale.set(1.6, 0.4, 0.8); koi.position.set(x, P.surfaceY - 0.08, z); g.add(koi); }
+  // The quench: an iron block on a stump by the mark, a board lettered 焼入, and
+  // two iron pots left out for anyone to heat or throw.
+  const Q = QUENCH;
+  slab(woodDark, Q.anvil.x, 0.24, Q.anvil.z, 0.62, 0.48, 0.62);
+  slab(iron, Q.anvil.x, 0.56, Q.anvil.z, 0.78, 0.16, 0.36);
+  slab(iron, Q.anvil.x + 0.46, 0.6, Q.anvil.z, 0.22, 0.08, 0.2);
+  const quenchSign = paintedSign('焼入', { width: 0.5, vertical: true });
+  quenchSign.position.set(Q.anvil.x - 0.85, 1.55, Q.anvil.z);
+  quenchSign.rotation.y = Math.PI / 2;
+  g.add(quenchSign);
+  slab(woodDark, Q.anvil.x - 0.9, 0.9, Q.anvil.z, 0.12, 1.8, 0.12);
+  props.spawn('pot', new THREE.Vector3(Q.anvil.x + 0.2, 0.05, Q.anvil.z - 1.0));
+  props.spawn('pot', new THREE.Vector3(Q.anvil.x - 0.5, 0.05, Q.anvil.z - 1.3));
   // The yard's trees fade like a wall when one stands between the camera and the player.
   tree(P.center.x + 4.8, P.center.z + 3.4, 'maple', 1.1, 3, 'tree-maple');
   tree(-20, 13.5, 'gold', 1.25, 5, 'tree-gold');

@@ -29,7 +29,7 @@ const zero = (): Stats => ({ output: 0, precision: 0, efficiency: 0, range: 0, s
 const KEY = 'zenko.mastery.v1';
 
 export class Mastery {
-  readonly stats = signal<Record<TechniqueId, Stats>>({ recoil: zero(), shift: zero(), rime: zero(), blink: zero(), echo: zero() });
+  readonly stats = signal<Record<TechniqueId, Stats>>({ recoil: zero(), shift: zero(), rime: zero(), blink: zero(), echo: zero(), heat: zero() });
   strain = 0;
   readonly recent = signal<{ stat: MasteryStat; amount: number; id: number } | null>(null);
   private n = 0;
@@ -102,5 +102,5 @@ export class Mastery {
 
   update(dt: number): void { this.strain = Math.max(0, this.strain - MASTERY_CONFIG.strainRecoveryPerSecond * dt); }
 
-  reset(): void { this.stats.value = { recoil: zero(), shift: zero(), rime: zero(), blink: zero(), echo: zero() }; try { localStorage.removeItem(KEY); } catch { /* */ } }
+  reset(): void { this.stats.value = { recoil: zero(), shift: zero(), rime: zero(), blink: zero(), echo: zero(), heat: zero() }; try { localStorage.removeItem(KEY); } catch { /* */ } }
 }

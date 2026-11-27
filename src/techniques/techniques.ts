@@ -21,13 +21,14 @@ import { shift } from './kits/shift';
 import { rime } from './kits/rime';
 import { blink } from './kits/blink';
 import { echo } from './kits/echo';
+import { heat } from './kits/heat';
 import { GROUP_PROP, GROUP_WORLD, GROUP_ENEMY } from '../physics/world';
 import { playerActor, enemyActor } from '../cutscene/cutscene';
 import { RULES } from '../net/protocol';
 import { Wagers, darkUi } from './wagers';
 import { Declarations } from './declarations';
 
-export const KITS: Record<TechniqueId, TechniqueKit> = { recoil, shift, rime, blink, echo };
+export const KITS: Record<TechniqueId, TechniqueKit> = { recoil, shift, rime, blink, echo, heat };
 
 interface Cast { slot: KeySlot; ctx: AbilityContext; t: number; impactAt: number; duration: number; fired: boolean; held: boolean; result?: CastResult | void }
 

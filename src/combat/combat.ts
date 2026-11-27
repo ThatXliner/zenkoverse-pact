@@ -59,7 +59,7 @@ export class Combat {
     return Math.max(0, low - 0.6) * 0.012 + (this.game.clock.frozen ? 0.004 : 0);
   }
 
-  hitEnemy(e: Enemy, amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number; kind?: 'kinetic' | 'cold' | 'pulse' | 'resonance' | 'cut'; heavy?: boolean; stagger?: boolean } = {}): number {
+  hitEnemy(e: Enemy, amount: number, opts: { from?: THREE.Vector3; knock?: number; lift?: number; kind?: 'kinetic' | 'cold' | 'pulse' | 'resonance' | 'cut' | 'heat'; heavy?: boolean; stagger?: boolean } = {}): number {
     const g = this.game;
     // A Wager's harder strike, on the blows of the cast that declared it (src/techniques/wagers.ts).
     const wager = g.techniques.wagers.boost;

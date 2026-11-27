@@ -87,6 +87,9 @@ export class Hands {
   private light: THREE.PointLight;
   frost = 0;
   glow = 0;
+  // Heat's body heat, 0 to 1: the skin flushes and the palms glow with it.
+  heat = 0;
+  private skin: THREE.MeshToonMaterial;
   // A beat of Technique-coloured light on the hands, set by
   // the full sign on its seal and release keys and decaying over a few frames.
   private pulseT = 0;
@@ -100,7 +103,7 @@ export class Hands {
     this.rig = new ArmRig(assets.model('characters/human'));
     // The same flat skin and suit the third-person body wears, inked by the
     // post effect: the player's own hands are drawn like everyone else's.
-    const skin = toon(0xf7d9bf);
+    const skin = this.skin = toon(0xf7d9bf);
     for (const m of this.rig.skinMeshes) m.material = skin;
     const sleeve = toon(PLAYER_SUIT, { side: THREE.DoubleSide });
     for (const m of this.rig.sleeveMeshes) m.material = sleeve;
@@ -241,6 +244,8 @@ export class Hands {
     this.pulseT *= Math.exp(-5 * dtc);
     this.light.intensity = this.glow * 0.25 + this.pulseT * 1.1;
     this.clawMat.emissiveIntensity = 0.3 + this.glow * 0.8 + this.pulseT;
+    const h = Math.min(1, this.heat);
+    this.skin.emissive.setRGB(h * 0.7, h * 0.12, h * 0.02);
   }
 
   // The arms are framed for a 16:9 window. A narrower window keeps that

@@ -57,7 +57,8 @@ kbd { display: inline-block; font-family: var(--sans); font-size: 11px; font-wei
 /* Technique select */
 .select { position: absolute; inset: 0; display: grid; grid-template-rows: auto 1fr auto; padding: 5vh 6vw; background: rgba(10,11,16,0.78); backdrop-filter: blur(14px); animation: fade 0.5s var(--ease); }
 .select h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(28px, 4vw, 48px); margin: 0 0 4px; }
-.cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; align-content: center; min-height: 0; }
+/* One row however many Techniques there are. */
+.cards { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 12px; align-content: center; min-height: 0; }
 .card { position: relative; min-width: 0; display: grid; align-content: end; gap: 10px; padding: 22px 18px 20px; min-height: 300px; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.0)); text-align: left; transition: transform 0.45s var(--ease), border-color 0.3s, background 0.3s; overflow: hidden; }
 .card::before { content: attr(data-glyph); position: absolute; right: -6px; top: -14px; font-family: var(--serif); font-size: 128px; font-weight: 800; color: var(--c); opacity: 0.16; line-height: 1; transition: opacity 0.4s, transform 0.6s var(--ease); }
 .card:hover, .card:focus-visible, .card.active { transform: translateY(-6px); border-color: var(--c); background: linear-gradient(180deg, color-mix(in oklab, var(--c) 14%, transparent), rgba(255,255,255,0)); }
@@ -402,7 +403,7 @@ button.ph.on { background: var(--c); color: var(--ink); border-bottom-color: tra
   .sheet > footer .kbd-hint { display: none; }
   .pause-menu button { font-size: 17px; padding: 4px 14px 4px 10px; }
 }
-@media (max-width: 1100px) { .ws { grid-template-columns: 1fr; } .ws-sheet > header { grid-template-columns: 1fr; } .ws-sheet > header .lede { justify-self: start; text-align: left; } .cards { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); } }
+@media (max-width: 1100px) { .ws { grid-template-columns: 1fr; } .ws-sheet > header { grid-template-columns: 1fr; } .ws-sheet > header .lede { justify-self: start; text-align: left; } .cards { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); } }
 /* The Workshop on a phone: the Pact list becomes one scrolling row of tabs
    above the editor, the choices fall into two columns, and the footer wraps. */
 @media (max-width: 760px) {

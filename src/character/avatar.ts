@@ -171,6 +171,9 @@ export class Avatar {
   private suitGlow = new THREE.Color(0);
   private materials: THREE.MeshToonMaterial[] = [];
   private flashT = 0;
+  // How hot the body runs, 0 to 1: the skin flushes red toward it (Heat's
+  // own body heat, or a burn).
+  heat = 0;
   private gesture: BodyGesture;
 
   constructor(assets: Assets, which: CharacterModel, opts: AvatarOptions = {}) {
@@ -652,7 +655,8 @@ export class Avatar {
       this.applyWeight(dt);
     }
     this.flashT *= Math.exp(-12 * dt);
-    for (const m of this.materials) m.emissive.setScalar(this.flashT * 0.8);
+    const f = this.flashT * 0.8, h = Math.min(1, this.heat);
+    for (const m of this.materials) m.emissive.setRGB(f + h * 0.62, f + h * 0.1, f + h * 0.02);
     this.suit.emissive.copy(this.suitGlow).lerp(WHITE, this.flashT);
   }
 
